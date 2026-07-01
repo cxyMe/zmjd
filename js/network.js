@@ -1,0 +1,525 @@
+// ============================================
+// 联机与账号系统：易圈登录 + Supabase 房间
+// 表结构对应 supabase-schema.sql
+// ============================================
+
+class AuthManager {
+  constructor(config) {
+    this.config = config;
+    this.user = null;
+    this.session = null;
+    this.loadSession();
+  }
+
+  loadSession() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('bedwars_auth') || 'null');
+      if (!saved?.session?.access_token) return;
+      if (saved.session.expires_at && saved.session.expires_at * 1000 < Date.now()) return;
+      this.user = saved.user;
+      this.session = saved.session;
+    } catch (_) {
+      this.user = null;
+      this.session = null;
+    }
+  }
+
+  async login(phone, password) {
+    if (!/^1\d{10}$/.test(phone)) throw new Error('请输入 11 位手机号');
+    if (!password || password.length < 6) throw new Error('密码至少 6 位');
+    if (!this.config?.yiquanAuthEndpoint) {
+      throw new Error('登录接口未配置，请检查 js/config.js');
+    }
+
+    let res;
+    try {
+      res = await fetch(this.config.yiquanAuthEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
+    } catch (err) {
+      throw new Error('无法连接易圈登录服务，请检查网络或接口跨域配置');
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || '手机号或密码错误');
+
+    this.user = data.user;
+    this.session = data.session;
+    localStorage.setItem('bedwars_auth', JSON.stringify({ user: this.user, session: this.session }));
+    return data;
+  }
+
+  logout() {
+    this.user = null;
+    this.session = null;
+    localStorage.removeItem('bedwars_auth');
+  }
+}
+
+class RoomNetwork {
+  constructor(config, auth) {
+    this.config = config;
+    this.auth = auth;
+    this.client = null;
+    this.room = null;
+    this.member = null;
+    this.members = [];
+    this.isMainHost = false;
+    this.channel = null;
+    this.heartbeatTimer = null;
+    this.hostCheckTimer = null;
+    this.onRoomUpdate = () => {};
+    this.onEvent = () => {};
+    this.onHostChanged = () => {};
+    this.onMembersChanged = () => {};
+  }
+
+  get enabled() {
+    return !!(this.config.supabaseUrl && this.config.supabaseAnonKey && window.supabase);
+  }
+
+  initClient() {
+    if (!this.enabled) throw new Error('Supabase 未配置');
+    if (!this.client) {
+      this.client = window.supabase.createClient(this.config.supabaseUrl, this.config.supabaseAnonKey);
+    }
+    return this.client;
+  }
+
+  makeRoomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
+  ensureLoggedIn() {
+    if (!this.auth.user) throw new Error('请先登录');
+  }
+
+  // ---------- 房间操作 ----------
+
+  async createRoom(roomName = '起床战争房间') {
+    this.ensureLoggedIn();
+    const client = this.initClient();
+    const now = new Date().toISOString();
+    const uid = this.auth.user.id;
+    let room = null;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = this.makeRoomCode();
+      const roomPayload = {
+        name: roomName,
+        code,
+        host_id: uid,
+        host_order: [uid],
+        status: 'waiting',
+        max_players: 12,
+        map_config: { maxTeams: 4, maxPlayersPerTeam: 3 },
+        updated_at: now
+      };
+
+      const { data, error } = await client.from('rooms').insert(roomPayload).select('*').single();
+      if (!error) {
+        room = data;
+        break;
+      }
+      lastError = error;
+      if (!String(error.message || '').includes('duplicate')) break;
+    }
+
+    if (!room) throw new Error(lastError?.message || '创建房间失败');
+    this.room = room;
+    this.isMainHost = true;
+    await this.upsertPlayer({ role: 'host' });
+    await this.subscribe();
+    await this.refreshPlayers();
+    this.startHeartbeat();
+    localStorage.setItem('bedwars_last_room', JSON.stringify({ code, savedAt: Date.now() }));
+    return room;
+  }
+
+  async joinRoom(code) {
+    this.ensureLoggedIn();
+    const client = this.initClient();
+    const { data: room, error } = await client
+      .from('rooms')
+      .select('*')
+      .eq('code', code.trim().toUpperCase())
+      .in('status', ['waiting', 'playing'])
+      .single();
+    if (error || !room) throw new Error('房间不存在或已结束');
+
+    this.room = room;
+    this.isMainHost = room.host_id === this.auth.user.id;
+    await this.upsertPlayer({ role: this.isMainHost ? 'host' : 'player' });
+    await this.subscribe();
+    await this.refreshPlayers();
+    if (!this.isMainHost) this.startHostCheck();
+    else this.startHeartbeat();
+    localStorage.setItem('bedwars_last_room', JSON.stringify({ code: room.code, savedAt: Date.now() }));
+    return room;
+  }
+
+  async reconnectLastRoom() {
+    const saved = JSON.parse(localStorage.getItem('bedwars_last_room') || 'null');
+    if (!saved?.code || Date.now() - saved.savedAt > 600000) throw new Error('没有可恢复的房间');
+    return this.joinRoom(saved.code);
+  }
+
+  // ---------- 玩家操作 ----------
+
+  async upsertPlayer({ role }) {
+    const client = this.initClient();
+    const uid = this.auth.user.id;
+    const { data: existing, error: findError } = await client
+      .from('room_players')
+      .select('*')
+      .eq('room_id', this.room.id)
+      .eq('player_id', uid)
+      .maybeSingle();
+    if (findError) throw findError;
+
+    if (existing) {
+      const { data, error } = await client
+        .from('room_players')
+        .update({ role, is_online: true })
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+      if (error) throw error;
+      this.member = data;
+      return data;
+    }
+
+    const { count } = await client
+      .from('room_players')
+      .select('id', { count: 'exact', head: true })
+      .eq('room_id', this.room.id);
+
+    const payload = {
+      room_id: this.room.id,
+      player_id: uid,
+      team: null,
+      role,
+      is_ready: false,
+      is_online: true,
+      join_order: count || 0
+    };
+
+    const { data, error } = await client
+      .from('room_players')
+      .insert(payload)
+      .select('*')
+      .single();
+    if (error) throw error;
+    this.member = data;
+    return data;
+  }
+
+  async refreshPlayers() {
+    const client = this.initClient();
+    const { data, error } = await client
+      .from('room_players')
+      .select('*')
+      .eq('room_id', this.room.id)
+      .eq('is_online', true)
+      .order('join_order', { ascending: true });
+    if (error) throw error;
+    this.members = data || [];
+    this.onMembersChanged(this.members);
+    return this.members;
+  }
+
+  async setReady(ready) {
+    const client = this.initClient();
+    const { error } = await client
+      .from('room_players')
+      .update({ is_ready: ready })
+      .eq('room_id', this.room.id)
+      .eq('player_id', this.auth.user.id);
+    if (error) throw error;
+  }
+
+  async setTeam(team) {
+    const client = this.initClient();
+    const { error } = await client
+      .from('room_players')
+      .update({ team })
+      .eq('room_id', this.room.id)
+      .eq('player_id', this.auth.user.id);
+    if (error) throw error;
+  }
+
+  // ---------- 订阅与实时同步 ----------
+
+  async subscribe() {
+    const client = this.initClient();
+    if (this.channel) await this.channel.unsubscribe();
+
+    this.channel = client.channel(`room_${this.room.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${this.room.id}` }, payload => {
+        const oldHost = this.room?.host_id;
+        this.room = payload.new;
+        this.onRoomUpdate(this.room);
+        if (oldHost && this.room.host_id !== oldHost) {
+          this.isMainHost = this.room.host_id === this.auth.user.id;
+          this.onHostChanged(this.room.host_id);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_players', filter: `room_id=eq.${this.room.id}` }, () => {
+        this.refreshPlayers();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: `room_id=eq.${this.room.id}` }, payload => {
+        this.onEvent(payload.new);
+      })
+      .subscribe();
+  }
+
+  // ---------- 房主心跳与接管 ----------
+
+  startHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(async () => {
+      try {
+        const client = this.initClient();
+        const now = new Date().toISOString();
+        await client.from('rooms').update({ updated_at: now }).eq('id', this.room.id);
+        // 同时发一个心跳事件，让副房主更精确地检测
+        await client.from('game_events').insert({
+          room_id: this.room.id,
+          player_id: this.auth.user.id,
+          event_type: 'heartbeat',
+          event_data: { ts: Date.now() },
+          tick: 0
+        });
+      } catch (e) { console.warn('心跳失败', e); }
+    }, this.config.heartbeatIntervalMs || 5000);
+  }
+
+  startHostCheck() {
+    if (this.hostCheckTimer) clearInterval(this.hostCheckTimer);
+    this.hostCheckTimer = setInterval(async () => {
+      try {
+        const client = this.initClient();
+        // 检查 rooms.updated_at
+        const { data: room } = await client.from('rooms').select('updated_at,host_id,host_order').eq('id', this.room.id).single();
+        if (!room) return;
+        const lastUpdate = new Date(room.updated_at).getTime();
+        const timeout = this.config.hostTimeoutMs || 15000;
+        if (Date.now() - lastUpdate < timeout) return; // 主房主正常
+
+        // 主房主掉线，选举新房主
+        await this.electNewHost(room);
+      } catch (e) { console.warn('房主检测失败', e); }
+    }, this.config.heartbeatIntervalMs || 5000);
+  }
+
+  async electNewHost(room) {
+    const client = this.initClient();
+    const myId = this.auth.user.id;
+    const order = room.host_order || [];
+
+    // 获取当前在线玩家
+    const { data: players } = await client
+      .from('room_players')
+      .select('player_id,role')
+      .eq('room_id', this.room.id)
+      .eq('is_online', true)
+      .order('join_order', { ascending: true });
+    if (!players?.length) return;
+
+    // 按 host_order 找到下一个房主候选
+    const onlineIds = players.map(p => p.player_id);
+    let nextId = null;
+    for (const uid of order) {
+      if (onlineIds.includes(uid) && uid !== room.host_id) { nextId = uid; break; }
+    }
+    // 若 host_order 里没有合适的，按 join_order 选第一个在线的
+    if (!nextId) nextId = onlineIds.find(id => id !== room.host_id);
+    if (!nextId || nextId !== myId) return; // 不是我，等待真正的副房主去更新
+
+    // 我是新房主，更新 rooms
+    const newOrder = [...new Set([...order, myId])];
+    const { data: updated } = await client
+      .from('rooms')
+      .update({ host_id: myId, host_order: newOrder, updated_at: new Date().toISOString() })
+      .eq('id', this.room.id)
+      .eq('host_id', room.host_id) // 乐观锁，防止多客户端同时竞争
+      .select('*')
+      .single();
+    if (updated) {
+      this.isMainHost = true;
+      this.room = updated;
+      this.onHostChanged(myId);
+      // 停止检测，开始发心跳
+      if (this.hostCheckTimer) { clearInterval(this.hostCheckTimer); this.hostCheckTimer = null; }
+      this.startHeartbeat();
+      await client.from('room_players').update({ role: 'host' }).eq('room_id', this.room.id).eq('player_id', myId);
+    }
+  }
+
+  // ---------- 游戏状态 ----------
+
+  async setRoomStatus(status) {
+    const client = this.initClient();
+    const { data, error } = await client
+      .from('rooms')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', this.room.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    this.room = data;
+    return data;
+  }
+
+  async sendEvent(eventType, eventData, tick = 0) {
+    if (!this.isMainHost) return;
+    const client = this.initClient();
+    const { error } = await client.from('game_events').insert({
+      room_id: this.room.id,
+      player_id: this.auth.user.id,
+      event_type: eventType,
+      event_data: eventData,
+      tick
+    });
+    if (error) console.warn('事件发送失败', error);
+  }
+
+  // ---------- 离开与清理 ----------
+
+  async leave() {
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+    if (this.hostCheckTimer) { clearInterval(this.hostCheckTimer); this.hostCheckTimer = null; }
+    if (this.channel) { await this.channel.unsubscribe(); this.channel = null; }
+
+    if (this.room && this.auth.user) {
+      try {
+        const client = this.initClient();
+        await client.from('room_players')
+          .update({ is_online: false })
+          .eq('room_id', this.room.id)
+          .eq('player_id', this.auth.user.id);
+        if (this.isMainHost) {
+          // 房主离开前先触发一次接管检测机会
+          await this.electNewHost(this.room);
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    this.room = null;
+    this.member = null;
+    this.members = [];
+    this.isMainHost = false;
+    localStorage.removeItem('bedwars_last_room');
+  }
+}
+
+// ============================================
+// NetworkManager：游戏层统一接口
+// ============================================
+
+class NetworkManager {
+  constructor(config) {
+    this.config = config;
+    this.auth = new AuthManager(config);
+    this.roomNet = new RoomNetwork(config, this.auth);
+    this.lastSent = {};
+    this.incoming = [];
+    this.snapshotCache = null;
+  }
+
+  get loggedIn() { return !!this.auth.user; }
+  get inRoom() { return !!this.roomNet.room; }
+  get isHost() { return this.roomNet.isMainHost; }
+  get roomCode() { return this.roomNet.room?.code; }
+  get members() { return this.roomNet.members; }
+
+  async login(phone, password) { return this.auth.login(phone, password); }
+  logout() { this.auth.logout(); }
+
+  async createRoom() {
+    const room = await this.roomNet.createRoom();
+    this.bindRoomEvents();
+    return room;
+  }
+
+  async joinRoom(code) {
+    const room = await this.roomNet.joinRoom(code);
+    this.bindRoomEvents();
+    return room;
+  }
+
+  async reconnect() {
+    const room = await this.roomNet.reconnectLastRoom();
+    this.bindRoomEvents();
+    return room;
+  }
+
+  bindRoomEvents() {
+    this.roomNet.onRoomUpdate = (room) => {
+      if (window.game) window.game.onNetworkRoomUpdate?.(room);
+    };
+    this.roomNet.onEvent = (evt) => {
+      if (evt.event_type === 'player_state') {
+        this.incoming.push(evt);
+      } else if (evt.event_type === 'snapshot') {
+        this.snapshotCache = evt.event_data;
+        if (window.game) window.game.onNetworkSnapshot?.(evt.event_data);
+      } else if (evt.event_type === 'bed_destroyed') {
+        if (window.game) window.game.onNetworkBedDestroyed?.(evt.event_data.teamKey, evt.event_data.destroyerId);
+      } else if (evt.event_type === 'player_killed') {
+        if (window.game) window.game.onNetworkPlayerKilled?.(evt.event_data.victimId, evt.event_data.killerId);
+      } else if (evt.event_type === 'game_over') {
+        if (window.game) window.game.onNetworkGameOver?.(evt.event_data.winner);
+      }
+    };
+    this.roomNet.onHostChanged = (hostId) => {
+      console.log('房主切换为', hostId);
+      if (window.game) window.game.showMessage?.('房主已切换');
+    };
+    this.roomNet.onMembersChanged = (members) => {
+      if (window.game) window.game.onNetworkMembers?.(members);
+    };
+  }
+
+  sendPlayerState(id, state) {
+    if (!this.isHost) return;
+    const key = `${id}_state`;
+    if (JSON.stringify(this.lastSent[key]) === JSON.stringify(state)) return;
+    this.lastSent[key] = state;
+    return this.roomNet.sendEvent('player_state', { id, state });
+  }
+
+  sendSnapshot(data) {
+    if (!this.isHost) return;
+    return this.roomNet.sendEvent('snapshot', data);
+  }
+
+  sendBedDestroyed(teamKey, destroyerId) {
+    if (!this.isHost) return;
+    return this.roomNet.sendEvent('bed_destroyed', { teamKey, destroyerId });
+  }
+
+  sendPlayerKilled(victimId, killerId) {
+    if (!this.isHost) return;
+    return this.roomNet.sendEvent('player_killed', { victimId, killerId });
+  }
+
+  sendGameOver(winner) {
+    if (!this.isHost) return;
+    return this.roomNet.sendEvent('game_over', { winner });
+  }
+
+  async leaveRoom() {
+    await this.roomNet.leave();
+  }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { AuthManager, RoomNetwork, NetworkManager };
+}

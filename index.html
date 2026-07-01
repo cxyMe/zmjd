@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>3D 起床战争 - Bed Wars 3D</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- ========== Loading Screen ========== -->
+<div id="loadingScreen">
+  <h1>3D 起床战争</h1>
+  <div class="progress"><div class="progress-bar" id="loadBar"></div></div>
+  <div class="tip" id="loadTip">正在加载 3D 引擎...</div>
+</div>
+
+<!-- ========== Main Menu ========== -->
+<div id="mainMenu" style="display:none;">
+  <h1>3D 起床战争</h1>
+  <div class="subtitle">移动端 / PC 互通联机对战</div>
+  <div class="menu-panel">
+    <div class="auth-panel">
+      <h3>易圈账号登录</h3>
+      <div id="authGuestBox">
+        <div class="form-row">
+          <input id="loginPhone" inputmode="numeric" maxlength="11" placeholder="11 位手机号">
+          <input id="loginPassword" type="password" placeholder="登录密码">
+        </div>
+        <div class="form-row">
+          <button class="small-btn" id="loginBtn">登录</button>
+          <button class="small-btn secondary" id="localModeBtn">本地试玩</button>
+        </div>
+      </div>
+      <div id="authUserBox" style="display:none;">
+        <div class="status-text">已登录：<span id="authUserName">--</span></div>
+        <div class="form-row" style="margin-top:8px;">
+          <button class="small-btn secondary" id="logoutBtn">退出登录</button>
+        </div>
+      </div>
+      <div class="status-text" id="authStatus">登录后可创建或加入 Supabase 联机房间。</div>
+    </div>
+
+    <div class="room-panel">
+      <h3>主机房间</h3>
+      <div class="form-row">
+        <button class="small-btn" id="createRoomBtn">创建房间</button>
+        <input id="joinRoomCode" maxlength="6" placeholder="输入房间码">
+        <button class="small-btn secondary" id="joinRoomBtn">加入</button>
+      </div>
+      <div class="form-row">
+        <button class="small-btn secondary" id="reconnectBtn">断线重连</button>
+      </div>
+      <div class="status-text" id="roomStatus">未进入房间；也可以选择“本地试玩”。</div>
+      <div class="room-members" id="roomMembers"></div>
+    </div>
+
+    <h2>选择你的队伍</h2>
+    <div class="team-select">
+      <div class="team-btn red" data-team="RED">红队</div>
+      <div class="team-btn blue" data-team="BLUE">蓝队</div>
+      <div class="team-btn green" data-team="GREEN">绿队</div>
+      <div class="team-btn yellow" data-team="YELLOW">黄队</div>
+    </div>
+    <div class="role-select">
+      <h3>选择角色</h3>
+      <div class="role-list">
+        <div class="role-btn" data-role="WARRIOR">战士</div>
+        <div class="role-btn" data-role="BUILDER">建筑师</div>
+        <div class="role-btn" data-role="ASSASSIN">刺客</div>
+        <div class="role-btn" data-role="ARCHER">射手</div>
+      </div>
+      <div class="role-desc" id="roleDesc">请选择角色查看详情</div>
+    </div>
+    <button class="start-btn" id="startBtn" disabled>开始游戏</button>
+  </div>
+</div>
+
+<!-- ========== HUD ========== -->
+<div id="hud">
+  <!-- Resources -->
+  <div id="resourceBar">
+    <div class="res-item res-copper"><div class="res-icon"></div><span id="resCopper">0</span></div>
+    <div class="res-item res-silver"><div class="res-icon"></div><span id="resSilver">0</span></div>
+    <div class="res-item res-gold"><div class="res-icon"></div><span id="resGold">0</span></div>
+    <div class="res-item res-jade"><div class="res-icon"></div><span id="resJade">0</span></div>
+  </div>
+
+  <!-- Timer -->
+  <div id="gameTimer">0:00</div>
+
+  <!-- Team Info -->
+  <div id="teamInfo">
+    <div class="team-name" id="teamName">--</div>
+    <div class="bed-status" id="bedStatus">--</div>
+    <div class="players">队友存活: --</div>
+  </div>
+
+  <!-- Minimap -->
+  <div id="minimap"><canvas id="minimapCanvas" width="160" height="160"></canvas></div>
+
+  <!-- Player Status -->
+  <div id="playerStatus">
+    <div class="status-bar">
+      <span class="status-label">生命</span>
+      <div class="status-track"><div class="status-fill hp-fill" id="hpFill" style="width:100%"></div></div>
+      <span id="hpText" style="color:#fff;font-size:12px;">100/100</span>
+    </div>
+    <div class="status-bar">
+      <span class="status-label">护甲</span>
+      <div class="status-track"><div class="status-fill armor-fill" id="armorFill" style="width:0%"></div></div>
+      <span id="armorText" style="color:#fff;font-size:12px;">0</span>
+    </div>
+  </div>
+
+  <!-- Hotbar -->
+  <div id="hotbar">
+    <div class="hotbar-slot active" id="slot0"><span class="slot-key">1</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot1"><span class="slot-key">2</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot2"><span class="slot-key">3</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot3"><span class="slot-key">4</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot4"><span class="slot-key">5</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot5"><span class="slot-key">6</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot6"><span class="slot-key">7</span><span class="slot-name"></span><span class="slot-count"></span></div>
+    <div class="hotbar-slot" id="slot7"><span class="slot-key">8</span><span class="slot-name"></span><span class="slot-count"></span></div>
+  </div>
+
+  <!-- Shop Button -->
+  <div id="shopBtn">商店</div>
+
+  <!-- Skill Button -->
+  <div id="skillBtn" style="display:none;"><span>技能</span><span class="skill-cd">就绪</span></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair" style="display:none;"></div>
+
+  <!-- Messages -->
+  <div id="gameMessages"></div>
+  <div id="killFeed"></div>
+  <div class="net-badge" id="netBadge" style="display:none;">联机状态：<span class="online">本地</span></div>
+
+  <!-- Mobile Controls -->
+  <div id="mobileControls">
+    <div id="joystickZone">
+      <div id="joystickBase"></div>
+      <div id="joystickKnob"></div>
+    </div>
+    <div id="jumpBtnMobile">跳跃</div>
+    <div id="attackBtnMobile">攻击</div>
+    <div id="buildBtnMobile">放置</div>
+  </div>
+</div>
+
+<!-- ========== Shop Panel ========== -->
+<div id="shopPanel">
+  <div class="shop-container">
+    <div class="shop-header">
+      <h2>商店</h2>
+      <button class="shop-close">&times;</button>
+    </div>
+    <div class="shop-tabs">
+      <button class="shop-tab active" data-tab="blocks">建筑</button>
+      <button class="shop-tab" data-tab="weapons">武器</button>
+      <button class="shop-tab" data-tab="armor">防具</button>
+      <button class="shop-tab" data-tab="specials">特殊</button>
+    </div>
+    <div class="shop-body" id="shopBody"></div>
+  </div>
+</div>
+
+<!-- ========== Backpack Panel ========== -->
+<div id="backpackPanel">
+  <div class="bp-container">
+    <div class="bp-header">
+      <h2>背包</h2>
+      <button class="bp-close" onclick="window.game?.toggleBackpack()">&times;</button>
+    </div>
+    <div class="bp-body" id="backpackGrid"></div>
+    <div class="bp-footer">
+      <div style="color:#aaa;font-size:12px;">操作提示：G键丢弃当前物品 | 滚轮切换快捷栏 | Tab打开背包</div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== Game Over ========== -->
+<div id="gameOverScreen">
+  <h1>游戏结束</h1>
+  <div class="winner">--</div>
+  <div class="stats"></div>
+  <button class="restart-btn" onclick="location.reload()">再来一局</button>
+</div>
+
+<!-- ========== 3D Canvas ========== -->
+<div id="gameCanvas"></div>
+
+<script src="js/config.js"></script>
+<script src="js/network.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/game.js"></script>
+<script>
+// ============================================
+// Menu Logic
+// ============================================
+let selectedTeam = null;
+let selectedRole = null;
+const config = window.BEDWARS_CONFIG;
+const auth = new AuthManager(config);
+let netMgr = null;
+let localOnly = false;
+
+const roleDescriptions = {
+  WARRIOR:  '战士 - 坚韧：每秒恢复1点生命 | 狂暴：5秒内攻击力翻倍',
+  BUILDER:  '建筑师 - 工匠：方块价格减半 | 要塞：面前生成3x3防御墙',
+  ASSASSIN: '刺客 - 疾风：移动速度+20% | 隐匿：隐身3秒',
+  ARCHER:   '射手 - 精准：弓箭伤害+30% | 连射：一次射出3支箭'
+};
+
+// Team selection
+document.querySelectorAll('.team-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedTeam = btn.dataset.team;
+    updateStartBtn();
+  });
+});
+
+// Role selection
+document.querySelectorAll('.role-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedRole = btn.dataset.role;
+    document.getElementById('roleDesc').textContent = roleDescriptions[selectedRole] || '';
+    updateStartBtn();
+  });
+});
+
+function updateStartBtn() {
+  const btn = document.getElementById('startBtn');
+  const hasRoom = localOnly || !!netMgr?.inRoom;
+  btn.disabled = !(selectedTeam && selectedRole && hasRoom);
+}
+
+function setAuthStatus(text, isError = false) {
+  const el = document.getElementById('authStatus');
+  el.textContent = text;
+  el.style.color = isError ? '#ff6666' : '#aaa';
+}
+
+function setRoomStatus(text, isError = false) {
+  const el = document.getElementById('roomStatus');
+  el.innerHTML = text;
+  el.style.color = isError ? '#ff6666' : '#aaa';
+}
+
+function renderAuth() {
+  const loggedIn = !!auth.user;
+  document.getElementById('authGuestBox').style.display = loggedIn ? 'none' : 'block';
+  document.getElementById('authUserBox').style.display = loggedIn ? 'block' : 'none';
+  document.getElementById('authUserName').textContent = auth.user?.nickname || auth.user?.phone || '--';
+  if (loggedIn) setAuthStatus('登录成功，可创建或加入房间。');
+}
+
+function renderRoom() {
+  const room = netMgr?.roomNet?.room;
+  const members = netMgr?.members || [];
+  const isMainHost = netMgr?.isHost;
+  const code = room?.code ? `<span class="room-code">${room.code}</span>` : '';
+  const hostText = isMainHost ? '你是主房主，负责保存权威游戏状态。' : '你是副房主/玩家，主房主掉线后会自动接管。';
+  setRoomStatus(`当前房间 ${code} ${hostText}`);
+  const list = document.getElementById('roomMembers');
+  list.innerHTML = '';
+  for (const m of members) {
+    const div = document.createElement('div');
+    div.className = 'member-line';
+    const isHost = room?.host_id === m.player_id;
+    const hostBadge = isHost ? '<span class="host-badge">主房主</span>' : (m.role === 'host' ? '<span>副房主</span>' : '<span>玩家</span>');
+    const state = m.is_online ? '<span>在线</span>' : '<span class="offline">离线</span>';
+    const name = m.player_id === auth.user?.id ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4));
+    div.innerHTML = `<span>${name} ${hostBadge}</span>${state}`;
+    list.appendChild(div);
+  }
+  updateStartBtn();
+}
+
+function bindNetEvents() {
+  if (!netMgr) return;
+  netMgr.roomNet.onRoomUpdate = renderRoom;
+  netMgr.roomNet.onMembersChanged = renderRoom;
+  netMgr.roomNet.onHostChanged = (hostId) => {
+    renderRoom();
+    const badge = document.getElementById('netBadge');
+    if (badge.style.display !== 'none') {
+      const isHost = hostId === auth.user?.id;
+      badge.innerHTML = `联机状态：<span class="online">在线</span>｜<span class="host">${isHost ? '主房主' : '副房主'}</span>`;
+    }
+  };
+  netMgr.roomNet.onEvent = (evt) => {
+    if (evt.event_type === 'game_start' && !window.game?.gameActive) {
+      setRoomStatus('房主已开始游戏，请选择队伍和角色后进入。');
+    }
+  };
+}
+
+renderAuth();
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const phone = document.getElementById('loginPhone').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  try {
+    setAuthStatus('正在登录...');
+    await auth.login(phone, password);
+    localOnly = false;
+    renderAuth();
+  } catch (err) {
+    setAuthStatus(err.message || '登录失败', true);
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  auth.logout();
+  netMgr = null;
+  localOnly = false;
+  renderAuth();
+  setAuthStatus('已退出登录。');
+  setRoomStatus('未进入房间；也可以选择“本地试玩”。');
+  document.getElementById('roomMembers').innerHTML = '';
+  updateStartBtn();
+});
+
+document.getElementById('localModeBtn').addEventListener('click', () => {
+  localOnly = true;
+  setAuthStatus('已进入本地试玩模式，不连接 Supabase。');
+  setRoomStatus('本地试玩模式：无需登录，直接点开始游戏。');
+  updateStartBtn();
+});
+
+document.getElementById('createRoomBtn').addEventListener('click', async () => {
+  try {
+    localOnly = false;
+    netMgr = new NetworkManager(config);
+    bindNetEvents();
+    setRoomStatus('正在创建房间...');
+    const room = await netMgr.createRoom();
+    renderRoom();
+  } catch (err) {
+    setRoomStatus(err.message || '创建房间失败', true);
+  }
+});
+
+document.getElementById('joinRoomBtn').addEventListener('click', async () => {
+  try {
+    localOnly = false;
+    netMgr = new NetworkManager(config);
+    bindNetEvents();
+    const code = document.getElementById('joinRoomCode').value;
+    setRoomStatus('正在加入房间...');
+    await netMgr.joinRoom(code);
+    renderRoom();
+  } catch (err) {
+    setRoomStatus(err.message || '加入房间失败', true);
+  }
+});
+
+document.getElementById('reconnectBtn').addEventListener('click', async () => {
+  try {
+    localOnly = false;
+    netMgr = new NetworkManager(config);
+    bindNetEvents();
+    setRoomStatus('正在重连上次房间...');
+    await netMgr.reconnect();
+    renderRoom();
+  } catch (err) {
+    setRoomStatus(err.message || '断线重连失败', true);
+  }
+});
+
+// Loading simulation
+let loadProgress = 0;
+const loadInterval = setInterval(() => {
+  loadProgress += 10;
+  document.getElementById('loadBar').style.width = loadProgress + '%';
+  if (loadProgress >= 30) document.getElementById('loadTip').textContent = '正在生成地图...';
+  if (loadProgress >= 70) document.getElementById('loadTip').textContent = '正在初始化AI...';
+  if (loadProgress >= 100) {
+    clearInterval(loadInterval);
+    setTimeout(() => {
+      document.getElementById('loadingScreen').style.opacity = '0';
+      setTimeout(() => {
+        document.getElementById('loadingScreen').style.display = 'none';
+        document.getElementById('mainMenu').style.display = 'flex';
+      }, 500);
+    }, 300);
+  }
+}, 80);
+
+// Start game
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (!selectedTeam || !selectedRole) return;
+  if (!localOnly && !netMgr?.inRoom) return setRoomStatus('请先创建或加入房间。', true);
+  document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
+  window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
+  window.game.init();
+  window.game.start(selectedTeam, selectedRole);
+  if (!localOnly && netMgr?.isHost) {
+    netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
+    netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: selectedRole }).catch(console.warn);
+  }
+  const badge = document.getElementById('netBadge');
+  badge.style.display = 'block';
+  badge.innerHTML = localOnly
+    ? '联机状态：<span class="online">本地试玩</span>'
+    : `联机状态：<span class="online">在线</span>｜<span class="host">${netMgr?.isHost ? '主房主' : '副房主'}</span>`;
+});
+</script>
+
+</body>
+</html>
