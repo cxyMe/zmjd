@@ -10,6 +10,15 @@
 </head>
 <body>
 
+<!-- ========== Orientation Gate ========== -->
+<div id="orientationGate">
+  <div class="rotate-card">
+    <div class="rotate-icon">↻</div>
+    <h2>请横屏进入筑梦激斗</h2>
+    <p>为了保证操作视野、快捷栏和战斗按钮不遮挡，请将手机旋转为横屏模式。</p>
+  </div>
+</div>
+
 <!-- ========== Loading Screen ========== -->
 <div id="loadingScreen">
   <h1>3D 起床战争</h1>
@@ -19,8 +28,13 @@
 
 <!-- ========== Main Menu ========== -->
 <div id="mainMenu" style="display:none;">
-  <h1>3D 起床战争</h1>
-  <div class="subtitle">移动端 / PC 互通联机对战</div>
+  <div class="menu-bg-orb orb-a"></div>
+  <div class="menu-bg-orb orb-b"></div>
+  <div class="brand-block">
+    <div class="brand-kicker">多人 3D 竞技 · 团队拆床 · 成长觉醒</div>
+    <h1>筑梦激斗</h1>
+    <div class="subtitle">移动端 / PC 互通联机对战，横屏获得最佳操作体验</div>
+  </div>
   <div class="menu-panel">
     <div class="auth-panel">
       <h3>易圈账号登录</h3>
@@ -64,15 +78,9 @@
       <div class="team-btn green" data-team="GREEN">绿队</div>
       <div class="team-btn yellow" data-team="YELLOW">黄队</div>
     </div>
-    <div class="role-select">
-      <h3>选择角色</h3>
-      <div class="role-list">
-        <div class="role-btn" data-role="WARRIOR">战士</div>
-        <div class="role-btn" data-role="BUILDER">建筑师</div>
-        <div class="role-btn" data-role="ASSASSIN">刺客</div>
-        <div class="role-btn" data-role="ARCHER">射手</div>
-      </div>
-      <div class="role-desc" id="roleDesc">请选择角色查看详情</div>
+    <div class="role-select menu-role-hint">
+      <h3>角色选择规则</h3>
+      <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「战士」。</div>
     </div>
     <button class="start-btn" id="startBtn" disabled>开始游戏</button>
   </div>
@@ -170,6 +178,22 @@
     <div id="jumpBtnMobile">跳跃</div>
     <div id="attackBtnMobile">攻击</div>
     <div id="buildBtnMobile">放置</div>
+  </div>
+</div>
+
+<!-- ========== Start Role Selection ========== -->
+<div id="startRolePanel">
+  <div class="start-role-shell">
+    <div class="start-role-head">
+      <div>
+        <div class="panel-kicker">开局角色部署</div>
+        <h2>选择你的本局角色</h2>
+        <p>你有 <span id="roleCountdown">10</span> 秒完成选择，角色只影响本局战斗风格。</p>
+      </div>
+      <div class="countdown-ring"><span id="roleCountdownBig">10</span></div>
+    </div>
+    <div id="startRoleCards" class="start-role-cards"></div>
+    <div class="start-role-foot">提示：角色选择期间你会被短暂保护，选择后立即解除。</div>
   </div>
 </div>
 
@@ -298,7 +322,6 @@
 // Menu Logic
 // ============================================
 let selectedTeam = null;
-let selectedRole = null;
 const config = window.BEDWARS_CONFIG;
 const auth = new AuthManager(config);
 let netMgr = null;
@@ -321,21 +344,10 @@ document.querySelectorAll('.team-btn').forEach(btn => {
   });
 });
 
-// Role selection
-document.querySelectorAll('.role-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    selectedRole = btn.dataset.role;
-    document.getElementById('roleDesc').textContent = roleDescriptions[selectedRole] || '';
-    updateStartBtn();
-  });
-});
-
 function updateStartBtn() {
   const btn = document.getElementById('startBtn');
   const hasRoom = localOnly || !!netMgr?.inRoom;
-  btn.disabled = !(selectedTeam && selectedRole && hasRoom);
+  btn.disabled = !(selectedTeam && hasRoom);
 }
 
 function setAuthStatus(text, isError = false) {
@@ -394,7 +406,7 @@ function bindNetEvents() {
   };
   netMgr.roomNet.onEvent = (evt) => {
     if (evt.event_type === 'game_start' && !window.game?.gameActive) {
-      setRoomStatus('房主已开始游戏，请选择队伍和角色后进入。');
+      setRoomStatus('房主已开始游戏，请选择队伍后进入，角色将在开局后选择。');
     }
   };
 }
@@ -493,15 +505,15 @@ const loadInterval = setInterval(() => {
 
 // Start game
 document.getElementById('startBtn').addEventListener('click', () => {
-  if (!selectedTeam || !selectedRole) return;
+  if (!selectedTeam) return;
   if (!localOnly && !netMgr?.inRoom) return setRoomStatus('请先创建或加入房间。', true);
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
   window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
   window.game.init();
-  window.game.start(selectedTeam, selectedRole);
+  window.game.start(selectedTeam, 'WARRIOR');
   if (!localOnly && netMgr?.isHost) {
     netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
-    netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: selectedRole }).catch(console.warn);
+    netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);
   }
   const badge = document.getElementById('netBadge');
   badge.style.display = 'block';

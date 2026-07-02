@@ -683,7 +683,7 @@ class PlayerEntity {
     this.isInvisible = false;
 
     // Mesh
-    const geo = new THREE.CapsuleGeometry(0.35, 0.9, 4, 8);
+    const geo = this.createRoleGeometry(roleKey);
     const mat = new THREE.MeshLambertMaterial({ color: this.teamInfo.color });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.position.copy(this.pos);
@@ -708,6 +708,40 @@ class PlayerEntity {
     this.weaponMesh = null;
 
     engine.addEntity(this);
+  }
+
+  createRoleGeometry(roleKey) {
+    if (roleKey === 'WARRIOR') return new THREE.BoxGeometry(0.8, 1.35, 0.8);
+    if (roleKey === 'BUILDER') return new THREE.CylinderGeometry(0.48, 0.48, 1.35, 6);
+    if (roleKey === 'ASSASSIN') return new THREE.ConeGeometry(0.5, 1.45, 5);
+    if (roleKey === 'ARCHER') {
+      const geo = new THREE.OctahedronGeometry(0.72, 0);
+      geo.scale(0.72, 1.1, 0.72);
+      return geo;
+    }
+    return new THREE.CapsuleGeometry(0.35, 0.9, 4, 8);
+  }
+
+  setRole(roleKey) {
+    if (!ROLES[roleKey]) return;
+    const oldRatio = this.maxHp ? this.hp / this.maxHp : 1;
+    this.role = roleKey;
+    this.roleInfo = ROLES[roleKey];
+    this.maxHp = this.roleInfo.hp + Math.max(0, this.matchLevel - 1) * (window.GROWTH_CONFIG?.hpPerLevel || 2);
+    this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * oldRatio)));
+    this.speed = roleKey === 'ASSASSIN' ? 7 : 6;
+    this.skillCd = 0;
+    this.skillActive = 0;
+    this.isInvisible = false;
+    const oldTag = this.nameTag;
+    const oldWeapon = this.weaponMesh;
+    if (oldTag) this.mesh.remove(oldTag);
+    if (oldWeapon) this.mesh.remove(oldWeapon);
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = this.createRoleGeometry(roleKey);
+    if (oldTag) this.mesh.add(oldTag);
+    this.weaponMesh = null;
+    this.updateWeaponMesh();
   }
 
   // ====== 快捷栏/背包操作 ======
@@ -998,7 +1032,7 @@ class PlayerEntity {
   }
 
   moveInput(dx, dz, sprint = false) {
-    if (this.isDead) return;
+    if (this.isDead || this.isFrozen) return;
     const slowMult = this.slowTimer > 0 ? 0.65 : 1;
     const spd = (sprint ? 1.5 : 1) * this.speed * slowMult;
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
@@ -1011,7 +1045,7 @@ class PlayerEntity {
   }
 
   jump() {
-    if (this.onGround && !this.isDead) {
+    if (this.onGround && !this.isDead && !this.isFrozen) {
       this.vel.y = this.jumpPower;
       this.onGround = false;
       this.acJumpCount++;
@@ -1036,7 +1070,7 @@ class PlayerEntity {
   }
 
   attack() {
-    if (this.isDead || this.attackCd > 0 || this.silencedTimer > 0) return;
+    if (this.isDead || this.isFrozen || this.attackCd > 0 || this.silencedTimer > 0) return;
     this.attackCd = 0.35;
 
     let dmg = this.baseDmg;
@@ -1105,7 +1139,7 @@ class PlayerEntity {
   }
 
   placeBlock() {
-    if (this.isDead) return;
+    if (this.isDead || this.isFrozen) return;
     const blockType = this.getSelectedBlockType();
     if (!blockType) return;
     const item = this.getSelectedItem();
@@ -1138,7 +1172,7 @@ class PlayerEntity {
   }
 
   useSkill() {
-    if (this.isDead || this.skillCd > 0) return;
+    if (this.isDead || this.isFrozen || this.skillCd > 0) return;
     const info = this.roleInfo;
     this.skillCd = Math.max(3, info.active.cd - (this.skillCdBonus || 0));
     this.skillActive = info.active.name === '狂暴' ? 5 : info.active.name === '隐匿' ? 3 : 0;

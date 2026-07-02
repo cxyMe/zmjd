@@ -680,6 +680,9 @@ class Game {
     this.social = null;
     this.growthPanelOpen = false;
     this.growthTab = 'talents';
+    this.roleSelectionActive = false;
+    this.roleSelectionTimer = 0;
+    this.roleChosen = false;
   }
 
   init() {
@@ -828,9 +831,73 @@ class Game {
 
     this.showMessage('游戏开始！保护你的床，摧毁敌人的床！');
     this.social?.initMatch?.();
+    this.beginRoleSelection();
     if (this.network) {
       this.network.startSnapshotLoop?.(() => this.getNetworkState());
     }
+  }
+
+  beginRoleSelection() {
+    this.roleSelectionActive = true;
+    this.roleSelectionTimer = 10;
+    this.roleChosen = false;
+    if (this.localPlayer) this.localPlayer.isFrozen = true;
+    const panel = document.getElementById('startRolePanel');
+    const cards = document.getElementById('startRoleCards');
+    if (!panel || !cards) return;
+    const shapeClass = { WARRIOR: 'shape-warrior', BUILDER: 'shape-builder', ASSASSIN: 'shape-assassin', ARCHER: 'shape-archer' };
+    const subtitles = {
+      WARRIOR: '正面冲阵 / 续航压制',
+      BUILDER: '守床筑防 / 快速铺路',
+      ASSASSIN: '高速绕后 / 偷袭拆床',
+      ARCHER: '远程牵制 / 火力覆盖'
+    };
+    cards.innerHTML = Object.entries(ROLES).map(([key, role]) => `
+      <div class="start-role-card" data-role="${key}">
+        <div class="role-shape ${shapeClass[key]}"></div>
+        <h3>${role.name}</h3>
+        <div class="role-stat"><span>定位</span><b>${subtitles[key]}</b></div>
+        <div class="role-stat"><span>生命</span><b>${role.hp}</b></div>
+        <div class="role-skill-box"><b>被动：${role.passive.name}</b><p>${role.passive.desc}</p></div>
+        <div class="role-skill-box"><b>主动：${role.active.name}</b><p>${role.active.desc}｜冷却 ${role.active.cd} 秒</p></div>
+      </div>
+    `).join('');
+    cards.querySelectorAll('.start-role-card').forEach(card => {
+      card.onclick = () => this.confirmRoleSelection(card.dataset.role);
+    });
+    panel.style.display = 'flex';
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.updateRoleSelectionUI();
+  }
+
+  updateRoleSelection(dt) {
+    if (!this.roleSelectionActive) return;
+    this.roleSelectionTimer -= dt;
+    this.updateRoleSelectionUI();
+    if (this.roleSelectionTimer <= 0) this.confirmRoleSelection('WARRIOR');
+  }
+
+  updateRoleSelectionUI() {
+    const sec = Math.max(0, Math.ceil(this.roleSelectionTimer));
+    const small = document.getElementById('roleCountdown');
+    const big = document.getElementById('roleCountdownBig');
+    if (small) small.textContent = sec;
+    if (big) big.textContent = sec;
+  }
+
+  confirmRoleSelection(roleKey) {
+    if (!this.roleSelectionActive || this.roleChosen) return;
+    this.roleChosen = true;
+    const role = ROLES[roleKey] ? roleKey : 'WARRIOR';
+    this.localPlayer?.setRole?.(role);
+    if (this.localPlayer) this.localPlayer.isFrozen = false;
+    const panel = document.getElementById('startRolePanel');
+    if (panel) panel.style.display = 'none';
+    const skillBtn = document.getElementById('skillBtn');
+    if (skillBtn) skillBtn.childNodes[0].textContent = ROLES[role].active.name;
+    this.showMessage(`已选择角色：${ROLES[role].name}｜${ROLES[role].active.name}`, '#ffdd00');
+    this.roleSelectionActive = false;
+    if (!this.input.isMobile()) this.engine.renderer.domElement.requestPointerLock();
   }
 
   loop(time) {
@@ -845,6 +912,7 @@ class Game {
     this.gameTime += dt;
     this.tick++;
     this.shrinkTimer -= dt;
+    this.updateRoleSelection(dt);
 
     // 梦域潮汐：每 5 分钟重排部分资源浮岛并刷新临时资源点
     if (this.gameTime >= this.nextDreamTide) {
@@ -887,7 +955,7 @@ class Game {
     }
 
     // Local input
-    if (this.localPlayer && !this.localPlayer.isDead) {
+    if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
       const move = this.input.getMovement();
       // Mobile auto-facing
       if (this.input.isMobile() && (move.x !== 0 || move.z !== 0)) {
