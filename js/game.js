@@ -58,7 +58,7 @@ class InputManager {
 
     document.addEventListener('touchstart', e => {
       if (!window.game?.gameActive || !this.isMobile()) return;
-      if (e.target.closest?.('#mobileControls, #shopBtn, #growthBtn, #socialBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel')) return;
+      if (e.target.closest?.('#mobileControls, #shopBtn, #socialBtn, #layoutBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel')) return;
       const t = e.changedTouches[0];
       this.buttons.build = true;
       this.buildPointer = { x: t.clientX, y: t.clientY };
@@ -727,7 +727,7 @@ class Game {
 
     document.querySelector('.shop-close').onclick = () => this.toggleShop();
     document.getElementById('shopBtn').onclick = () => this.toggleShop();
-    document.getElementById('growthBtn').onclick = () => this.toggleGrowthPanel();
+    document.getElementById('layoutBtn').onclick = () => window.hudLayoutManager?.open();
     document.getElementById('socialBtn').onclick = () => this.social?.openSocialPanel();
     document.getElementById('comboShieldBtn').onclick = () => this.social?.castCombo('shield');
     document.getElementById('comboAssaultBtn').onclick = () => this.social?.castCombo('assault');
@@ -836,7 +836,8 @@ class Game {
     document.getElementById('gameOverScreen').style.display = 'none';
     document.getElementById('shopPanel').style.display = 'none';
     document.getElementById('crosshair').style.display = 'block';
-    document.getElementById('skillBtn').style.display = this.input.isMobile() ? 'flex' : 'none';
+    document.getElementById('skillBtn').style.display = 'flex';
+    window.hudLayoutManager?.init?.();
 
     // Show skill info
     const skillBtn = document.getElementById('skillBtn');

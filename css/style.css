@@ -84,6 +84,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 .role-select { margin-bottom: 14px; }
 .role-select h3 { font-size: 14px; color: #aaa; margin-bottom: 10px; }
 .menu-role-hint { grid-column: 1 / -1; padding: 12px 14px; border-radius: 14px; background: rgba(139,233,253,0.08); border: 1px solid rgba(139,233,253,0.2); }
+.menu-feature-row {
+  grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 10px;
+}
+.menu-feature-btn {
+  padding: 12px; border: 1px solid rgba(139,233,253,0.38); border-radius: 12px;
+  background: rgba(139,233,253,0.12); color: #8be9fd; font-weight: bold; cursor: pointer;
+}
+.menu-feature-btn.secondary { border-color: rgba(179,136,255,0.42); background: rgba(179,136,255,0.12); color: #d9c2ff; }
+.menu-feature-btn:hover { filter: brightness(1.2); transform: translateY(-1px); }
 .role-list { display: flex; gap: 8px; flex-wrap: wrap; }
 .role-btn {
   padding: 10px 16px; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
@@ -254,19 +264,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   cursor: pointer;
 }
 #shopBtn:active { transform: scale(0.95); }
-#growthBtn {
-  position: absolute; bottom: 82px; left: 16px; width: 56px; height: 42px;
-  border-radius: 14px; background: rgba(139,233,253,0.18); border: 2px solid #8be9fd;
-  color: #8be9fd; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-}
-#growthBtn:active { transform: scale(0.95); }
 #socialBtn {
-  position: absolute; bottom: 132px; left: 16px; width: 56px; height: 42px;
+  position: absolute; bottom: 82px; left: 16px; width: 56px; height: 42px;
   border-radius: 14px; background: rgba(179,136,255,0.18); border: 2px solid #b388ff;
   color: #d9c2ff; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
+#layoutBtn {
+  position: absolute; bottom: 132px; left: 16px; width: 56px; height: 42px;
+  border-radius: 14px; background: rgba(139,233,253,0.18); border: 2px solid #8be9fd;
+  color: #8be9fd; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#socialBtn:active, #layoutBtn:active { transform: scale(0.95); }
 #comboBar {
   position: absolute; top: 96px; left: 16px; width: 190px; padding: 10px;
   border-radius: 12px; background: rgba(0,0,0,0.48); border: 1px solid rgba(139,233,253,0.35);
@@ -435,10 +445,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 
 /* Skill button */
 #skillBtn {
-  position: absolute; bottom: 90px; right: 90px; width: 64px; height: 64px;
-  border-radius: 50%; background: rgba(0,212,255,0.2); border: 2px solid #00d4ff;
-  color: #00d4ff; font-size: 12px; z-index: 150; display: none; align-items: center; justify-content: center;
+  position: absolute; bottom: 92px; right: 18px; width: 72px; height: 72px;
+  border-radius: 50%; background: rgba(0,212,255,0.22); border: 2px solid #00d4ff;
+  color: #00d4ff; font-size: 13px; z-index: 150; display: none; align-items: center; justify-content: center;
   cursor: pointer; flex-direction: column;
+  box-shadow: 0 0 18px rgba(0,212,255,0.28);
 }
 #skillBtn .skill-cd { font-size: 10px; color: #aaa; }
 
@@ -507,7 +518,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 }
 
 /* ========== Growth System ========== */
-#awakeningPanel, #growthPanel {
+#awakeningPanel, #growthPanel, #menuGrowthPanel {
   position: fixed; inset: 0; z-index: 260; background: rgba(0,0,0,0.82);
   display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
 }
@@ -547,6 +558,46 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 .talent-card.active button { background: rgba(255,85,85,0.18); color: #ff8888; }
 .growth-summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .growth-pill { padding: 8px 12px; border-radius: 20px; background: rgba(139,233,253,0.12); color: #8be9fd; font-size: 13px; }
+.season-track { display: grid; grid-template-columns: repeat(10, minmax(70px, 1fr)); gap: 8px; margin-bottom: 14px; overflow-x: auto; }
+.season-node {
+  min-width: 70px; padding: 10px; border-radius: 12px; text-align: center;
+  background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.08); color: #aaa;
+}
+.season-node.unlocked { border-color: rgba(255,221,0,0.5); background: rgba(255,221,0,0.12); color: #ffdd00; }
+.season-node b, .season-node span { display: block; font-size: 12px; }
+.task-list { display: flex; flex-direction: column; gap: 12px; }
+.task-card { padding: 14px; border-radius: 14px; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.08); }
+.task-head { display: flex; justify-content: space-between; gap: 12px; color: #fff; font-size: 13px; margin-bottom: 8px; }
+.task-track { height: 9px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; margin-bottom: 8px; }
+.task-track div { height: 100%; background: linear-gradient(90deg,#8be9fd,#ffdd00); }
+.task-card p { color: #aaa; font-size: 12px; }
+.reward-unlocked { border-color: rgba(139,233,253,0.45); background: rgba(139,233,253,0.1); }
+
+/* ========== HUD Layout Editor ========== */
+#layoutPanel {
+  position: fixed; inset: 0; z-index: 280; background: rgba(0,0,0,0.78);
+  display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+}
+.layout-container {
+  width: min(560px, calc(100vw - 24px)); background: rgba(18,18,32,0.96);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; overflow: hidden;
+  box-shadow: 0 16px 50px rgba(0,0,0,0.45); color: #ddd;
+}
+.layout-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.layout-header h2 { color: #8be9fd; font-size: 22px; }
+.layout-header button { width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fff; font-size: 22px; cursor: pointer; }
+.layout-body { padding: 18px; }
+.layout-body p { color: #aaa; font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
+.layout-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.layout-actions button {
+  min-height: 36px; border: none; border-radius: 9px; cursor: pointer;
+  background: rgba(139,233,253,0.16); color: #8be9fd; font-weight: bold;
+}
+.layout-actions button.danger { background: rgba(255,85,85,0.16); color: #ff8888; }
+.layout-status { margin-top: 12px; color: #ffdd00; font-size: 12px; }
+.layout-editing #hud .layout-draggable {
+  outline: 2px dashed rgba(255,221,0,0.85); outline-offset: 4px; cursor: move; touch-action: none;
+}
 
 /* ========== Social System ========== */
 #markWheel, #teamChestPanel, #socialPanel, #postMatchGallery {
@@ -608,14 +659,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   #hotbar { bottom: 8px; gap: 4px; padding: 5px; max-width: calc(100vw - 130px); overflow-x: auto; }
   .hotbar-slot { width: 42px; height: 42px; font-size: 10px; flex: 0 0 auto; }
   #shopBtn { bottom: 8px; left: 8px; width: 50px; height: 50px; font-size: 12px; }
+  #socialBtn { bottom: 64px; left: 8px; width: 50px; height: 38px; font-size: 12px; }
+  #layoutBtn { bottom: 108px; left: 8px; width: 50px; height: 38px; font-size: 12px; }
   #joystickZone { bottom: 86px; left: 18px; width: 108px; height: 108px; }
   #joystickBase { width: 108px; height: 108px; }
   #jumpBtnMobile { bottom: 104px; right: 86px; width: 56px; height: 56px; }
   #attackBtnMobile { bottom: 104px; right: 16px; width: 56px; height: 56px; }
   #buildBtnMobile { bottom: 174px; right: 16px; width: 50px; height: 50px; }
-  #skillBtn { bottom: 174px; right: 78px; width: 54px; height: 54px; font-size: 11px; }
+  #skillBtn { bottom: 174px; right: 84px; width: 58px; height: 58px; font-size: 11px; }
   .shop-container { width: calc(100vw - 18px); max-height: calc(100vh - 24px); }
   .shop-body { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); padding: 12px; gap: 8px; }
+  .menu-feature-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .menu-feature-btn { padding: 10px 6px; font-size: 12px; }
+  .layout-actions { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 380px) {

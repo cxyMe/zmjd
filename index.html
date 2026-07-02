@@ -82,6 +82,11 @@
       <h3>角色选择规则</h3>
       <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「战士」。</div>
     </div>
+    <div class="menu-feature-row">
+      <button class="menu-feature-btn" id="menuSeasonBtn">查看赛季</button>
+      <button class="menu-feature-btn" id="menuTasksBtn">查看任务</button>
+      <button class="menu-feature-btn secondary" id="menuTalentsBtn">筑梦基石</button>
+    </div>
     <button class="start-btn" id="startBtn" disabled>开始游戏</button>
   </div>
 </div>
@@ -142,8 +147,8 @@
 
   <!-- Shop Button -->
   <div id="shopBtn">商店</div>
-  <div id="growthBtn">成长</div>
   <div id="socialBtn">社交</div>
+  <div id="layoutBtn">布局</div>
 
   <!-- Team Combo -->
   <div id="comboBar">
@@ -178,6 +183,47 @@
     <div id="jumpBtnMobile">跳跃</div>
     <div id="attackBtnMobile">攻击</div>
     <div id="buildBtnMobile">放置</div>
+  </div>
+</div>
+
+<!-- ========== Main Menu Season / Tasks ========== -->
+<div id="menuGrowthPanel">
+  <div class="growth-container">
+    <div class="growth-header">
+      <h2 id="menuGrowthTitle">赛季任务</h2>
+      <button class="growth-close" onclick="window.menuGrowthUI?.close()">&times;</button>
+    </div>
+    <div class="growth-tabs">
+      <button class="growth-tab active" data-menu-growth-tab="season">赛季</button>
+      <button class="growth-tab" data-menu-growth-tab="tasks">任务</button>
+      <button class="growth-tab" data-menu-growth-tab="rewards">奖励</button>
+      <button class="growth-tab" data-menu-growth-tab="talents">筑梦基石</button>
+    </div>
+    <div id="menuGrowthBody" class="growth-body"></div>
+  </div>
+</div>
+
+<!-- ========== HUD Layout Editor ========== -->
+<div id="layoutPanel">
+  <div class="layout-container">
+    <div class="layout-header">
+      <h2>自定义界面布局</h2>
+      <button id="layoutCloseBtn">&times;</button>
+    </div>
+    <div class="layout-body">
+      <p>开启编辑后，可拖动HUD组件位置。支持保存3套布局，也可一键复原默认布局。</p>
+      <div class="layout-actions">
+        <button id="layoutEditBtn">开启编辑</button>
+        <button data-save-layout="1">保存布局1</button>
+        <button data-save-layout="2">保存布局2</button>
+        <button data-save-layout="3">保存布局3</button>
+        <button data-load-layout="1">读取1</button>
+        <button data-load-layout="2">读取2</button>
+        <button data-load-layout="3">读取3</button>
+        <button class="danger" id="layoutResetBtn">一键复原</button>
+      </div>
+      <div id="layoutStatus" class="layout-status">当前使用默认布局。</div>
+    </div>
   </div>
 </div>
 
@@ -317,6 +363,7 @@
 <script src="js/social.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/game.js"></script>
+<script src="js/menu-features.js"></script>
 <script>
 // ============================================
 // Menu Logic
