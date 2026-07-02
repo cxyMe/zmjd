@@ -199,6 +199,17 @@ INSERT INTO game_config (config_key, config_value) VALUES
   ('match_settings', '{"shrink_start_min":30,"shrink_end_min":35,"max_players":12,"teams":4,"players_per_team":3}')
   ON CONFLICT (config_key) DO NOTHING;
 
+-- 默认超级管理员预授权：手机号 12345678900
+-- 首次用该手机号登录后台后，会自动绑定真实易圈 user_id。
+INSERT INTO admin_users (user_id, phone, nickname, level, created_by, is_active) VALUES
+  ('phone:12345678900', '12345678900', '默认超级管理员', 4, 'system', true)
+  ON CONFLICT (user_id) DO UPDATE SET
+    phone = EXCLUDED.phone,
+    nickname = EXCLUDED.nickname,
+    level = 4,
+    is_active = true,
+    updated_at = now();
+
 -- 启用 Realtime
 BEGIN;
   ALTER PUBLICATION supabase_realtime ADD TABLE admin_users;

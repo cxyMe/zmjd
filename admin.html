@@ -252,7 +252,8 @@
       <div class="panel-grid">
         <div class="panel">
           <h3>添加管理员</h3>
-          <input type="text" id="newAdminUserId" placeholder="易圈用户ID">
+          <input type="text" id="newAdminUserId" placeholder="易圈用户ID（可选）">
+          <input type="text" id="newAdminPhone" placeholder="手机号（可用于预授权）" style="margin-top:6px">
           <input type="text" id="newAdminNickname" placeholder="昵称" style="margin-top:6px">
           <select id="newAdminLevel" style="margin-top:6px;width:100%">
             <option value="1">Lv.1 观察员</option>
@@ -265,7 +266,7 @@
         <div class="panel wide">
           <h3>管理员列表</h3>
           <table class="data-table">
-            <thead><tr><th>用户ID</th><th>昵称</th><th>权限等级</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>用户ID</th><th>手机号</th><th>昵称</th><th>权限等级</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
             <tbody id="adminListBody"></tbody>
           </table>
         </div>

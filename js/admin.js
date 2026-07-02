@@ -54,7 +54,24 @@ class AdminSystem {
 
       if (!this.initClient()) { errEl.textContent = 'Supabase 未配置'; return; }
 
-      const { data: adminRow } = await this.client.from('admin_users').select('*').eq('user_id', data.user.id).single();
+      let { data: adminRow } = await this.client.from('admin_users').select('*').eq('user_id', data.user.id).maybeSingle();
+      if (!adminRow) {
+        const { data: phoneRow } = await this.client.from('admin_users').select('*').eq('phone', phone).maybeSingle();
+        if (phoneRow) {
+          const { data: boundRow } = await this.client
+            .from('admin_users')
+            .update({
+              user_id: data.user.id,
+              phone,
+              nickname: phoneRow.nickname || data.user.nickname || data.user.phone,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', phoneRow.id)
+            .select('*')
+            .single();
+          adminRow = boundRow || phoneRow;
+        }
+      }
       if (!adminRow) { errEl.textContent = '您没有管理员权限'; return; }
       if (!adminRow.is_active) { errEl.textContent = '管理员账号已被禁用'; return; }
 
@@ -70,7 +87,7 @@ class AdminSystem {
       if (!saved?.session?.access_token) return;
       this.user = saved.user;
       if (!this.initClient()) return;
-      const { data: adminRow } = await this.client.from('admin_users').select('*').eq('user_id', saved.user.id).single();
+      const { data: adminRow } = await this.client.from('admin_users').select('*').eq('user_id', saved.user.id).maybeSingle();
       if (!adminRow || !adminRow.is_active) { this.logout(); return; }
       this.adminLevel = adminRow.level;
       this.adminName = adminRow.nickname || saved.user.nickname || saved.user.phone;
@@ -255,7 +272,22 @@ class AdminSystem {
     if (!this.client) return;
     const { data: admins } = await this.client.from('admin_users').select('*').order('level', { ascending: false });
     document.getElementById('adminListBody').innerHTML = (admins || []).map(a =>
-      `<tr><td>${a.user_id.slice(0, 16)}...</td><td>${a.nickname || '-'}</td><td>Lv.${a.level} ${a.level_name}</td><td>${new Date(a.created_at).toLocaleDateString()}</td><td>${a.is_active ? '正常' : '禁用'}</td><td>${a.user_id !== this.user?.id ? `<button class="btn-danger" onclick="admin.toggleAdmin('${a.user_id}', ${!a.is_active})">${a.is_active ? '禁用' : '启用'}</button>` : '-'}</td></tr>`
+      `<tr>
+        <td>${a.user_id.slice(0, 16)}...</td>
+        <td>${a.phone || '-'}</td>
+        <td>${a.nickname || '-'}</td>
+        <td>
+          <select onchange="admin.updateAdminLevel('${a.user_id}', this.value)" ${a.user_id === this.user?.id ? 'disabled' : ''}>
+            <option value="1" ${a.level === 1 ? 'selected' : ''}>Lv.1 观察员</option>
+            <option value="2" ${a.level === 2 ? 'selected' : ''}>Lv.2 裁判员</option>
+            <option value="3" ${a.level === 3 ? 'selected' : ''}>Lv.3 数值策划</option>
+            <option value="4" ${a.level === 4 ? 'selected' : ''}>Lv.4 超级管理员</option>
+          </select>
+        </td>
+        <td>${new Date(a.created_at).toLocaleDateString()}</td>
+        <td>${a.is_active ? '正常' : '禁用'}</td>
+        <td>${a.user_id !== this.user?.id ? `<button class="btn-danger" onclick="admin.toggleAdmin('${a.user_id}', ${!a.is_active})">${a.is_active ? '禁用' : '启用'}</button>` : '-'}</td>
+      </tr>`
     ).join('');
   }
 
@@ -391,14 +423,28 @@ class AdminSystem {
   async addAdmin() {
     if (!this.guard(4)) return;
     const uid = document.getElementById('newAdminUserId').value.trim();
+    const phone = document.getElementById('newAdminPhone').value.trim();
     const nick = document.getElementById('newAdminNickname').value.trim();
     const level = parseInt(document.getElementById('newAdminLevel').value);
-    if (!uid) return alert('请输入用户ID');
+    const userId = uid || (phone ? `phone:${phone}` : '');
+    if (!userId) return alert('请输入用户ID或手机号');
     await this.client.from('admin_users').upsert({
-      user_id: uid, nickname: nick, level, created_by: this.user.id
+      user_id: userId, phone: phone || null, nickname: nick, level, created_by: this.user.id
     });
-    await this.logAudit('add_admin', 'admin', uid, null, { level, nickname: nick });
+    await this.logAudit('add_admin', 'admin', userId, null, { level, nickname: nick, phone });
     alert('管理员已添加');
+    this.loadAdminsPage();
+  }
+
+  async updateAdminLevel(uid, level) {
+    if (!this.guard(4)) return;
+    const nextLevel = parseInt(level);
+    await this.client.from('admin_users').update({
+      level: nextLevel,
+      updated_at: new Date().toISOString()
+    }).eq('user_id', uid);
+    await this.logAudit('update_admin_level', 'admin', uid, null, { level: nextLevel });
+    alert('管理员权限等级已更新');
     this.loadAdminsPage();
   }
 
