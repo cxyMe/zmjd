@@ -916,6 +916,7 @@ class PlayerEntity {
 
     if (this.silencedTimer > 0) this.silencedTimer -= dt;
     if (this.slowTimer > 0) this.slowTimer -= dt;
+    if (this.socialShield > 0) this.socialShield -= dt;
 
     // Anti-cheat detection
     if (!this.isDead && !this.acAlertSent) {
@@ -1178,7 +1179,8 @@ class PlayerEntity {
   takeDamage(amount, attacker) {
     if (this.isDead) return;
     const reduction = this.armor / (this.armor + 50);
-    const actual = Math.max(1, amount * (1 - reduction));
+    const shieldReduce = this.socialShield > 0 ? 0.35 : 0;
+    const actual = Math.max(1, amount * (1 - reduction) * (1 - shieldReduce));
     this.hp -= actual;
     if (attacker) {
       attacker.matchStats.damage += actual;

@@ -135,6 +135,20 @@
   <!-- Shop Button -->
   <div id="shopBtn">商店</div>
   <div id="growthBtn">成长</div>
+  <div id="socialBtn">社交</div>
+
+  <!-- Team Combo -->
+  <div id="comboBar">
+    <div class="combo-title">三人连携</div>
+    <div class="combo-track"><div id="comboFill"></div></div>
+    <div id="comboText">连携 0%</div>
+    <div class="combo-actions">
+      <button id="comboShieldBtn">铁壁</button>
+      <button id="comboAssaultBtn">突袭</button>
+    </div>
+  </div>
+
+  <button id="rescueBtn" style="display:none;">救援</button>
 
   <!-- Skill Button -->
   <div id="skillBtn" style="display:none;"><span>技能</span><span class="skill-cd">就绪</span></div>
@@ -187,6 +201,50 @@
   </div>
 </div>
 
+<!-- ========== Dream Mark Wheel ========== -->
+<div id="markWheel">
+  <div class="social-container small">
+    <div class="social-header">
+      <h2>梦之印记</h2>
+      <button onclick="document.getElementById('markWheel').style.display='none'">&times;</button>
+    </div>
+    <div id="markOptions" class="mark-options"></div>
+  </div>
+</div>
+
+<!-- ========== Team Chest ========== -->
+<div id="teamChestPanel">
+  <div class="social-container small">
+    <div class="social-header">
+      <h2>团队保险箱</h2>
+      <button onclick="document.getElementById('teamChestPanel').style.display='none'">&times;</button>
+    </div>
+    <div id="teamChestBody" class="social-body"></div>
+  </div>
+</div>
+
+<!-- ========== Social Panel ========== -->
+<div id="socialPanel">
+  <div class="social-container">
+    <div class="social-header">
+      <h2>社交与安全</h2>
+      <button onclick="document.getElementById('socialPanel').style.display='none'">&times;</button>
+    </div>
+    <div id="socialBody" class="social-body"></div>
+  </div>
+</div>
+
+<!-- ========== Post Match Gallery ========== -->
+<div id="postMatchGallery">
+  <div class="social-container">
+    <div class="social-header">
+      <h2>赛后荣耀海报</h2>
+      <button onclick="document.getElementById('postMatchGallery').style.display='none'">&times;</button>
+    </div>
+    <div id="postMatchBody" class="poster-grid"></div>
+  </div>
+</div>
+
 <!-- ========== Shop Panel ========== -->
 <div id="shopPanel">
   <div class="shop-container">
@@ -232,6 +290,7 @@
 <script src="js/config.js"></script>
 <script src="js/network.js"></script>
 <script src="js/growth.js"></script>
+<script src="js/social.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/game.js"></script>
 <script>

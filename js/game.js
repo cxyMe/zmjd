@@ -677,6 +677,7 @@ class Game {
     this.economyLogTimer = 0;
     this.adminCommandSub = null;
     this.growth = null;
+    this.social = null;
     this.growthPanelOpen = false;
     this.growthTab = 'talents';
   }
@@ -685,9 +686,11 @@ class Game {
     const container = document.getElementById('gameCanvas');
     this.engine = new Engine(container);
     this.gens = generateWorld(this.engine);
+    this.social?.initMatch?.();
     this.ai = new AISystem(this);
     this.ui = new UIManager(this);
     this.growth = new GrowthManager(this);
+    this.social = new SocialManager(this);
 
     // Build shop tabs
     document.querySelectorAll('.shop-tab').forEach(tab => {
@@ -702,6 +705,10 @@ class Game {
     document.querySelector('.shop-close').onclick = () => this.toggleShop();
     document.getElementById('shopBtn').onclick = () => this.toggleShop();
     document.getElementById('growthBtn').onclick = () => this.toggleGrowthPanel();
+    document.getElementById('socialBtn').onclick = () => this.social?.openSocialPanel();
+    document.getElementById('comboShieldBtn').onclick = () => this.social?.castCombo('shield');
+    document.getElementById('comboAssaultBtn').onclick = () => this.social?.castCombo('assault');
+    document.getElementById('rescueBtn').onclick = () => this.social?.rescueVoidMate();
     document.querySelectorAll('.growth-tab').forEach(tab => {
       tab.onclick = () => {
         document.querySelectorAll('.growth-tab').forEach(t => t.classList.remove('active'));
@@ -726,6 +733,10 @@ class Game {
       if (e.code === 'Digit7') this.selectHotbar(6);
       if (e.code === 'Digit8') this.selectHotbar(7);
       if (e.code === 'KeyB') this.toggleShop();
+      if (e.code === 'KeyC') this.social?.openMarkWheel();
+      if (e.code === 'KeyV') this.social?.sendAid();
+      if (e.code === 'KeyX') this.social?.openTeamChest();
+      if (e.code === 'KeyZ') this.social?.castCombo('shield');
       if (e.code === 'KeyQ') {
         if (this.localPlayer) this.localPlayer.useSkill();
       }
@@ -816,6 +827,7 @@ class Game {
     }
 
     this.showMessage('游戏开始！保护你的床，摧毁敌人的床！');
+    this.social?.initMatch?.();
     if (this.network) {
       this.network.startSnapshotLoop?.(() => this.getNetworkState());
     }
@@ -922,6 +934,7 @@ class Game {
     }
 
     // Engine update
+    this.social?.update?.(dt);
     this.engine.update(dt);
     this.engine.render();
 
@@ -1087,6 +1100,7 @@ class Game {
       this.network.sendGameOver(winnerName).catch(console.warn);
     }
     if (document.pointerLockElement) document.exitPointerLock();
+    this.social?.showPostMatchGallery?.(winnerName);
     const screen = document.getElementById('gameOverScreen');
     screen.style.display = 'flex';
     screen.querySelector('h1').textContent = winnerName === '无' ? '平局！' : '游戏结束！';
