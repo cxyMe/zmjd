@@ -640,7 +640,7 @@ class UIManager {
       blocks: ['wood_plank','stone_plate','iron_plate','titanium'],
       weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow'],
       armor: ['std_armor','fine_armor','rd_armor'],
-      specials: ['tnt','portal','potion']
+      specials: ['tnt','trap_device','portal','potion']
     };
     const items = tabs[this.shopTab] || [];
 
@@ -992,10 +992,22 @@ class Game {
       if (this.input.consumeJump()) this.localPlayer.jump();
       if (this.input.consumeAttack()) this.localPlayer.attack();
       const buildPointer = this.input.consumeBuild();
-      if (buildPointer) this.localPlayer.placeBlock(buildPointer);
+      if (buildPointer) {
+        const selectedItem = this.localPlayer.getSelectedItem();
+        if (selectedItem && selectedItem.key === 'trap_device') {
+          this.localPlayer.useHotbarItem();
+        } else {
+          this.localPlayer.placeBlock(buildPointer);
+        }
+      }
       if (this.input.consumeSkill()) this.localPlayer.useSkill();
       if (this.input.consumeDrop()) this.localPlayer.dropSelectedItem();
       if (this.input.consumeBackpack()) this.toggleBackpack();
+      // 按F装填最近陷阱的箭矢
+      if (this.input.isDown('KeyF') && this.localPlayer.arrowCount > 0) {
+        this.input.keys['KeyF'] = false;
+        this.loadNearestTrap();
+      }
     }
 
     // Resource generators spawn drop items instead of direct collection
@@ -1117,6 +1129,24 @@ class Game {
       lp.equip(key);
     }
     this.shopDirty = true;
+  }
+
+  loadNearestTrap() {
+    const lp = this.localPlayer;
+    if (!lp || lp.arrowCount <= 0) return;
+    let nearest = null, nearestDist = 3;
+    for (const trap of this.engine.trapDevices) {
+      if (!trap.active) continue;
+      if (trap.team !== lp.team) continue;
+      if (trap.arrows >= trap.maxArrows) continue;
+      const dist = lp.pos.distanceTo(trap.pos);
+      if (dist < nearestDist) { nearestDist = dist; nearest = trap; }
+    }
+    if (nearest) {
+      const loaded = this.engine.loadTrapArrows(nearest, Math.min(lp.arrowCount, nearest.maxArrows - nearest.arrows));
+      lp.arrowCount -= loaded;
+      this.showMessage(`已装填 ${loaded} 支箭矢到追踪装置（剩余 ${nearest.arrows}/${nearest.maxArrows}）`, '#8be9fd');
+    }
   }
 
   onPlayerKilled(victim, killer) {

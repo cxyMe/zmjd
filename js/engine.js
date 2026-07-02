@@ -36,10 +36,10 @@ const ROLES = {
 // Resource Types (刷新速度减缓)
 // ============================================
 const RES = {
-  COPPER: { name: '铜币', color: 0xcd7f32, spawnSec: 4,  key: 'copper' },
-  SILVER: { name: '银币', color: 0xc0c0c0, spawnSec: 12, key: 'silver' },
-  GOLD:   { name: '金币', color: 0xffd700, spawnSec: 30, key: 'gold'   },
-  JADE:   { name: '玉佩', color: 0x00a86b, spawnSec: 90, key: 'jade'   }
+  COPPER: { name: '铜币', color: 0xcd7f32, spawnSec: 2,  key: 'copper' },
+  SILVER: { name: '银币', color: 0xc0c0c0, spawnSec: 6,  key: 'silver' },
+  GOLD:   { name: '金币', color: 0xffd700, spawnSec: 15, key: 'gold'   },
+  JADE:   { name: '玉佩', color: 0x00a86b, spawnSec: 42, key: 'jade'   }
 };
 
 // ============================================
@@ -60,6 +60,7 @@ const ITEM_DB = {
   fine_armor:   { name: '精制甲',type: 'armor',  cost: { gold: 16 },         armor: 40, desc: '中级防护', stack: 1 },
   rd_armor:     { name: '研发甲',type: 'armor',  cost: { jade: 4 },          armor: 60, desc: '顶级防护', stack: 1 },
   tnt:          { name: '炸药',  type: 'special',cost: { gold: 8 },          desc: '破坏3x3范围方块', stack: 4 },
+  trap_device:  { name: '追踪装置',type:'special',cost: { gold: 12 },         desc: '自动攻击附近敌人，可装填100支箭', stack: 2 },
   portal:       { name: '传送门',type: 'special',cost: { jade: 2 },          desc: '瞬移至基地', stack: 2 },
   potion:       { name: '生命药水',type:'special',cost: { gold: 4 },          desc: '恢复全部生命', stack: 8 }
 };
@@ -79,6 +80,8 @@ class Engine {
     this.particles = [];
     this.projectiles = [];
     this.dropItems = [];     // 地面掉落物
+    this.deathBoxes = [];   // 死亡掉落盒子
+    this.trapDevices = [];  // 陷阱装置
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -331,6 +334,154 @@ class Engine {
     }
   }
 
+  // ============================================
+  // Death Drop Box System
+  // ============================================
+  createDeathBox(pos, playerName, teamColor, items, currencies) {
+    // 创建盒子
+    const boxGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+    const boxMat = new THREE.MeshLambertMaterial({ color: teamColor, emissive: teamColor, emissiveIntensity: 0.4 });
+    const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+    boxMesh.position.copy(pos);
+    boxMesh.position.y = Math.max(0.5, pos.y + 0.5);
+    boxMesh.castShadow = true;
+    this.scene.add(boxMesh);
+
+    // 名字标签
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 48;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${playerName}的遗物`, 128, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    const labelMat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9 });
+    const label = new THREE.Sprite(labelMat);
+    label.scale.set(1.8, 0.34, 1);
+    label.position.y = 0.8;
+    boxMesh.add(label);
+
+    // 粒子光环
+    const ringGeo = new THREE.TorusGeometry(0.6, 0.05, 8, 16);
+    const ringMat = new THREE.MeshBasicMaterial({ color: teamColor, transparent: true, opacity: 0.6 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = 0;
+    boxMesh.add(ring);
+
+    const deathBox = {
+      mesh: boxMesh,
+      label,
+      ring,
+      pos: boxMesh.position.clone(),
+      playerName,
+      teamColor,
+      items: items || [],      // [{key, count}, ...]
+      currencies: currencies || {}, // {copper: n, silver: n, ...}
+      life: 90,               // 90秒后消失
+      floatOffset: Math.random() * Math.PI * 2,
+      radius: 0.7,
+      opened: false
+    };
+    this.deathBoxes.push(deathBox);
+    return deathBox;
+  }
+
+  removeDeathBox(box) {
+    const i = this.deathBoxes.indexOf(box);
+    if (i >= 0) {
+      this.scene.remove(box.mesh);
+      this.deathBoxes.splice(i, 1);
+    }
+  }
+
+  // ============================================
+  // Trap Device System (追踪连发装置)
+  // ============================================
+  createTrapDevice(pos, team, owner) {
+    // 底座
+    const baseGeo = new THREE.CylinderGeometry(0.45, 0.55, 0.3, 8);
+    const baseMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.set(pos.x, pos.y + 0.15, pos.z);
+    base.castShadow = true;
+    this.scene.add(base);
+
+    // 炮塔
+    const turretGeo = new THREE.CylinderGeometry(0.25, 0.35, 0.5, 8);
+    const turretMat = new THREE.MeshLambertMaterial({ color: 0x666666, emissive: 0x222222 });
+    const turret = new THREE.Mesh(turretGeo, turretMat);
+    turret.position.y = 0.35;
+    base.add(turret);
+
+    // 红色指示灯
+    const lightGeo = new THREE.SphereGeometry(0.08, 8, 8);
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const light = new THREE.Mesh(lightGeo, lightMat);
+    light.position.y = 0.65;
+    base.add(light);
+
+    // 团队标识环
+    const ringGeo = new THREE.TorusGeometry(0.4, 0.04, 8, 16);
+    const ringMat = new THREE.MeshBasicMaterial({ color: TEAMS[team]?.color || 0xffffff, transparent: true, opacity: 0.7 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.3;
+    base.add(ring);
+
+    // 标签
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('追踪装置', 64, 22);
+    const tex = new THREE.CanvasTexture(canvas);
+    const labelMat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.8 });
+    const label = new THREE.Sprite(labelMat);
+    label.scale.set(1.0, 0.25, 1);
+    label.position.y = 1.0;
+    base.add(label);
+
+    const trap = {
+      mesh: base,
+      turret,
+      light,
+      ring,
+      label,
+      pos: new THREE.Vector3(pos.x, pos.y, pos.z),
+      team,
+      owner,
+      arrows: 0,           // 当前装填箭矢数
+      maxArrows: 100,      // 最大装填量
+      range: 8,            // 探测范围
+      fireInterval: 0.05,  // 发射间隔（秒）
+      fireTimer: 0,
+      hp: 80,              // 生命值
+      maxHp: 80,
+      active: true
+    };
+    this.trapDevices.push(trap);
+    return trap;
+  }
+
+  removeTrapDevice(trap) {
+    const i = this.trapDevices.indexOf(trap);
+    if (i >= 0) {
+      this.scene.remove(trap.mesh);
+      this.trapDevices.splice(i, 1);
+    }
+  }
+
+  // 装填陷阱箭矢
+  loadTrapArrows(trap, count) {
+    if (!trap || !trap.active) return 0;
+    const canLoad = Math.min(count, trap.maxArrows - trap.arrows);
+    trap.arrows += canLoad;
+    return canLoad;
+  }
+
   explodeAt(pos, radius, dmg) {
     // 炸毁方块
     const rx = Math.floor(pos.x);
@@ -349,6 +500,22 @@ class Engine {
       if (d.pos.distanceTo(pos) <= radius + 1.5) {
         this.spawnParticles(d.pos, 0xff4400, 5);
         this.removeDropItem(d);
+      }
+    }
+    // 炸毁范围内的陷阱装置
+    for (let i = this.trapDevices.length - 1; i >= 0; i--) {
+      const trap = this.trapDevices[i];
+      if (trap.pos.distanceTo(pos) <= radius + 2) {
+        this.spawnParticles(trap.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), 0xff4400, 15);
+        this.removeTrapDevice(trap);
+      }
+    }
+    // 炸毁范围内的死亡盒子
+    for (let i = this.deathBoxes.length - 1; i >= 0; i--) {
+      const box = this.deathBoxes[i];
+      if (box.pos.distanceTo(pos) <= radius + 2) {
+        this.spawnParticles(box.pos, 0xff4400, 10);
+        this.removeDeathBox(box);
       }
     }
     this.spawnParticles(pos, 0xff4400, 20);
@@ -408,6 +575,104 @@ class Engine {
             break;
           }
         }
+      }
+    }
+
+    // Death Boxes (浮动动画 + 拾取 + 超时)
+    for (let i = this.deathBoxes.length - 1; i >= 0; i--) {
+      const box = this.deathBoxes[i];
+      box.life -= dt;
+      box.floatOffset += dt * 1.5;
+      box.mesh.position.y = box.pos.y + Math.sin(box.floatOffset) * 0.2;
+      box.mesh.rotation.y += dt * 0.8;
+      box.ring.rotation.z += dt * 2;
+      box.ring.rotation.x += dt * 1.5;
+
+      if (box.life <= 0) {
+        this.spawnParticles(box.mesh.position, box.teamColor, 10);
+        this.removeDeathBox(box);
+        continue;
+      }
+
+      // 玩家靠近自动拾取
+      for (const ent of this.entities) {
+        if (ent.isDead || !ent.isLocal) continue;
+        const pickupRange = 2.0 * (1 + (ent.pickupRangeBonus || 0));
+        const dist = ent.pos.distanceTo(box.mesh.position);
+        if (dist < pickupRange) {
+          const pull = ent.pos.clone().sub(box.mesh.position).normalize().multiplyScalar(5 * dt);
+          box.mesh.position.add(pull);
+          box.pos.copy(box.mesh.position);
+          if (dist < 0.8) {
+            // 打开盒子，拾取所有物品
+            for (const item of box.items) {
+              ent.addToBackpack(item.key, item.count);
+            }
+            for (const [rk, rv] of Object.entries(box.currencies)) {
+              if (rv > 0) ent.inv[rk] = (ent.inv[rk] || 0) + rv;
+            }
+            this.spawnParticles(box.mesh.position, 0xffdd00, 10);
+            this.removeDeathBox(box);
+            window.game?.showMessage(`打开了 ${box.playerName} 的遗物！`, '#ffdd00');
+            break;
+          }
+        }
+      }
+    }
+
+    // Trap Devices (扫描敌人 + 发射)
+    for (let i = this.trapDevices.length - 1; i >= 0; i--) {
+      const trap = this.trapDevices[i];
+      if (!trap.active) continue;
+
+      // 视觉更新
+      trap.light.material.color.setHex(trap.arrows > 0 ? 0x00ff00 : 0xff0000);
+      trap.ring.rotation.z += dt * 3;
+
+      if (trap.arrows <= 0) continue;
+
+      trap.fireTimer -= dt;
+      if (trap.fireTimer > 0) continue;
+
+      // 扫描范围内的敌方玩家
+      let nearestEnemy = null;
+      let nearestDist = trap.range;
+      for (const ent of this.entities) {
+        if (ent.isDead) continue;
+        if (ent.team === trap.team) continue;
+        const dist = trap.pos.distanceTo(ent.pos);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestEnemy = ent;
+        }
+      }
+
+      if (nearestEnemy) {
+        // 炮塔转向敌人
+        const dir = nearestEnemy.pos.clone().sub(trap.pos);
+        dir.y = 0;
+        const angle = Math.atan2(dir.x, dir.z);
+        trap.turret.rotation.y = angle;
+
+        // 发射箭矢
+        const arrowDir = nearestEnemy.pos.clone().sub(trap.pos.clone().add(new THREE.Vector3(0, 0.5, 0))).normalize();
+        const start = trap.pos.clone().add(new THREE.Vector3(0, 0.6, 0));
+        const arrowGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4);
+        arrowGeo.rotateX(Math.PI / 2);
+        const arrowMat = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+        const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+        arrowMesh.position.copy(start);
+        arrowMesh.lookAt(start.clone().add(arrowDir));
+        this.scene.add(arrowMesh);
+        this.projectiles.push({
+          mesh: arrowMesh,
+          vel: arrowDir.clone().multiplyScalar(22),
+          life: 2,
+          damage: 6,
+          owner: trap.owner || this.entities.find(e => e.team === trap.team && !e.isDead) || null
+        });
+        trap.arrows--;
+        trap.fireTimer = trap.fireInterval;
       }
     }
 
@@ -925,6 +1190,21 @@ class PlayerEntity {
       this.vel.set(0, 0, 0);
       item.count--;
       if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+    } else if (item.key === 'trap_device') {
+      // 放置追踪装置
+      const dir = this.getForwardDir();
+      const placePos = this.pos.clone().add(new THREE.Vector3(0, 0, 0)).addScaledVector(dir, 1.5);
+      placePos.y = Math.max(0.5, placePos.y);
+      const trap = this.engine.createTrapDevice(placePos, this.team, this);
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage(`${this.name} 放置了追踪装置！`, '#8be9fd');
+      // 自动装填箭矢
+      if (this.arrowCount > 0) {
+        const loaded = this.engine.loadTrapArrows(trap, Math.min(this.arrowCount, 100));
+        this.arrowCount -= loaded;
+        window.game?.showMessage(`已装填 ${loaded} 支箭矢`, '#ffdd00');
+      }
     }
   }
 
@@ -981,7 +1261,7 @@ class PlayerEntity {
         this.voidGraceTimer += dt;
         this.vel.y = Math.max(this.vel.y, -2);
       } else {
-        this.die(null);
+        this.die(null, true);
         return;
       }
     } else {
@@ -1266,32 +1546,68 @@ class PlayerEntity {
     }
   }
 
-  die(killer) {
+  die(killer, isVoidDeath = false) {
     if (this.isDead) return;
     this.isDead = true;
     this.hp = 0;
     this.mesh.visible = false;
     this.respawnTimer = 5;
-    // 死亡掉落所有快捷栏和背包物品
-    for (let i = 0; i < this.hotbar.length; i++) {
-      if (this.hotbar[i]) {
-        const dropPos = this.pos.clone();
-        dropPos.x += (Math.random() - 0.5) * 2;
-        dropPos.z += (Math.random() - 0.5) * 2;
-        this.engine.spawnDropItem(dropPos, this.hotbar[i].key, this.hotbar[i].count);
-        this.hotbar[i] = null;
-      }
-    }
-    for (let i = 0; i < this.backpack.length; i++) {
-      if (this.backpack[i]) {
-        const dropPos = this.pos.clone();
-        dropPos.x += (Math.random() - 0.5) * 2;
-        dropPos.z += (Math.random() - 0.5) * 2;
-        this.engine.spawnDropItem(dropPos, this.backpack[i].key, this.backpack[i].count);
-        this.backpack[i] = null;
-      }
-    }
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
+
+    if (isVoidDeath) {
+      // 虚空死亡：清空所有装备和物品
+      this.hotbar = Array(8).fill(null);
+      this.backpack = Array(20).fill(null);
+      this.equipped = { weapon: null, armor: null };
+      this.arrowCount = 0;
+      this.armor = 0;
+      this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
+      this.updateWeaponMesh();
+      window.game?.showMessage(`${this.name} 坠入虚空，装备和物品全部清空！`, '#ff4444');
+    } else {
+      // 收集所有物品和货币
+      const allItems = [];
+      for (let i = 0; i < this.hotbar.length; i++) {
+        if (this.hotbar[i]) {
+          allItems.push({ key: this.hotbar[i].key, count: this.hotbar[i].count });
+          this.hotbar[i] = null;
+        }
+      }
+      for (let i = 0; i < this.backpack.length; i++) {
+        if (this.backpack[i]) {
+          allItems.push({ key: this.backpack[i].key, count: this.backpack[i].count });
+          this.backpack[i] = null;
+        }
+      }
+      // 装备也掉落
+      if (this.equipped.weapon) {
+        allItems.push({ key: this.equipped.weapon, count: 1 });
+        this.equipped.weapon = null;
+      }
+      if (this.equipped.armor) {
+        allItems.push({ key: this.equipped.armor, count: 1 });
+        this.equipped.armor = null;
+        this.armor = 0;
+      }
+      // 箭矢也掉落
+      if (this.arrowCount > 0) {
+        allItems.push({ key: 'arrow', count: this.arrowCount });
+        this.arrowCount = 0;
+      }
+      this.updateWeaponMesh();
+
+      // 货币掉落
+      const currencies = { ...this.inv };
+      this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
+
+      // 创建死亡盒子
+      if (allItems.length > 0 || Object.values(currencies).some(v => v > 0)) {
+        const boxPos = this.pos.clone();
+        boxPos.y = Math.max(0.5, boxPos.y);
+        this.engine.createDeathBox(boxPos, this.name, this.teamInfo.color, allItems, currencies);
+      }
+    }
+
     if (killer) {
       killer.matchStats.kills++;
       window.game?.growth?.addXp?.(killer, GROWTH_CONFIG.xp.kill, '击杀');
