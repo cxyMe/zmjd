@@ -246,12 +246,60 @@ class RoomNetwork {
 
   async setTeam(team) {
     const client = this.initClient();
+    if (team) {
+      const { count } = await client
+        .from('room_players')
+        .select('id', { count: 'exact', head: true })
+        .eq('room_id', this.room.id)
+        .eq('team', team)
+        .eq('is_online', true)
+        .neq('player_id', this.auth.user.id);
+      if ((count || 0) >= 3) throw new Error('该队伍已满，最多3人');
+    }
     const { error } = await client
       .from('room_players')
       .update({ team })
       .eq('room_id', this.room.id)
       .eq('player_id', this.auth.user.id);
     if (error) throw error;
+    await this.refreshPlayers();
+  }
+
+  async hostSetPlayerTeam(playerId, team) {
+    if (!this.isMainHost) throw new Error('只有房主可以变更用户队伍');
+    const client = this.initClient();
+    if (team) {
+      const { count } = await client
+        .from('room_players')
+        .select('id', { count: 'exact', head: true })
+        .eq('room_id', this.room.id)
+        .eq('team', team)
+        .eq('is_online', true)
+        .neq('player_id', playerId);
+      if ((count || 0) >= 3) throw new Error('该队伍已满，最多3人');
+    }
+    const { error } = await client
+      .from('room_players')
+      .update({ team })
+      .eq('room_id', this.room.id)
+      .eq('player_id', playerId);
+    if (error) throw error;
+    await this.sendEvent('room_team_changed', { playerId, team }, 0);
+    await this.refreshPlayers();
+  }
+
+  async hostKickPlayer(playerId, reason = '房主移出房间') {
+    if (!this.isMainHost) throw new Error('只有房主可以踢出用户');
+    if (playerId === this.auth.user.id) throw new Error('不能踢出自己');
+    const client = this.initClient();
+    const { error } = await client
+      .from('room_players')
+      .update({ is_online: false })
+      .eq('room_id', this.room.id)
+      .eq('player_id', playerId);
+    if (error) throw error;
+    await this.sendEvent('room_kick', { playerId, reason }, 0);
+    await this.refreshPlayers();
   }
 
   // ---------- 订阅与实时同步 ----------
@@ -458,6 +506,18 @@ class NetworkManager {
     const room = await this.roomNet.reconnectLastRoom();
     this.bindRoomEvents();
     return room;
+  }
+
+  async setMyTeam(team) {
+    return this.roomNet.setTeam(team);
+  }
+
+  async hostSetPlayerTeam(playerId, team) {
+    return this.roomNet.hostSetPlayerTeam(playerId, team);
+  }
+
+  async hostKickPlayer(playerId, reason) {
+    return this.roomNet.hostKickPlayer(playerId, reason);
   }
 
   bindRoomEvents() {

@@ -336,10 +336,18 @@ const roleDescriptions = {
 
 // Team selection
 document.querySelectorAll('.team-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedTeam = btn.dataset.team;
+    if (!localOnly && netMgr?.inRoom) {
+      try {
+        await netMgr.setMyTeam(selectedTeam);
+        setRoomStatus(`已选择 ${TEAMS[selectedTeam].name}，房间成员列表已同步。`);
+      } catch (err) {
+        setRoomStatus(err.message || '同步队伍失败', true);
+      }
+    }
     updateStartBtn();
   });
 });
@@ -374,21 +382,83 @@ function renderRoom() {
   const room = netMgr?.roomNet?.room;
   const members = netMgr?.members || [];
   const isMainHost = netMgr?.isHost;
+  const myId = auth.user?.id;
   const code = room?.code ? `<span class="room-code">${room.code}</span>` : '';
   const hostText = isMainHost ? '你是主房主，负责保存权威游戏状态。' : '你是副房主/玩家，主房主掉线后会自动接管。';
-  setRoomStatus(`当前房间 ${code} ${hostText}`);
+  const teamCount = ['RED','BLUE','GREEN','YELLOW'].map(k => `${TEAMS[k].name}${members.filter(m => m.team === k).length}/3`).join(' ｜ ');
+  setRoomStatus(`当前房间 ${code} ${hostText}<br><span class="team-count-line">${teamCount}</span>`);
   const list = document.getElementById('roomMembers');
   list.innerHTML = '';
+  if (netMgr?.inRoom && myId && !members.some(m => m.player_id === myId)) {
+    handleRoomKick('你已被房主移出房间');
+    return;
+  }
+  const myMember = members.find(m => m.player_id === myId);
+  if (myMember?.team && myMember.team !== selectedTeam) {
+    selectedTeam = myMember.team;
+    document.querySelectorAll('.team-btn').forEach(b => b.classList.toggle('selected', b.dataset.team === selectedTeam));
+  }
   for (const m of members) {
     const div = document.createElement('div');
     div.className = 'member-line';
     const isHost = room?.host_id === m.player_id;
     const hostBadge = isHost ? '<span class="host-badge">主房主</span>' : (m.role === 'host' ? '<span>副房主</span>' : '<span>玩家</span>');
     const state = m.is_online ? '<span>在线</span>' : '<span class="offline">离线</span>';
-    const name = m.player_id === auth.user?.id ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4));
-    div.innerHTML = `<span>${name} ${hostBadge}</span>${state}`;
+    const name = m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4));
+    const teamName = m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队';
+    const teamSelect = `
+      <select class="member-team-select" data-player-id="${m.player_id}" ${isMainHost ? '' : 'disabled'}>
+        <option value="">未选队</option>
+        <option value="RED" ${m.team === 'RED' ? 'selected' : ''}>红队</option>
+        <option value="BLUE" ${m.team === 'BLUE' ? 'selected' : ''}>蓝队</option>
+        <option value="GREEN" ${m.team === 'GREEN' ? 'selected' : ''}>绿队</option>
+        <option value="YELLOW" ${m.team === 'YELLOW' ? 'selected' : ''}>黄队</option>
+      </select>`;
+    const kickBtn = isMainHost && m.player_id !== myId
+      ? `<button class="member-kick-btn" data-player-id="${m.player_id}">踢出</button>`
+      : '';
+    div.innerHTML = `
+      <div class="member-main">
+        <span>${name} ${hostBadge}</span>
+        <span class="member-team-label">${teamName}</span>
+      </div>
+      <div class="member-actions">${state}${teamSelect}${kickBtn}</div>`;
     list.appendChild(div);
   }
+  list.querySelectorAll('.member-team-select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      try {
+        await netMgr.hostSetPlayerTeam(sel.dataset.playerId, sel.value || null);
+        if (sel.dataset.playerId === myId) {
+          selectedTeam = sel.value || null;
+          document.querySelectorAll('.team-btn').forEach(b => b.classList.toggle('selected', b.dataset.team === selectedTeam));
+        }
+      } catch (err) {
+        setRoomStatus(err.message || '变更队伍失败', true);
+      }
+    });
+  });
+  list.querySelectorAll('.member-kick-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await netMgr.hostKickPlayer(btn.dataset.playerId, '房主移出房间');
+        setRoomStatus('已踢出该用户。');
+      } catch (err) {
+        setRoomStatus(err.message || '踢出失败', true);
+      }
+    });
+  });
+  updateStartBtn();
+}
+
+async function handleRoomKick(reason = '你已离开房间') {
+  try { await netMgr?.leaveRoom?.(); } catch (_) {}
+  netMgr = null;
+  localOnly = false;
+  selectedTeam = null;
+  document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('roomMembers').innerHTML = '';
+  setRoomStatus(reason, true);
   updateStartBtn();
 }
 
@@ -407,6 +477,10 @@ function bindNetEvents() {
   netMgr.roomNet.onEvent = (evt) => {
     if (evt.event_type === 'game_start' && !window.game?.gameActive) {
       setRoomStatus('房主已开始游戏，请选择队伍后进入，角色将在开局后选择。');
+    } else if (evt.event_type === 'room_kick' && evt.event_data?.playerId === auth.user?.id) {
+      handleRoomKick(evt.event_data?.reason || '你已被房主移出房间');
+    } else if (evt.event_type === 'room_team_changed') {
+      renderRoom();
     }
   };
 }

@@ -214,6 +214,46 @@ class Engine {
     return { hit: false };
   }
 
+  raycastPlacement(screenX = window.innerWidth / 2, screenY = window.innerHeight / 2, maxDist = 6) {
+    const ndc = new THREE.Vector2(
+      (screenX / window.innerWidth) * 2 - 1,
+      -(screenY / window.innerHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.camera);
+    raycaster.far = maxDist + 10;
+
+    const blockEntries = Array.from(this.blocks.entries());
+    const blockMeshes = blockEntries.map(([, blk]) => blk.mesh);
+    const hits = raycaster.intersectObjects(blockMeshes, false);
+    if (hits.length) {
+      const hit = hits[0];
+      const entry = blockEntries.find(([, blk]) => blk.mesh === hit.object);
+      const base = hit.object.position.clone().floor();
+      const normal = hit.face?.normal?.clone() || new THREE.Vector3(0, 1, 0);
+      normal.transformDirection(hit.object.matrixWorld);
+      const place = base.add(new THREE.Vector3(
+        Math.round(normal.x),
+        Math.round(normal.y),
+        Math.round(normal.z)
+      ));
+      return { hit: true, x: place.x, y: place.y, z: place.z, source: 'block', baseKey: entry?.[0] };
+    }
+
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const point = new THREE.Vector3();
+    if (raycaster.ray.intersectPlane(plane, point)) {
+      return {
+        hit: true,
+        x: Math.floor(point.x),
+        y: 0,
+        z: Math.floor(point.z),
+        source: 'ground'
+      };
+    }
+    return { hit: false };
+  }
+
   // ============================================
   // Drop Item System
   // ============================================
@@ -1138,24 +1178,20 @@ class PlayerEntity {
     }
   }
 
-  placeBlock() {
+  placeBlock(pointer = null) {
     if (this.isDead || this.isFrozen) return;
     const blockType = this.getSelectedBlockType();
     if (!blockType) return;
     const item = this.getSelectedItem();
     if (!item || item.count <= 0) return;
 
-    const dir = this.getForwardDir();
-    const reach = 4;
-    const rc = this.engine.raycastBlocks(
-      this.pos.clone().add(new THREE.Vector3(0, 0.5, 0)),
-      dir, reach
-    );
+    const rc = this.engine.raycastPlacement(pointer?.x, pointer?.y, 6);
     if (rc.hit) {
-      const placePos = rc.pos.clone().add(dir.multiplyScalar(0.6));
-      const px = Math.round(placePos.x);
-      const py = Math.round(placePos.y);
-      const pz = Math.round(placePos.z);
+      const px = rc.x;
+      const py = rc.y;
+      const pz = rc.z;
+      const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
+      if (center.distanceTo(this.pos) > 6.5) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
       if (this.engine.placeBlock(px, py, pz, blockType, this.team)) {
         item.count--;

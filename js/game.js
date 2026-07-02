@@ -6,6 +6,7 @@ class InputManager {
   constructor() {
     this.keys = {};
     this.mouse = { dx: 0, dy: 0, locked: false };
+    this.buildPointer = null;
     this.touch = { active: false, x: 0, y: 0, originX: 0, originY: 0 };
     this.joystick = { active: false, dx: 0, dy: 0 };
     this.buttons = { jump: false, attack: false, build: false, skill: false };
@@ -26,7 +27,12 @@ class InputManager {
     });
     document.addEventListener('mousedown', e => {
       if (e.button === 0) this.buttons.attack = true;
-      if (e.button === 2) this.buttons.build = true;
+      if (e.button === 2) {
+        this.buttons.build = true;
+        this.buildPointer = document.pointerLockElement
+          ? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+          : { x: e.clientX, y: e.clientY };
+      }
     });
     document.addEventListener('mouseup', e => {
       if (e.button === 0) this.buttons.attack = false;
@@ -49,6 +55,14 @@ class InputManager {
     document.addEventListener('pointerlockchange', () => {
       this.mouse.locked = !!document.pointerLockElement;
     });
+
+    document.addEventListener('touchstart', e => {
+      if (!window.game?.gameActive || !this.isMobile()) return;
+      if (e.target.closest?.('#mobileControls, #shopBtn, #growthBtn, #socialBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel')) return;
+      const t = e.changedTouches[0];
+      this.buttons.build = true;
+      this.buildPointer = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
 
     // Mobile touch
     this.setupMobile();
@@ -132,7 +146,13 @@ class InputManager {
 
   isDown(code) { return !!this.keys[code]; }
   consumeAttack() { const v = this.buttons.attack; this.buttons.attack = false; return v; }
-  consumeBuild() { const v = this.buttons.build; this.buttons.build = false; return v; }
+  consumeBuild() {
+    const v = this.buttons.build;
+    this.buttons.build = false;
+    const target = this.buildPointer;
+    this.buildPointer = null;
+    return v ? (target || { x: window.innerWidth / 2, y: window.innerHeight / 2 }) : null;
+  }
   consumeJump() { const v = this.buttons.jump || this.keys['Space']; this.buttons.jump = false; this.keys['Space'] = false; return v; }
   consumeSkill() { const v = this.buttons.skill || this.keys['KeyQ']; this.buttons.skill = false; this.keys['KeyQ'] = false; return v; }
   consumeDrop() { const v = this.keys['KeyG']; this.keys['KeyG'] = false; return v; }
@@ -971,7 +991,8 @@ class Game {
       }
       if (this.input.consumeJump()) this.localPlayer.jump();
       if (this.input.consumeAttack()) this.localPlayer.attack();
-      if (this.input.consumeBuild()) this.localPlayer.placeBlock();
+      const buildPointer = this.input.consumeBuild();
+      if (buildPointer) this.localPlayer.placeBlock(buildPointer);
       if (this.input.consumeSkill()) this.localPlayer.useSkill();
       if (this.input.consumeDrop()) this.localPlayer.dropSelectedItem();
       if (this.input.consumeBackpack()) this.toggleBackpack();
