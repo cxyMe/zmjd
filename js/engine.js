@@ -651,6 +651,18 @@ class PlayerEntity {
     this.attackRange = 2.2;
     this.baseDmg = 2;
 
+    // Anti-cheat tracking
+    this.acBlocksPlaced = 0;
+    this.acBlockPlaceWindow = 0;
+    this.acJumpCount = 0;
+    this.acJumpWindow = 0;
+    this.acLastPos = this.pos.clone();
+    this.acSpeedCheckTimer = 0;
+    this.acAlertSent = false;
+    this.isFrozen = false;
+    this.isMuted = false;
+    this.aiTakeover = false;
+
     // Skills
     this.skillCd = 0;
     this.skillActive = 0;
@@ -881,6 +893,24 @@ class PlayerEntity {
       return;
     }
 
+    // Anti-cheat detection
+    if (!this.isDead && !this.acAlertSent) {
+      this.acBlockPlaceWindow -= dt;
+      if (this.acBlockPlaceWindow <= 0) { this.acBlocksPlaced = 0; this.acBlockPlaceWindow = 1; }
+      this.acJumpWindow -= dt;
+      if (this.acJumpWindow <= 0) { this.acJumpCount = 0; this.acJumpWindow = 0.5; }
+      this.acSpeedCheckTimer -= dt;
+      if (this.acSpeedCheckTimer <= 0) {
+        this.acSpeedCheckTimer = 1;
+        const dist = this.pos.distanceTo(this.acLastPos);
+        const maxSpeed = this.speed * 3;
+        if (dist > maxSpeed && this.pos.y > -10) {
+          window.game?.reportCheat?.(this.playerId, 'speed_hack', { dist, maxSpeed, pos: this.pos.toArray() }, 4);
+        }
+        this.acLastPos.copy(this.pos);
+      }
+    }
+
     // Update mesh
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.y = this.yaw;
@@ -958,6 +988,10 @@ class PlayerEntity {
     if (this.onGround && !this.isDead) {
       this.vel.y = this.jumpPower;
       this.onGround = false;
+      this.acJumpCount++;
+      if (this.acJumpCount > 3 && this.pos.y < -5) {
+        window.game?.reportCheat?.(this.playerId, 'void_jump', { count: this.acJumpCount, y: this.pos.y }, 3);
+      }
     }
   }
 
@@ -1059,6 +1093,10 @@ class PlayerEntity {
       if (this.engine.placeBlock(px, py, pz, blockType, this.team)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+        this.acBlocksPlaced++;
+        if (this.acBlocksPlaced > 15) {
+          window.game?.reportCheat?.(this.playerId, 'rapid_build', { count: this.acBlocksPlaced }, 3);
+        }
       }
     }
   }

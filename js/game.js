@@ -578,6 +578,9 @@ class Game {
     this.onlineMode = !!options.onlineMode;
     this.playerName = options.playerName || '你';
     this.tick = 0;
+    this.matchSnapshotTimer = 0;
+    this.economyLogTimer = 0;
+    this.adminCommandSub = null;
   }
 
   init() {
@@ -629,6 +632,9 @@ class Game {
 
     // Start loop
     requestAnimationFrame(t => this.loop(t));
+
+    // Subscribe to admin commands
+    this.subscribeAdminCommands();
   }
 
   start(teamKey, roleKey) {
@@ -818,6 +824,18 @@ class Game {
       this.ui.buildShop();
       this.shopDirty = false;
     }
+
+    // Admin data reporting
+    this.matchSnapshotTimer -= dt;
+    if (this.matchSnapshotTimer <= 0) {
+      this.matchSnapshotTimer = 5;
+      this.reportMatchSnapshot();
+    }
+    this.economyLogTimer -= dt;
+    if (this.economyLogTimer <= 0) {
+      this.economyLogTimer = 30;
+      this.reportEconomyStats();
+    }
   }
 
   selectHotbar(idx) {
@@ -885,6 +903,15 @@ class Game {
       msg = `${victim.name} 坠入了虚空`;
     }
     this.addKillFeed(msg);
+    // Kill replay log
+    this.network?.roomNet?.client?.from('kill_replay_events').insert({
+      room_id: this.network?.roomNet?.room?.id || 'local',
+      match_tick: Math.floor(this.gameTime),
+      event_type: 'player_killed',
+      actor_id: killer?.playerId || null,
+      target_id: victim.playerId,
+      details: { victimHp: victim.hp, victimArmor: victim.armor, killerWeapon: killer?.equipped?.weapon || null }
+    }).catch(()=>{});
     if (this.network?.sendPlayerKilled) {
       this.network.sendPlayerKilled(victim.playerId || victim.name, killer?.playerId || killer?.name || null);
     }
@@ -1006,5 +1033,94 @@ class Game {
         .slice(-300)
         .map(([key, b]) => ({ key, type: b.type, hp: b.hp, team: b.team || null }))
     };
+  }
+
+  reportMatchSnapshot() {
+    const alive = { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 };
+    for (const p of this.players) if (!p.isDead) alive[p.team]++;
+    const snapshot = {
+      room_id: this.network?.roomNet?.room?.id || 'local',
+      match_code: this.network?.roomNet?.room?.code || 'LOCAL',
+      status: this.gameActive ? 'playing' : 'ended',
+      team_red_alive: alive.RED,
+      team_blue_alive: alive.BLUE,
+      team_green_alive: alive.GREEN,
+      team_yellow_alive: alive.YELLOW,
+      red_bed_alive: TEAMS.RED.bedAlive,
+      blue_bed_alive: TEAMS.BLUE.bedAlive,
+      green_bed_alive: TEAMS.GREEN.bedAlive,
+      yellow_bed_alive: TEAMS.YELLOW.bedAlive,
+      tick: Math.floor(this.gameTime),
+      updated_at: new Date().toISOString()
+    };
+    this.network?.roomNet?.client?.from('active_matches').upsert(snapshot, { onConflict: 'room_id' }).catch(()=>{});
+  }
+
+  reportEconomyStats() {
+    const hourKey = new Date().toISOString().slice(0, 13);
+    let copper = 0, silver = 0, gold = 0, jade = 0;
+    for (const p of this.players) {
+      copper += p.inv.copper || 0;
+      silver += p.inv.silver || 0;
+      gold += p.inv.gold || 0;
+      jade += p.inv.jade || 0;
+    }
+    const stats = {
+      hour_key: hourKey,
+      copper_total: copper,
+      silver_total: silver,
+      gold_total: gold,
+      jade_total: jade,
+      match_count: 1,
+      player_count: this.players.length
+    };
+    this.network?.roomNet?.client?.from('economy_stats').upsert(stats, { onConflict: 'hour_key' }).catch(()=>{});
+  }
+
+  reportCheat(playerId, type, details, severity) {
+    const alert = {
+      player_id: playerId,
+      room_id: this.network?.roomNet?.room?.id || 'local',
+      alert_type: type,
+      severity,
+      details,
+      tick: Math.floor(this.gameTime),
+      pos_x: this.localPlayer?.pos?.x || 0,
+      pos_y: this.localPlayer?.pos?.y || 0,
+      pos_z: this.localPlayer?.pos?.z || 0
+    };
+    this.network?.roomNet?.client?.from('cheat_alerts').insert(alert).catch(()=>{});
+  }
+
+  async subscribeAdminCommands() {
+    if (!this.network?.roomNet?.client) return;
+    const client = this.network.roomNet.client;
+    this.adminCommandSub = client.channel('admin_broadcast')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: "room_id=eq.broadcast" }, payload => {
+        const evt = payload.new;
+        if (evt.event_type === 'admin_command') this.handleAdminCommand(evt.event_data);
+      })
+      .subscribe();
+  }
+
+  handleAdminCommand(data) {
+    const cmd = data.cmd;
+    if (cmd === 'force_shrink') {
+      this.shrinkActive = true; this.shrinkRadius = 30; this.showMessage('管理员触发缩圈！', '#ff4444');
+    } else if (cmd === 'force_final') {
+      this.shrinkActive = true; this.shrinkRadius = 5; this.showMessage('胜利之炉已激活！', '#ff4444');
+    } else if (cmd === 'force_tide') {
+      this.engine.triggerDreamTide?.(this.gens);
+      this.showMessage('管理员触发梦域潮汐！', '#00d4ff');
+    } else if (cmd === 'force_time') {
+      this.gameTime = (data.minutes || 0) * 60;
+      this.showMessage(`时间已调整至 ${data.minutes} 分钟`, '#ffdd00');
+    } else if (cmd === 'send_gift' && data.player === this.localPlayer?.playerId) {
+      this.localPlayer?.addToBackpack?.(data.item, data.count);
+      this.showMessage(`收到管理员补给: ${data.item} x${data.count}`, '#00d4ff');
+    } else if (cmd === 'ai_takeover') {
+      const p = this.players.find(x => x.playerId === data.player);
+      if (p) p.aiTakeover = data.enable;
+    }
   }
 }

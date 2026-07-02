@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>筑梦决斗 - 后台管理系统</title>
+  <link rel="stylesheet" href="css/admin.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>筑梦决斗管理后台</h1>
+    <p class="login-sub">易圈账号登录</p>
+    <input type="text" id="adminPhone" placeholder="手机号" maxlength="11">
+    <input type="password" id="adminPassword" placeholder="密码">
+    <button id="adminLoginBtn">登录</button>
+    <div id="loginError"></div>
+  </div>
+</div>
+
+<!-- 主后台 -->
+<div id="adminApp" style="display:none;">
+  <!-- 顶部栏 -->
+  <header class="admin-header">
+    <div class="logo">筑梦决斗 <span class="badge">管理后台</span></div>
+    <div class="header-right">
+      <span id="adminLevelBadge" class="level-badge">观察员</span>
+      <span id="adminName">--</span>
+      <button id="logoutAdminBtn">退出</button>
+    </div>
+  </header>
+
+  <!-- 侧边栏 -->
+  <aside class="admin-sidebar">
+    <nav>
+      <a href="#" class="nav-item active" data-page="dashboard"><span class="icon">📊</span> 仪表盘</a>
+      <a href="#" class="nav-item" data-page="players"><span class="icon">👤</span> 玩家管理</a>
+      <a href="#" class="nav-item" data-page="matches"><span class="icon">⚔️</span> 对局控制</a>
+      <a href="#" class="nav-item" data-page="economy"><span class="icon">💰</span> 经济调参</a>
+      <a href="#" class="nav-item" data-page="balance"><span class="icon">⚖️</span> 平衡沙盒</a>
+      <a href="#" class="nav-item" data-page="cheat"><span class="icon">🛡️</span> 反作弊审计</a>
+      <a href="#" class="nav-item" data-page="audit"><span class="icon">📋</span> 操作日志</a>
+      <a href="#" class="nav-item" data-page="admins" id="navAdmins" style="display:none"><span class="icon">🔐</span> 权限管理</a>
+    </nav>
+  </aside>
+
+  <!-- 内容区 -->
+  <main class="admin-main">
+
+    <!-- ====== 仪表盘 ====== -->
+    <section id="page-dashboard" class="page active">
+      <h2>实时战况驾驶舱</h2>
+      <div class="dash-cards">
+        <div class="dash-card">
+          <div class="dash-label">正在进行的对局</div>
+          <div class="dash-value" id="dashMatches">0</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-label">在线玩家总数</div>
+          <div class="dash-value" id="dashPlayers">0</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-label">匹配等待时长</div>
+          <div class="dash-value" id="dashWait">--</div>
+        </div>
+        <div class="dash-card alert" id="dashEconomyAlert" style="display:none">
+          <div class="dash-label">经济通胀预警</div>
+          <div class="dash-value">异常</div>
+        </div>
+      </div>
+      <div class="dash-section">
+        <h3>床存活率统计</h3>
+        <div class="bed-stats">
+          <div class="bed-bar"><span class="bed-label red">红队</span><div class="bed-track"><div class="bed-fill red" id="bedRed" style="width:100%"></div></div><span id="bedRedText">100%</span></div>
+          <div class="bed-bar"><span class="bed-label blue">蓝队</span><div class="bed-track"><div class="bed-fill blue" id="bedBlue" style="width:100%"></div></div><span id="bedBlueText">100%</span></div>
+          <div class="bed-bar"><span class="bed-label green">绿队</span><div class="bed-track"><div class="bed-fill green" id="bedGreen" style="width:100%"></div></div><span id="bedGreenText">100%</span></div>
+          <div class="bed-bar"><span class="bed-label yellow">黄队</span><div class="bed-track"><div class="bed-fill yellow" id="bedYellow" style="width:100%"></div></div><span id="bedYellowText">100%</span></div>
+        </div>
+      </div>
+      <div class="dash-section">
+        <h3>全服经济产出（过去1小时）</h3>
+        <canvas id="economyChart" height="80"></canvas>
+      </div>
+      <div class="dash-section">
+        <h3>活跃对局列表</h3>
+        <table class="data-table">
+          <thead><tr><th>房间码</th><th>状态</th><th>开始时间</th><th>存活</th><th>床状态</th></tr></thead>
+          <tbody id="activeMatchesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ====== 玩家管理 ====== -->
+    <section id="page-players" class="page">
+      <h2>玩家与团队管理</h2>
+      <div class="search-bar">
+        <input type="text" id="playerSearch" placeholder="输入玩家ID或昵称">
+        <button id="searchPlayerBtn">查询</button>
+      </div>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>玩家信息</h3>
+          <div id="playerInfo">请输入玩家ID查询</div>
+        </div>
+        <div class="panel">
+          <h3>资源流水</h3>
+          <div id="playerEconomy" style="max-height:300px;overflow-y:auto"></div>
+        </div>
+        <div class="panel">
+          <h3>惩戒操作 <span class="perm-note">(Lv.2+)</span></h3>
+          <div class="action-btns" id="penaltyBtns">
+            <button class="btn-warn" data-type="mute">禁言</button>
+            <button class="btn-warn" data-type="kick">踢出</button>
+            <button class="btn-danger" data-type="freeze">冻结</button>
+            <button class="btn-danger" data-type="ban">永久封禁</button>
+          </div>
+          <input type="text" id="penaltyReason" placeholder="惩戒原因" style="margin-top:8px;width:100%">
+          <input type="number" id="penaltyDuration" placeholder="时长(分钟)，永久填0" style="margin-top:6px;width:100%">
+        </div>
+        <div class="panel">
+          <h3>资产回档 <span class="perm-note">(Lv.2+)</span></h3>
+          <p style="font-size:12px;color:#aaa">扣除非法所得并补偿受害者</p>
+          <button class="btn-danger" id="rollbackAssetsBtn">执行资产回档</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 对局控制 ====== -->
+    <section id="page-matches" class="page">
+      <h2>对局宏观控制</h2>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>时间轴干预 <span class="perm-note">(Lv.3+)</span></h3>
+          <label>加速/跳过游戏阶段</label>
+          <input type="range" id="timeSlider" min="0" max="35" value="0" style="width:100%;margin:8px 0">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#aaa"><span>0min</span><span>发育期</span><span>15min</span><span>决战期</span><span>35min</span></div>
+          <button class="btn-primary" id="forceTimeBtn">强制执行</button>
+        </div>
+        <div class="panel">
+          <h3>强制事件 <span class="perm-note">(Lv.3+)</span></h3>
+          <button class="btn-danger" id="forceShrinkBtn">立即缩圈</button>
+          <button class="btn-danger" id="forceFinalBtn">激活胜利之炉</button>
+          <button class="btn-warn" id="forceTideBtn">触发梦域潮汐</button>
+        </div>
+        <div class="panel">
+          <h3>补位与互换 <span class="perm-note">(Lv.2+)</span></h3>
+          <input type="text" id="swapPlayerA" placeholder="玩家A ID">
+          <input type="text" id="swapPlayerB" placeholder="玩家B ID" style="margin-top:6px">
+          <button class="btn-primary" id="swapPlayersBtn">互换角色/队伍</button>
+          <hr style="border-color:rgba(255,255,255,0.1);margin:12px 0">
+          <input type="text" id="fillPlayer" placeholder="补位玩家ID">
+          <select id="fillTeam" style="margin-top:6px;width:100%"><option value="RED">红队</option><option value="BLUE">蓝队</option><option value="GREEN">绿队</option><option value="YELLOW">黄队</option></select>
+          <button class="btn-primary" id="fillTeamBtn" style="margin-top:6px">强制补位</button>
+        </div>
+        <div class="panel">
+          <h3>AI托管 <span class="perm-note">(Lv.2+)</span></h3>
+          <p style="font-size:12px;color:#aaa">掉线玩家自动切换为AI托管</p>
+          <input type="text" id="aiPlayerId" placeholder="掉线玩家ID">
+          <button class="btn-primary" id="enableAiBtn">启用AI托管</button>
+          <button class="btn-warn" id="disableAiBtn">取消托管</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 经济调参 ====== -->
+    <section id="page-economy" class="page">
+      <h2>经济与商店调参中心</h2>
+      <div class="perm-note" style="margin-bottom:12px">此页面操作需要 Lv.3 数值策划权限</div>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>商店物价实时调整</h3>
+          <div id="shopPriceEditor" style="max-height:400px;overflow-y:auto"></div>
+          <button class="btn-primary" id="saveShopPricesBtn">保存物价</button>
+        </div>
+        <div class="panel">
+          <h3>资源生成器倍率</h3>
+          <div id="genRateEditor"></div>
+          <button class="btn-primary" id="saveGenRatesBtn">保存倍率</button>
+        </div>
+        <div class="panel">
+          <h3>定制补给包 <span class="perm-note">(Lv.4)</span></h3>
+          <input type="text" id="giftPlayerId" placeholder="目标玩家ID">
+          <select id="giftItem" style="margin-top:6px;width:100%"></select>
+          <input type="number" id="giftCount" placeholder="数量" value="1" style="margin-top:6px;width:100%">
+          <button class="btn-primary" id="sendGiftBtn">发送补给</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 平衡沙盒 ====== -->
+    <section id="page-balance" class="page">
+      <h2>内容与平衡性沙盒</h2>
+      <div class="perm-note" style="margin-bottom:12px">此页面操作需要 Lv.3 数值策划权限</div>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>角色技能开关</h3>
+          <div id="roleSkillEditor"></div>
+          <button class="btn-primary" id="saveRoleSkillsBtn">保存角色配置</button>
+        </div>
+        <div class="panel">
+          <h3>方块耐久度调节</h3>
+          <div id="blockDurabilityEditor"></div>
+          <button class="btn-primary" id="saveBlockDurabilityBtn">保存耐久度</button>
+        </div>
+        <div class="panel">
+          <h3>黑白名单道具</h3>
+          <div id="bannedItemsEditor"></div>
+          <button class="btn-primary" id="saveBannedItemsBtn">保存道具名单</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 反作弊 ====== -->
+    <section id="page-cheat" class="page">
+      <h2>日志与反作弊审计</h2>
+      <div class="panel-grid">
+        <div class="panel wide">
+          <h3>异常操作检测 <span id="cheatCount" class="badge-red">0</span></h3>
+          <table class="data-table">
+            <thead><tr><th>时间</th><th>玩家ID</th><th>类型</th><th>严重度</th><th>详情</th><th>操作</th></tr></thead>
+            <tbody id="cheatAlertsBody"></tbody>
+          </table>
+        </div>
+        <div class="panel wide">
+          <h3>击杀回放事件链</h3>
+          <div class="search-bar">
+            <input type="text" id="replayRoomId" placeholder="房间ID">
+            <input type="number" id="replayTick" placeholder="Tick" style="width:100px">
+            <button id="loadReplayBtn">加载回放</button>
+          </div>
+          <div id="replayTimeline" style="max-height:400px;overflow-y:auto;margin-top:12px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 操作日志 ====== -->
+    <section id="page-audit" class="page">
+      <h2>管理员操作审计日志</h2>
+      <table class="data-table">
+        <thead><tr><th>时间</th><th>管理员</th><th>操作</th><th>目标类型</th><th>目标ID</th><th>变更内容</th></tr></thead>
+        <tbody id="auditLogsBody"></tbody>
+      </table>
+    </section>
+
+    <!-- ====== 权限管理 ====== -->
+    <section id="page-admins" class="page">
+      <h2>权限分级管理 <span class="perm-note">(Lv.4 超级管理员)</span></h2>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>添加管理员</h3>
+          <input type="text" id="newAdminUserId" placeholder="易圈用户ID">
+          <input type="text" id="newAdminNickname" placeholder="昵称" style="margin-top:6px">
+          <select id="newAdminLevel" style="margin-top:6px;width:100%">
+            <option value="1">Lv.1 观察员</option>
+            <option value="2">Lv.2 裁判员</option>
+            <option value="3">Lv.3 数值策划</option>
+            <option value="4">Lv.4 超级管理员</option>
+          </select>
+          <button class="btn-primary" id="addAdminBtn" style="margin-top:8px">添加</button>
+        </div>
+        <div class="panel wide">
+          <h3>管理员列表</h3>
+          <table class="data-table">
+            <thead><tr><th>用户ID</th><th>昵称</th><th>权限等级</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="adminListBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

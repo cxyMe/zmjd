@@ -518,6 +518,35 @@ class NetworkManager {
   async leaveRoom() {
     await this.roomNet.leave();
   }
+
+  // Admin command broadcast (for game clients to receive)
+  subscribeAdminCommands(callback) {
+    if (!this.roomNet?.client) return;
+    const client = this.roomNet.client;
+    const channel = client.channel('admin_broadcast')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: "room_id=eq.broadcast" }, payload => {
+        callback(payload.new);
+      })
+      .subscribe();
+    return channel;
+  }
+
+  // Report player economy log
+  async logEconomy(playerId, eventType, currency, amount, itemKey, pos, tick) {
+    if (!this.roomNet?.client) return;
+    await this.roomNet.client.from('player_economy_logs').insert({
+      player_id: playerId,
+      room_id: this.roomNet.room?.id || 'local',
+      event_type: eventType,
+      currency: currency || null,
+      amount: amount || null,
+      item_key: itemKey || null,
+      tick: tick || 0,
+      pos_x: pos?.x || 0,
+      pos_y: pos?.y || 0,
+      pos_z: pos?.z || 0
+    }).catch(()=>{});
+  }
 }
 
 if (typeof module !== 'undefined' && module.exports) {
