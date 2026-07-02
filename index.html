@@ -113,6 +113,11 @@
       <div class="status-track"><div class="status-fill armor-fill" id="armorFill" style="width:0%"></div></div>
       <span id="armorText" style="color:#fff;font-size:12px;">0</span>
     </div>
+    <div class="status-bar growth-status">
+      <span class="status-label">等级</span>
+      <div class="status-track"><div class="status-fill xp-fill" id="xpFill" style="width:0%"></div></div>
+      <span id="xpText" style="color:#fff;font-size:12px;">Lv.1</span>
+    </div>
   </div>
 
   <!-- Hotbar -->
@@ -129,6 +134,7 @@
 
   <!-- Shop Button -->
   <div id="shopBtn">商店</div>
+  <div id="growthBtn">成长</div>
 
   <!-- Skill Button -->
   <div id="skillBtn" style="display:none;"><span>技能</span><span class="skill-cd">就绪</span></div>
@@ -150,6 +156,34 @@
     <div id="jumpBtnMobile">跳跃</div>
     <div id="attackBtnMobile">攻击</div>
     <div id="buildBtnMobile">放置</div>
+  </div>
+</div>
+
+<!-- ========== Awakening Choice ========== -->
+<div id="awakeningPanel">
+  <div class="growth-container small">
+    <div class="growth-header">
+      <h2>天赋觉醒</h2>
+    </div>
+    <p class="growth-tip">本局达到关键等级，请选择一个分支强化。本次选择只在当前对局生效。</p>
+    <div id="awakeningChoices" class="awakening-choices"></div>
+  </div>
+</div>
+
+<!-- ========== Growth Center ========== -->
+<div id="growthPanel">
+  <div class="growth-container">
+    <div class="growth-header">
+      <h2>成长中心</h2>
+      <button class="growth-close" onclick="window.game?.toggleGrowthPanel()">&times;</button>
+    </div>
+    <div class="growth-tabs">
+      <button class="growth-tab active" data-growth-tab="talents">筑梦基石</button>
+      <button class="growth-tab" data-growth-tab="mastery">勋章墙</button>
+      <button class="growth-tab" data-growth-tab="season">赛季征程</button>
+      <button class="growth-tab" data-growth-tab="rank">排位成长</button>
+    </div>
+    <div id="growthBody" class="growth-body"></div>
   </div>
 </div>
 
@@ -197,6 +231,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/network.js"></script>
+<script src="js/growth.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/game.js"></script>
 <script>

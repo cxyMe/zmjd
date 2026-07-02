@@ -347,8 +347,9 @@ class Engine {
       // 玩家靠近自动拾取
       for (const ent of this.entities) {
         if (ent.isDead || !ent.isLocal) continue;
+        const pickupRange = 1.8 * (1 + (ent.pickupRangeBonus || 0));
         const dist = ent.pos.distanceTo(d.mesh.position);
-        if (dist < 1.8) {
+        if (dist < pickupRange) {
           // 向玩家移动
           const pull = ent.pos.clone().sub(d.mesh.position).normalize().multiplyScalar(6 * dt);
           d.mesh.position.add(pull);
@@ -357,6 +358,8 @@ class Engine {
             // 拾取
             if (d.isCurrency) {
               ent.inv[d.currency] = (ent.inv[d.currency] || 0) + d.count;
+              ent.matchStats.resourceContribution += d.count * (d.currency === 'jade' ? 18 : d.currency === 'gold' ? 8 : d.currency === 'silver' ? 3 : 1);
+              window.game?.growth?.addXp?.(ent, GROWTH_CONFIG.xp.collectResource[d.currency] || 1, '收集资源');
             } else {
               ent.addToBackpack(d.typeKey, d.count);
             }
@@ -650,6 +653,17 @@ class PlayerEntity {
     this.attackCd = 0;
     this.attackRange = 2.2;
     this.baseDmg = 2;
+    this.matchLevel = 1;
+    this.matchXp = 0;
+    this.awakenings = {};
+    this.matchStats = { kills: 0, beds: 0, damage: 0, blocksPlaced: 0, resourceContribution: 0 };
+    this.skillCdBonus = 0;
+    this.voidGrace = 0;
+    this.voidGraceTimer = 0;
+    this.knockbackReduce = 0;
+    this.pickupRangeBonus = 0;
+    this.silencedTimer = 0;
+    this.slowTimer = 0;
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -887,11 +901,21 @@ class PlayerEntity {
     // Block collision
     this.resolveBlockCollision();
 
-    // Void death
+    // Void death with optional out-game grace talent
     if (this.pos.y < -15) {
-      this.die(null);
-      return;
+      if (this.voidGrace > 0 && this.voidGraceTimer < this.voidGrace) {
+        this.voidGraceTimer += dt;
+        this.vel.y = Math.max(this.vel.y, -2);
+      } else {
+        this.die(null);
+        return;
+      }
+    } else {
+      this.voidGraceTimer = 0;
     }
+
+    if (this.silencedTimer > 0) this.silencedTimer -= dt;
+    if (this.slowTimer > 0) this.slowTimer -= dt;
 
     // Anti-cheat detection
     if (!this.isDead && !this.acAlertSent) {
@@ -974,7 +998,8 @@ class PlayerEntity {
 
   moveInput(dx, dz, sprint = false) {
     if (this.isDead) return;
-    const spd = (sprint ? 1.5 : 1) * this.speed;
+    const slowMult = this.slowTimer > 0 ? 0.65 : 1;
+    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult;
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
@@ -1010,7 +1035,7 @@ class PlayerEntity {
   }
 
   attack() {
-    if (this.isDead || this.attackCd > 0) return;
+    if (this.isDead || this.attackCd > 0 || this.silencedTimer > 0) return;
     this.attackCd = 0.35;
 
     let dmg = this.baseDmg;
@@ -1024,6 +1049,7 @@ class PlayerEntity {
     }
 
     if (this.role === 'WARRIOR' && this.skillActive > 0) dmg *= 2;
+    if (this.lowHpDamageBoost && this.hp / this.maxHp < 0.3) dmg *= (1 + this.lowHpDamageBoost);
 
     if (isRanged && this.arrowCount > 0) {
       this.arrowCount--;
@@ -1039,6 +1065,7 @@ class PlayerEntity {
       const speed = 25;
       let finalDmg = dmg;
       if (this.role === 'ARCHER') finalDmg *= 1.3;
+      if (this.arrowDamageBoost) finalDmg *= (1 + this.arrowDamageBoost);
       this.engine.projectiles.push({
         mesh: arrowMesh, vel: dir.multiplyScalar(speed), life: 3,
         damage: finalDmg, owner: this
@@ -1053,7 +1080,10 @@ class PlayerEntity {
         if (ent.team === this.team) continue;
         const dist = ent.pos.distanceTo(this.pos);
         if (dist < range) {
-          ent.takeDamage(dmg, this);
+          let finalDmg = dmg;
+          if (this.role === 'ASSASSIN' && this.backstabBoost) finalDmg *= (1 + this.backstabBoost);
+          ent.takeDamage(finalDmg, this);
+          if (this.shadowSilence && this.skillActive > 0) ent.silencedTimer = Math.max(ent.silencedTimer || 0, 0.5);
         }
       }
 
@@ -1065,6 +1095,8 @@ class PlayerEntity {
           tinfo.bedAlive = false;
           tinfo.bedMesh.visible = false;
           this.engine.spawnParticles(tinfo.bedPos, tinfo.color, 20);
+          this.matchStats.beds++;
+          window.game?.growth?.addXp?.(this, GROWTH_CONFIG.xp.bedBreak, '拆床');
           window.game?.onBedDestroyed(tkey, this);
         }
       }
@@ -1093,6 +1125,9 @@ class PlayerEntity {
       if (this.engine.placeBlock(px, py, pz, blockType, this.team)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+        this.matchStats.blocksPlaced++;
+        const xp = GROWTH_CONFIG.xp.placeBlock * (1 + (this.blockXpBoost || 0));
+        window.game?.growth?.addXp?.(this, xp, '建造');
         this.acBlocksPlaced++;
         if (this.acBlocksPlaced > 15) {
           window.game?.reportCheat?.(this.playerId, 'rapid_build', { count: this.acBlocksPlaced }, 3);
@@ -1104,7 +1139,7 @@ class PlayerEntity {
   useSkill() {
     if (this.isDead || this.skillCd > 0) return;
     const info = this.roleInfo;
-    this.skillCd = info.active.cd;
+    this.skillCd = Math.max(3, info.active.cd - (this.skillCdBonus || 0));
     this.skillActive = info.active.name === '狂暴' ? 5 : info.active.name === '隐匿' ? 3 : 0;
 
     if (this.role === 'WARRIOR') {
@@ -1126,7 +1161,8 @@ class PlayerEntity {
           const px = face === 'x' ? Math.floor(center.x) + 1 : Math.floor(center.x) + ds;
           const pz = face === 'z' ? Math.floor(center.z) + 1 : Math.floor(center.z) + ds;
           const py = Math.floor(center.y) + dy;
-          this.engine.placeBlock(px, py, pz, 'wood_plank', this.team);
+          const blockType = this.fortressIronCore && ds === 0 ? 'iron_plate' : 'wood_plank';
+          this.engine.placeBlock(px, py, pz, blockType, this.team);
         }
       }
       window.game?.showMessage(`${this.name} 建造了防御墙！`);
@@ -1145,7 +1181,11 @@ class PlayerEntity {
     const actual = Math.max(1, amount * (1 - reduction));
     this.hp -= actual;
     if (attacker) {
-      const kb = this.pos.clone().sub(attacker.pos).normalize().multiplyScalar(3);
+      attacker.matchStats.damage += actual;
+      window.game?.growth?.addXp?.(attacker, actual * GROWTH_CONFIG.xp.damage, '造成伤害');
+      if (attacker.arrowSlow) this.slowTimer = Math.max(this.slowTimer || 0, 1.2);
+      const kbPower = 3 * (1 - (this.knockbackReduce || 0));
+      const kb = this.pos.clone().sub(attacker.pos).normalize().multiplyScalar(kbPower);
       kb.y = 2;
       this.vel.add(kb);
     }
@@ -1180,6 +1220,13 @@ class PlayerEntity {
       }
     }
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
+    if (killer) {
+      killer.matchStats.kills++;
+      window.game?.growth?.addXp?.(killer, GROWTH_CONFIG.xp.kill, '击杀');
+      if (killer.killHeal) killer.hp = Math.min(killer.maxHp, killer.hp + killer.killHeal);
+      if (killer.killResetSkill) killer.skillCd = 0;
+      if (killer.killArrowRefund) killer.arrowCount += killer.killArrowRefund;
+    }
     window.game?.onPlayerKilled(this, killer);
   }
 

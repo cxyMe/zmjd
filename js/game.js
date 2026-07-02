@@ -375,6 +375,11 @@ class UIManager {
     document.getElementById('hpText').textContent = `${Math.ceil(lp.hp)}/${lp.maxHp}`;
     document.getElementById('armorFill').style.width = `${Math.min(100, (lp.armor / 60) * 100)}%`;
     document.getElementById('armorText').textContent = lp.armor;
+    const currentNeed = GROWTH_CONFIG.levelXp[lp.matchLevel - 1] || 0;
+    const nextNeed = GROWTH_CONFIG.levelXp[lp.matchLevel] || GROWTH_CONFIG.levelXp[GROWTH_CONFIG.levelXp.length - 1];
+    const xpPct = lp.matchLevel >= GROWTH_CONFIG.maxInMatchLevel ? 100 : ((lp.matchXp - currentNeed) / Math.max(1, nextNeed - currentNeed)) * 100;
+    document.getElementById('xpFill').style.width = `${Math.max(0, Math.min(100, xpPct))}%`;
+    document.getElementById('xpText').textContent = `Lv.${lp.matchLevel}`;
 
     // Timer
     const mins = Math.floor(this.game.gameTime / 60);
@@ -515,6 +520,96 @@ class UIManager {
     grid.appendChild(packRow);
   }
 
+  updateGrowthPanel() {
+    if (this.game.growthPanelOpen) this.renderGrowthCenter();
+  }
+
+  renderGrowthCenter() {
+    const body = document.getElementById('growthBody');
+    if (!body || !this.game.growth) return;
+    const gm = this.game.growth;
+    if (this.game.growthTab === 'talents') return this.renderTalentPanel(body, gm);
+    if (this.game.growthTab === 'mastery') return this.renderMasteryPanel(body, gm);
+    if (this.game.growthTab === 'season') return this.renderSeasonPanel(body, gm);
+    if (this.game.growthTab === 'rank') return this.renderRankPanel(body, gm);
+  }
+
+  renderTalentPanel(body, gm) {
+    const active = gm.activeTalents || [];
+    body.innerHTML = `
+      <div class="growth-summary">
+        <span class="growth-pill">筑梦星尘：${gm.profile.stardust || 0}</span>
+        <span class="growth-pill">已激活：${active.length}/3</span>
+        <span class="growth-pill">满级可点亮30节点，入场仅携带3个</span>
+      </div>
+      <div class="growth-grid">
+        ${OUTGAME_TALENTS.map(t => `
+          <div class="talent-card ${t.color} ${active.includes(t.id) ? 'active' : ''}">
+            <h4>${t.name}</h4>
+            <p>${t.desc}</p>
+            <button data-talent="${t.id}">${active.includes(t.id) ? '取消携带' : '携带进场'}</button>
+          </div>
+        `).join('')}
+      </div>`;
+    body.querySelectorAll('[data-talent]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.talent;
+        const idx = gm.activeTalents.indexOf(id);
+        if (idx >= 0) gm.activeTalents.splice(idx, 1);
+        else {
+          if (gm.activeTalents.length >= 3) return alert('每局最多携带3个核心天赋');
+          gm.activeTalents.push(id);
+        }
+        localStorage.setItem('bedwars_active_talents', JSON.stringify(gm.activeTalents));
+        this.renderGrowthCenter();
+      };
+    });
+  }
+
+  renderMasteryPanel(body, gm) {
+    const all = JSON.parse(localStorage.getItem('bedwars_role_mastery') || '{}');
+    body.innerHTML = `<div class="growth-grid">
+      ${Object.keys(ROLES).map(role => {
+        const r = all[role] || { kills: 0, beds: 0, wins: 0, tier: '青铜' };
+        const tier = r.tier || gm.masteryTier(r);
+        const reward = tier === '筑梦大师' ? '已解锁专属搭路方块皮肤与拆床宣言' : tier === '黄金' ? '已解锁出生彩色拖尾光效' : '继续使用角色可解锁外观奖励';
+        return `<div class="mastery-card"><h4>${ROLES[role].name} · ${tier}</h4><p>击杀 ${r.kills || 0}｜拆床 ${r.beds || 0}｜胜利 ${r.wins || 0}</p><p>${reward}</p></div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  renderSeasonPanel(body, gm) {
+    const seasonXp = gm.profile.seasonXp || 0;
+    const level = Math.floor(seasonXp / 300) + 1;
+    body.innerHTML = `
+      <div class="growth-summary">
+        <span class="growth-pill">赛季等级：${level}</span>
+        <span class="growth-pill">赛季积分：${seasonXp}</span>
+        <span class="growth-pill">赛季周期：每3个月重置</span>
+      </div>
+      <div class="growth-grid">
+        <div class="season-card"><h4>日常：累计放置500个方块</h4><p>奖励：120赛季积分。当前局建造会计入结算。</p></div>
+        <div class="season-card"><h4>周常：用弓箭击杀3人</h4><p>奖励：重置卷轴碎片，可在10分钟后重新选择觉醒。</p></div>
+        <div class="season-card"><h4>奖励：重置卷轴</h4><p>稀有道具，每局10分钟后可重选一次技能分支。</p></div>
+        <div class="season-card"><h4>奖励：表情动作</h4><p>击败敌人后可播放跳舞、鞠躬等表现动作。</p></div>
+      </div>`;
+  }
+
+  renderRankPanel(body, gm) {
+    const score = gm.profile.rankScore || 0;
+    body.innerHTML = `
+      <div class="growth-summary">
+        <span class="growth-pill">当前段位：${gm.rankName(score)}</span>
+        <span class="growth-pill">排位分：${score}</span>
+        <span class="growth-pill">仅联机对局计入正式排位</span>
+      </div>
+      <div class="growth-grid">
+        <div class="rank-card"><h4>评分维度</h4><p>关键拆床、团队资源贡献、存活时长、胜负结果共同决定加减分。</p></div>
+        <div class="rank-card"><h4>团队导向</h4><p>铺路搭桥、守床、资源输送同样会提高结算评分，不鼓励单纯抢人头。</p></div>
+        <div class="rank-card"><h4>最高荣誉</h4><p>筑梦传说：全区前20名玩家显示专属称号。</p></div>
+      </div>`;
+  }
+
   buildShop() {
     const body = document.getElementById('shopBody');
     if (!body) return;
@@ -581,6 +676,9 @@ class Game {
     this.matchSnapshotTimer = 0;
     this.economyLogTimer = 0;
     this.adminCommandSub = null;
+    this.growth = null;
+    this.growthPanelOpen = false;
+    this.growthTab = 'talents';
   }
 
   init() {
@@ -589,6 +687,7 @@ class Game {
     this.gens = generateWorld(this.engine);
     this.ai = new AISystem(this);
     this.ui = new UIManager(this);
+    this.growth = new GrowthManager(this);
 
     // Build shop tabs
     document.querySelectorAll('.shop-tab').forEach(tab => {
@@ -602,6 +701,15 @@ class Game {
 
     document.querySelector('.shop-close').onclick = () => this.toggleShop();
     document.getElementById('shopBtn').onclick = () => this.toggleShop();
+    document.getElementById('growthBtn').onclick = () => this.toggleGrowthPanel();
+    document.querySelectorAll('.growth-tab').forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll('.growth-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        this.growthTab = tab.dataset.growthTab;
+        this.ui.renderGrowthCenter();
+      };
+    });
     document.getElementById('skillBtn').onclick = () => {
       if (this.localPlayer) this.localPlayer.useSkill();
     };
@@ -663,6 +771,7 @@ class Game {
     this.localPlayer.equip('wood_sword');
     this.localPlayer.addToBackpack('wood_plank', 32);
     this.localPlayer.addToBackpack('potion', 2);
+    this.growth?.applyOutGameTalents(this.localPlayer);
     this.players.push(this.localPlayer);
 
     // Create bots
@@ -868,6 +977,18 @@ class Game {
     }
   }
 
+  toggleGrowthPanel() {
+    this.growthPanelOpen = !this.growthPanelOpen;
+    const panel = document.getElementById('growthPanel');
+    if (panel) panel.style.display = this.growthPanelOpen ? 'flex' : 'none';
+    if (this.growthPanelOpen) {
+      this.ui.renderGrowthCenter();
+      if (document.pointerLockElement) document.exitPointerLock();
+    } else if (!this.input.isMobile()) {
+      this.engine.renderer.domElement.requestPointerLock();
+    }
+  }
+
   buyItem(key) {
     const lp = this.localPlayer;
     if (!lp) return;
@@ -889,6 +1010,7 @@ class Game {
     }
 
     lp.addToBackpack(key, 1);
+    this.network?.logEconomy?.(lp.playerId, 'buy_item', Object.keys(cost)[0], -Object.values(cost)[0], key, lp.pos, Math.floor(this.gameTime));
     if (item.type === 'weapon' || item.type === 'armor') {
       lp.equip(key);
     }
@@ -973,10 +1095,16 @@ class Game {
     const lp = this.localPlayer;
     const stats = screen.querySelector('.stats');
     stats.innerHTML = '';
+    const growthResult = this.growth?.settlement?.(winnerName);
     const rows = [
       ['存活时间', `${Math.floor(this.gameTime / 60)}分${Math.floor(this.gameTime % 60)}秒`],
       ['最终生命', `${Math.ceil(lp?.hp || 0)}/${lp?.maxHp || 0}`],
-      ['持有资源', `铜:${Math.floor(lp?.inv.copper||0)} 银:${Math.floor(lp?.inv.silver||0)} 金:${Math.floor(lp?.inv.gold||0)}`]
+      ['本局等级', `Lv.${lp?.matchLevel || 1} / 8`],
+      ['本局表现', `击杀:${lp?.matchStats.kills || 0} 拆床:${lp?.matchStats.beds || 0} 建造:${lp?.matchStats.blocksPlaced || 0}`],
+      ['持有资源', `铜:${Math.floor(lp?.inv.copper||0)} 银:${Math.floor(lp?.inv.silver||0)} 金:${Math.floor(lp?.inv.gold||0)}`],
+      ['筑梦星尘', `+${growthResult?.stardust || 0}`],
+      ['排位变化', `${growthResult?.rankDelta >= 0 ? '+' : ''}${growthResult?.rankDelta || 0}（${growthResult?.rankName || '沉睡梦游者'}）`],
+      ['赛季积分', `${growthResult?.seasonXp || 0}`]
     ];
     for (const [label, val] of rows) {
       const row = document.createElement('div');
