@@ -13,7 +13,7 @@ const ROLES = {
   FOX: {
     name: '狐狸', hp: 90, skinClass: 'role-fox',
     passive: { name: '狐假虎威', desc: '生命低于20%时，造成伤害增加20%' },
-    active: { name: '伪装', desc: '8秒隐身，移速+50%；跳跃和移动不破隐，其他操作破隐', cd: 16 },
+    active: { name: '伪装', desc: '12秒隐身，移速+50%；跳跃和移动不破隐，其他操作破隐', cd: 16 },
     starter: [{ key: 'wood_sword', count: 1 }, { currency: 'copper', count: 10 }]
   },
   PORK_DOCTOR: {
@@ -67,10 +67,10 @@ const ITEM_DB = {
   iron_plate:   { name: '铁板',  type: 'block',  cost: { gold: 4 },          hp: 120, desc: '高级建筑材料', stack: 64 },
   titanium:     { name: '钛板',  type: 'block',  cost: { jade: 2 },          hp: 300, desc: '顶级建筑材料', stack: 64 },
   blast_glass:  { name: '防爆玻璃',type:'block', cost: { gold: 2 },          hp: 1,   desc: '阻挡一次爆炸，遇爆即碎，不可徒手拆毁', stack: 64, blastOnly: true, handImmune: true },
-  wood_sword:   { name: '木剑',  type: 'weapon', cost: { silver: 4 },        dmg: 4,  desc: '基础近战武器', stack: 1 },
-  stone_sword:  { name: '石剑',  type: 'weapon', cost: { silver: 8 },        dmg: 8,  desc: '中级近战武器', stack: 1 },
-  iron_sword:   { name: '铁剑',  type: 'weapon', cost: { gold: 4 },          dmg: 12, desc: '高级近战武器', stack: 1 },
-  diamond_sword:{ name: '钻石剑',type: 'weapon', cost: { jade: 2 },          dmg: 20, desc: '顶级近战武器', stack: 1 },
+  wood_sword:   { name: '木质剑',type: 'weapon', cost: { copper: 4 },        dmg: 12, durability: 20, desc: '耐久20，伤害12', stack: 1 },
+  stone_sword:  { name: '手工剑',type: 'weapon', cost: { silver: 3 },        dmg: 22, durability: 20, desc: '耐久20，伤害22', stack: 1 },
+  iron_sword:   { name: '精致剑',type: 'weapon', cost: { gold: 4 },          dmg: 35, durability: 30, desc: '耐久30，伤害35', stack: 1 },
+  diamond_sword:{ name: '研发剑',type: 'weapon', cost: { jade: 2 },          dmg: 60, durability: 45, desc: '耐久45，伤害60', stack: 1 },
   bow:          { name: '弓',    type: 'weapon', cost: { silver: 12 },       dmg: 6,  desc: '远程武器', ranged: true, stack: 1 },
   armor_hammer: { name: '破甲锤',type: 'weapon', cost: { silver: 30 },       dmg: 14, desc: '攻速极慢，对建筑和护盾3倍伤害；右键扇形击退', stack: 1, slow: true, blockMult: 3, shieldMult: 3 },
   boomerang:    { name: '回旋镖',type: 'weapon', cost: { silver: 15 },       dmg: 7,  desc: '直线飞出后折返，去回程均可造成伤害，可被击落', stack: 1, projectileType: 'boomerang' },
@@ -78,10 +78,19 @@ const ITEM_DB = {
   javelin:      { name: '标枪',  type: 'weapon', cost: { silver: 10 },       dmg: 8,  desc: '钉住敌人暴露5秒；钉在方块可作为弹跳踮脚石', stack: 1, projectileType: 'javelin' },
   smoke_launcher:{ name:'烟雾弹发射器',type:'weapon',cost:{ silver:25 },     dmg: 0,  desc: '发射烟雾弹，落地形成8秒烟区，友军进烟隐身2秒', stack: 1, projectileType: 'smoke' },
   arrow:        { name: '箭',    type: 'ammo',   cost: { silver: 2 },        count: 8, desc: '箭矢x8', stack: 64 },
-  std_armor:    { name: '标准甲',type: 'armor',  cost: { gold: 8 },          armor: 20, desc: '基础防护', stack: 1 },
-  fine_armor:   { name: '精制甲',type: 'armor',  cost: { gold: 16 },         armor: 40, desc: '中级防护', stack: 1 },
-  rd_armor:     { name: '研发甲',type: 'armor',  cost: { jade: 4 },          armor: 60, desc: '顶级防护', stack: 1 },
-  tnt:          { name: '炸药',  type: 'special',cost: { gold: 8 },          desc: '破坏3x3范围方块', stack: 4 },
+  crude_armor:  { name: '粗制护甲',type:'armor', cost: { copper: 2 },        armor: 30, protectRate: 0.20, desc: '耐久30，防护率20%', stack: 1 },
+  handmade_armor:{name: '手工护甲',type:'armor', cost: { silver: 2 },        armor: 40, protectRate: 0.25, desc: '耐久40，防护率25%', stack: 1 },
+  std_armor:    { name: '标准护甲',type:'armor', cost: { silver: 10 },       armor: 60, protectRate: 0.40, desc: '耐久60，防护率40%', stack: 1 },
+  fine_armor:   { name: '精致护甲',type:'armor', cost: { gold: 8 },          armor: 150, protectRate: 0.60, desc: '耐久150，防护率60%', stack: 1 },
+  rd_armor:     { name: '研发护甲',type:'armor', cost: { jade: 3 },          armor: 180, protectRate: 0.85, reflectChance: 0.20, reflectRate: 0.40, desc: '耐久180，防护率85%，20%概率反弹40%伤害', stack: 1 },
+  tnt:          { name: '粗制炸药包',type:'special',cost: { copper: 1 },     desc: '伤害35，范围2×2，延迟2秒', stack: 8, explosive: true, explosionDamage: 35, explosionRadius: 2, explosionDelay: 2 },
+  handmade_tnt: { name: '手工炸药包',type:'special',cost: { silver: 2 },     desc: '伤害90，范围3×3，延迟1.6秒', stack: 8, explosive: true, explosionDamage: 90, explosionRadius: 3, explosionDelay: 1.6 },
+  military_c4:  { name: 'C4',type:'special',cost: { gold: 5 },               desc: '伤害180，范围4×4，延迟1.5秒', stack: 4, explosive: true, explosionDamage: 180, explosionRadius: 4, explosionDelay: 1.5 },
+  mini_nuke:    { name: '研发炸药',type:'special',cost: { jade: 3 },         desc: '伤害350，范围6×6，延迟3秒', stack: 2, explosive: true, explosionDamage: 350, explosionRadius: 6, explosionDelay: 3 },
+  repair_drone: { name: '自动修复无人机',type:'special',cost: { silver: 20 },desc: '跟随玩家20秒，修复5×5范围建筑，每秒回复2点耐久', stack: 2 },
+  bandage:      { name: '简易绷带',type:'special',cost: { silver: 3 },       desc: '回血25，使用3.5秒，耐久2次', stack: 4, healAmount: 25, useTime: 3.5, uses: 2 },
+  medkit:       { name: '医疗箱',type:'special',cost: { gold: 5 },           desc: '回血50，使用2秒，耐久3次', stack: 3, healAmount: 50, useTime: 2, uses: 3 },
+  surgery_station:{name:'移动手术台',type:'special',cost:{ gold: 15 },       desc: '回满血，使用2秒，耐久2次', stack: 2, healFull: true, useTime: 2, uses: 2 },
   trap_device:  { name: '追踪装置',type:'special',cost: { gold: 12 },         desc: '自动攻击附近敌人，可装填100支箭', stack: 2 },
   bear_trap:    { name: '捕兽夹',type:'special',cost: { silver: 20 },        desc: '隐形地面陷阱，定身敌人3秒并预警', stack: 4 },
   sensor_mine:  { name: '感应地雷',type:'special',cost:{ gold: 30 },         desc: '隐形感应雷，敌人靠近后1秒延迟爆炸', stack: 3 },
@@ -114,6 +123,8 @@ class Engine {
     this.groundDevices = []; // 捕兽夹、感应地雷、标枪踏板
     this.smokeZones = [];    // 烟雾区域
     this.boneZones = [];     // 歪歪骨头阵
+    this.explosives = [];    // 定时爆炸物
+    this.repairDrones = [];  // 自动修复无人机
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -172,7 +183,7 @@ class Engine {
 
   getBlockKey(x, y, z) { return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; }
 
-  placeBlock(x, y, z, typeKey, team, hpMult = 1) {
+  placeBlock(x, y, z, typeKey, team, hpMult = 1, owner = null) {
     const key = this.getBlockKey(x, y, z);
     if (this.blocks.has(key)) return false;
     const info = ITEM_DB[typeKey];
@@ -194,7 +205,33 @@ class Engine {
 
     const baseHp = info.hp || 20;
     const hp = Math.round(baseHp * hpMult);
-    this.blocks.set(key, { mesh, type: typeKey, hp, maxHp: hp, team });
+    this.blocks.set(key, { mesh, type: typeKey, hp, maxHp: hp, team, ownerId: owner?.playerId || owner?.name || null });
+    return true;
+  }
+
+  replaceBlockType(key, typeKey, hpMult = 1) {
+    const blk = this.blocks.get(key);
+    const info = ITEM_DB[typeKey];
+    if (!blk || !info) return false;
+    const [x, y, z] = key.split(',').map(Number);
+    const team = blk.team;
+    const ownerId = blk.ownerId;
+    this.scene.remove(blk.mesh);
+    this.blocks.delete(key);
+    const ok = this.placeBlock(x, y, z, typeKey, team, hpMult);
+    const next = this.blocks.get(key);
+    if (next) next.ownerId = ownerId;
+    return ok;
+  }
+
+  moveBlock(key, x, y, z) {
+    const blk = this.blocks.get(key);
+    if (!blk) return false;
+    const newKey = this.getBlockKey(x, y, z);
+    if (this.blocks.has(newKey)) return false;
+    this.blocks.delete(key);
+    blk.mesh.position.set(Math.floor(x) + 0.5, Math.floor(y) + 0.5, Math.floor(z) + 0.5);
+    this.blocks.set(newKey, blk);
     return true;
   }
 
@@ -657,19 +694,94 @@ class Engine {
     }
   }
 
-  explodeAt(pos, radius, dmg) {
+  makeTextSprite(text, color = '#ffffff') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(18, 18, 220, 56);
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color;
+    ctx.fillText(text, 128, 56);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(2.3, 0.85, 1);
+    sprite.userData.canvas = canvas;
+    sprite.userData.ctx = ctx;
+    sprite.userData.tex = tex;
+    sprite.userData.color = color;
+    return sprite;
+  }
+
+  updateTextSprite(sprite, text) {
+    const { canvas, ctx, tex, color } = sprite.userData;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(18, 18, 220, 56);
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color || '#ffffff';
+    ctx.fillText(text, 128, 56);
+    tex.needsUpdate = true;
+  }
+
+  createTimedExplosive(owner, itemKey, pos) {
+    const info = ITEM_DB[itemKey];
+    if (!info?.explosive) return null;
+    const geo = new THREE.BoxGeometry(0.55, 0.32, 0.55);
+    const mat = new THREE.MeshLambertMaterial({ color: itemKey === 'mini_nuke' ? 0x00ff66 : itemKey === 'military_c4' ? 0x333333 : 0xaa4422 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.position.y += 0.18;
+    mesh.castShadow = true;
+    const label = this.makeTextSprite(`${info.explosionDelay.toFixed(1)}s`, '#ffdd00');
+    label.position.set(0, 0.85, 0);
+    mesh.add(label);
+    this.scene.add(mesh);
+    const ex = { mesh, label, pos: mesh.position.clone(), owner, team: owner?.team, life: info.explosionDelay, radius: info.explosionRadius, damage: info.explosionDamage };
+    this.explosives.push(ex);
+    return ex;
+  }
+
+  createRepairDrone(owner) {
+    const geo = new THREE.SphereGeometry(0.22, 12, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x8be9fd });
+    const mesh = new THREE.Mesh(geo, mat);
+    this.scene.add(mesh);
+    const label = this.makeTextSprite('修复', '#8be9fd');
+    label.position.set(0, 0.55, 0);
+    mesh.add(label);
+    const drone = { mesh, label, owner, team: owner.team, life: 20, tick: 0, angle: 0 };
+    this.repairDrones.push(drone);
+    return drone;
+  }
+
+  explodeAt(pos, radius, dmg, owner = null) {
     // 炸毁方块
     const rx = Math.floor(pos.x);
     const ry = Math.floor(pos.y);
     const rz = Math.floor(pos.z);
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
+    const r = Math.max(1, Math.ceil(radius));
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.sqrt(dx * dx + dy * dy + dz * dz) > radius) continue;
           const key = this.getBlockKey(rx + dx, ry + dy, rz + dz);
           const blk = this.blocks.get(key);
           if (blk?.type === 'blast_glass') this.damageBlock(rx + dx, ry + dy, rz + dz, 999);
           else this.damageBlock(rx + dx, ry + dy, rz + dz, dmg);
         }
+      }
+    }
+    for (const ent of this.entities) {
+      if (ent.isDead) continue;
+      const dist = ent.pos.distanceTo(pos);
+      if (dist <= radius + 0.8) {
+        const falloff = Math.max(0.25, 1 - dist / (radius + 1));
+        ent.takeDamage(dmg * falloff, owner);
       }
     }
     // 炸毁范围内的掉落物
@@ -855,6 +967,44 @@ class Engine {
       if (zone.life <= 0) this.removeBoneZone(zone);
     }
 
+    // Timed explosives
+    for (let i = this.explosives.length - 1; i >= 0; i--) {
+      const ex = this.explosives[i];
+      ex.life -= dt;
+      ex.mesh.rotation.y += dt * 2.5;
+      this.updateTextSprite(ex.label, `${Math.max(0, ex.life).toFixed(1)}s`);
+      if (ex.life <= 0) {
+        this.explodeAt(ex.pos.clone(), ex.radius, ex.damage, ex.owner);
+        this.scene.remove(ex.mesh);
+        this.explosives.splice(i, 1);
+      }
+    }
+
+    // Repair drones
+    for (let i = this.repairDrones.length - 1; i >= 0; i--) {
+      const d = this.repairDrones[i];
+      d.life -= dt;
+      d.tick -= dt;
+      d.angle += dt * 2.8;
+      if (!d.owner || d.owner.isDead || d.life <= 0) {
+        this.scene.remove(d.mesh);
+        this.repairDrones.splice(i, 1);
+        continue;
+      }
+      d.mesh.position.copy(d.owner.pos).add(new THREE.Vector3(Math.cos(d.angle) * 1.4, 1.35 + Math.sin(d.angle * 1.7) * 0.18, Math.sin(d.angle) * 1.4));
+      this.updateTextSprite(d.label, `${Math.ceil(d.life)}s`);
+      if (d.tick <= 0) {
+        d.tick = 1;
+        for (const blk of this.blocks.values()) {
+          if (blk.team !== d.team || blk.type === 'ground') continue;
+          if (blk.mesh.position.distanceTo(d.owner.pos) <= 2.5) {
+            blk.hp = Math.min(blk.maxHp, blk.hp + 2);
+            this.spawnParticles(blk.mesh.position, 0x8be9fd, 2);
+          }
+        }
+      }
+    }
+
     // Ground Devices (捕兽夹/感应雷/标枪踏板)
     for (let i = this.groundDevices.length - 1; i >= 0; i--) {
       const dev = this.groundDevices[i];
@@ -977,7 +1127,7 @@ class Engine {
       }
       if (proj.type === 'missile' && proj.owner) {
         const dir = proj.owner.getForwardDir().normalize();
-        proj.vel.lerp(dir.multiplyScalar(5), 0.22);
+        proj.vel.lerp(dir.multiplyScalar(proj.boosted ? 15 : 8), 0.22);
         proj.mesh.lookAt(proj.mesh.position.clone().add(proj.vel));
         if (proj.owner.isLocal && proj.owner.missileControl === proj) {
           this.camera.position.lerp(proj.mesh.position.clone().addScaledVector(proj.vel.clone().normalize(), -3).add(new THREE.Vector3(0, 1.2, 0)), 0.35);
@@ -1000,7 +1150,7 @@ class Engine {
       const rc = this.raycastBlocks(proj.mesh.position, proj.vel.clone().normalize(), 0.5);
       if (rc.hit) {
         if (proj.type === 'missile') {
-          this.explodeAt(proj.mesh.position.clone(), 4.5, 95);
+          this.explodeAt(proj.mesh.position.clone(), 4.5, 95, proj.owner);
           if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
         } else if (proj.type === 'smoke') {
           this.createSmokeZone(proj.mesh.position.clone(), proj.owner?.team, proj.owner);
@@ -1028,7 +1178,7 @@ class Engine {
           ent.takeDamage(proj.damage, proj.owner);
           if (proj.owner?.role === 'DRIFTWOOD') proj.owner.extraShield = Math.min(60 + (proj.owner.shieldCapBonus || 0), (proj.owner.extraShield || 0) + 3);
           if (proj.type === 'missile') {
-            this.explodeAt(proj.mesh.position.clone(), 4.5, 95);
+            this.explodeAt(proj.mesh.position.clone(), 4.5, 95, proj.owner);
             if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
           }
           if (proj.type === 'frost') {
@@ -1061,7 +1211,7 @@ class Engine {
           this.createSmokeZone(proj.mesh.position.clone(), proj.owner?.team, proj.owner);
         }
         if (proj.type === 'missile' && proj.mesh.position.y > -20) {
-          this.explodeAt(proj.mesh.position.clone(), 4.5, 95);
+          this.explodeAt(proj.mesh.position.clone(), 4.5, 95, proj.owner);
           if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
         }
         this.scene.remove(proj.mesh);
@@ -1286,6 +1436,10 @@ class PlayerEntity {
     this.maxHp = this.roleInfo.hp;
     this.hp = this.maxHp;
     this.armor = 0;
+    this.armorMax = 0;
+    this.armorProtectRate = 0;
+    this.armorReflectChance = 0;
+    this.armorReflectRate = 0;
     this.isDead = false;
     this.respawnTimer = 0;
     this.deathCount = 0;
@@ -1346,6 +1500,7 @@ class PlayerEntity {
     this.speedPotionTimer = 0;
     this.burstPotionTimer = 0;
     this.voidBridgeBlocks = [];
+    this.healAction = null;
     this.miss = this.role === 'WAIWAI' ? 3 : 0;
     this.maxMiss = this.role === 'WAIWAI' ? 3 : 0;
     this.missRegenTimer = 30;
@@ -1478,6 +1633,11 @@ class PlayerEntity {
     this.backpack = Array(20).fill(null);
     this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
     this.equipped = { weapon: null, armor: null };
+    this.armor = 0;
+    this.armorMax = 0;
+    this.armorProtectRate = 0;
+    this.armorReflectChance = 0;
+    this.armorReflectRate = 0;
     this.arrowCount = 0;
     for (const starter of (this.roleInfo.starter || [])) {
       if (starter.currency) {
@@ -1656,20 +1816,30 @@ class PlayerEntity {
     } else if (info.type === 'armor') {
       this.equipped.armor = item.key;
       this.armor = info.armor;
+      this.armorMax = info.armor;
+      this.armorProtectRate = info.protectRate || 0;
+      this.armorReflectChance = info.reflectChance || 0;
+      this.armorReflectRate = info.reflectRate || 0;
       // 护甲使用后从快捷栏移除（或减1）
       item.count--;
       if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
     } else if (info.type === 'block') {
       // 放置方块由外部调用 placeBlock 处理
-    } else if (item.key === 'tnt') {
-      // TNT 爆炸
+    } else if (info.explosive) {
       const dir = this.getForwardDir();
-      const rc = this.engine.raycastBlocks(this.pos.clone().add(new THREE.Vector3(0, 0.5, 0)), dir, 5);
-      if (rc.hit) {
-        this.engine.explodeAt(rc.pos, 3, 999);
-        item.count--;
-        if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
-      }
+      const placePos = this.pos.clone().addScaledVector(dir, 1.5);
+      placePos.y = Math.max(this.getGroundHeight(placePos.x, placePos.z) + 0.05, this.pos.y - this.radius + 0.05);
+      this.engine.createTimedExplosive(this, item.key, placePos);
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage?.(`${info.name} 已放置，${info.explosionDelay}s 后爆炸`, '#ffdd00');
+    } else if (item.key === 'repair_drone') {
+      this.engine.createRepairDrone(this);
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage?.('自动修复无人机已启动，持续20秒', '#8be9fd');
+    } else if (info.healAmount || info.healFull) {
+      this.startHealAction(item, info);
     } else if (item.key === 'potion') {
       this.hp = this.maxHp;
       item.count--;
@@ -1728,6 +1898,18 @@ class PlayerEntity {
     }
   }
 
+  startHealAction(item, info) {
+    if (this.healAction) {
+      this.healAction = null;
+      window.game?.showMessage?.('已取消治疗', '#cccccc');
+      return;
+    }
+    this.vel.x *= 0.2;
+    this.vel.z *= 0.2;
+    this.healAction = { item, info, remain: info.useTime, total: info.useTime };
+    window.game?.showMessage?.(`开始使用${info.name}，再次点击可取消`, '#50fa7b');
+  }
+
   useWeaponAlt() {
     this.breakCamouflage();
     if (!this.equipped.weapon || this.attackCd > 0 || this.isDead || this.isFrozen) return;
@@ -1768,6 +1950,20 @@ class PlayerEntity {
     return item?.key || null;
   }
 
+  consumeWeaponDurability() {
+    const item = this.getSelectedItem();
+    const info = item ? ITEM_DB[item.key] : null;
+    if (!item || item.key !== this.equipped.weapon || !info?.durability) return;
+    item.durability = item.durability ?? info.durability;
+    item.durability--;
+    if (item.durability <= 0) {
+      window.game?.showMessage?.(`${info.name} 已损坏`, '#ff5555');
+      this.hotbar[this.hotbarIndex] = null;
+      this.equipped.weapon = null;
+      this.updateWeaponMesh();
+    }
+  }
+
   update(dt) {
     if (this.isDead) {
       this.respawnTimer -= dt;
@@ -1794,6 +1990,24 @@ class PlayerEntity {
         }
       } else {
         this.missRegenTimer = Math.max(5, 30 - (this.missRegenBonus || 0));
+      }
+    }
+    if (this.healAction) {
+      this.healAction.remain -= dt;
+      this.vel.x *= 0.86;
+      this.vel.z *= 0.86;
+      if (this.healAction.remain <= 0) {
+        const { item, info } = this.healAction;
+        this.hp = info.healFull ? this.maxHp : Math.min(this.maxHp, this.hp + info.healAmount);
+        item.usesLeft = item.usesLeft ?? info.uses;
+        item.usesLeft--;
+        if (item.usesLeft <= 0) {
+          item.count--;
+          delete item.usesLeft;
+          if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+        }
+        window.game?.showMessage?.(`${info.name} 治疗完成`, '#50fa7b');
+        this.healAction = null;
       }
     }
 
@@ -1960,7 +2174,7 @@ class PlayerEntity {
     if (this.isDead || this.isFrozen || this.rootTimer > 0) return;
     const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
     const roleSpeedMult = (this.camouflageTimer > 0 ? 1.5 : 1) * (this.fatTimer > 0 ? 0.75 : 1);
-    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult * (this.speedPotionTimer > 0 ? 1.25 : 1);
+    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult * (this.speedPotionTimer > 0 ? 1.25 : 1) * (this.healAction ? 0.5 : 1);
     const moveDir = new THREE.Vector3();
     if (this.isLocal) {
       const forward = new THREE.Vector3();
@@ -1985,6 +2199,7 @@ class PlayerEntity {
   }
 
   jump() {
+    if (this.healAction) return;
     if (this.onGround && !this.isDead && !this.isFrozen && this.rootTimer <= 0) {
       this.vel.y = this.jumpPower * (this.frostTimer > 0 ? 0.5 : 1);
       this.onGround = false;
@@ -2072,6 +2287,7 @@ class PlayerEntity {
         if (dist < range) {
           let finalDmg = dmg;
           ent.takeDamage(finalDmg, this);
+          this.consumeWeaponDurability();
           if (this.role === 'DRIFTWOOD') this.extraShield = Math.min(60 + (this.shieldCapBonus || 0), (this.extraShield || 0) + 3);
         }
       }
@@ -2162,7 +2378,7 @@ class PlayerEntity {
       if (center.distanceTo(this.pos) > 6.5) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
       const steelBonus = this.role === 'STEEL_BONE' ? 1.2 + (this.steelBuildBonus || 0) : 1;
-      if (this.engine.placeBlock(px, py, pz, blockType, this.team, steelBonus)) {
+      if (this.engine.placeBlock(px, py, pz, blockType, this.team, steelBonus, this)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
         this.matchStats.blocksPlaced++;
@@ -2185,6 +2401,11 @@ class PlayerEntity {
   }
 
   useSkill() {
+    if (this.role === 'DRIFTWOOD' && this.missileControl) {
+      this.missileControl.boosted = true;
+      window.game?.showMessage?.('导弹已加速至15格/秒！', '#ffdd00');
+      return;
+    }
     if (this.isDead || this.isFrozen || this.skillCd > 0) return;
     if (this.role !== 'FOX') this.breakCamouflage();
     const info = this.roleInfo;
@@ -2193,7 +2414,7 @@ class PlayerEntity {
 
     if (this.role === 'FOX') {
       this.isInvisible = true;
-      this.camouflageTimer = 8;
+      this.camouflageTimer = 12;
       window.game?.showMessage(`${this.name} 发动伪装！`, '#8be9fd');
     } else if (this.role === 'PORK_DOCTOR') {
       this.maxHp += 150;
@@ -2251,7 +2472,7 @@ class PlayerEntity {
     this.engine.scene.add(mesh);
     const missile = {
       mesh,
-      vel: dir.multiplyScalar(5),
+      vel: dir.multiplyScalar(8),
       life: 8,
       damage: 0,
       owner: this,
@@ -2279,7 +2500,7 @@ class PlayerEntity {
       for (const p of positions) {
         const key = this.engine.getBlockKey(p.x, p.y, p.z);
         if (!this.engine.blocks.has(key)) {
-          this.engine.placeBlock(p.x, p.y, p.z, 'blast_glass', this.team);
+          this.engine.placeBlock(p.x, p.y, p.z, 'blast_glass', this.team, 1, this);
           this.voidBridgeBlocks.push(p);
         }
       }
@@ -2335,15 +2556,34 @@ class PlayerEntity {
       }
     }
     if (this.missileControl) {
-      this.engine.explodeAt(this.missileControl.mesh.position.clone(), 4.5, 95);
+      this.engine.explodeAt(this.missileControl.mesh.position.clone(), 4.5, 95, this);
       this.engine.scene.remove(this.missileControl.mesh);
       const idx = this.engine.projectiles.indexOf(this.missileControl);
       if (idx >= 0) this.engine.projectiles.splice(idx, 1);
       this.missileControl = null;
     }
-    const reduction = this.armor / (this.armor + 50);
     const shieldReduce = this.socialShield > 0 ? 0.35 : 0;
-    let actual = Math.max(1, amount * (1 - reduction) * (1 - shieldReduce) * (1 - (this.flatDamageReduce || 0)));
+    let incoming = amount * (1 - shieldReduce) * (1 - (this.flatDamageReduce || 0));
+    let armorAbsorb = 0;
+    if (this.armor > 0 && this.armorProtectRate > 0) {
+      armorAbsorb = Math.min(this.armor, incoming * this.armorProtectRate);
+      this.armor -= armorAbsorb;
+      incoming -= armorAbsorb;
+      if (this.armor <= 0) {
+        this.armor = 0;
+        this.equipped.armor = null;
+        this.armorMax = 0;
+        this.armorProtectRate = 0;
+        this.armorReflectChance = 0;
+        this.armorReflectRate = 0;
+        window.game?.showMessage?.(`${this.name} 的护甲已损坏`, '#ff5555');
+      }
+      if (attacker && this.armorReflectChance > 0 && Math.random() < this.armorReflectChance) {
+        attacker.takeDamage(amount * this.armorReflectRate, this);
+        window.game?.showMessage?.('研发护甲触发反弹伤害！', '#b388ff');
+      }
+    }
+    let actual = Math.max(1, incoming);
     if (this.extraShield > 0) {
       const absorbed = Math.min(this.extraShield, actual);
       this.extraShield -= absorbed;
@@ -2397,6 +2637,10 @@ class PlayerEntity {
       this.equipped = { weapon: null, armor: null };
       this.arrowCount = 0;
       this.armor = 0;
+      this.armorMax = 0;
+      this.armorProtectRate = 0;
+      this.armorReflectChance = 0;
+      this.armorReflectRate = 0;
       this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
       this.updateWeaponMesh();
       window.game?.showMessage(`${this.name} 坠入虚空，装备和物品全部清空！`, '#ff4444');
@@ -2424,6 +2668,10 @@ class PlayerEntity {
         allItems.push({ key: this.equipped.armor, count: 1 });
         this.equipped.armor = null;
         this.armor = 0;
+        this.armorMax = 0;
+        this.armorProtectRate = 0;
+        this.armorReflectChance = 0;
+        this.armorReflectRate = 0;
       }
       // 箭矢也掉落
       if (this.arrowCount > 0) {
@@ -2523,6 +2771,10 @@ class PlayerEntity {
     } else if (item.type === 'armor') {
       this.equipped.armor = key;
       this.armor = item.armor;
+      this.armorMax = item.armor;
+      this.armorProtectRate = item.protectRate || 0;
+      this.armorReflectChance = item.reflectChance || 0;
+      this.armorReflectRate = item.reflectRate || 0;
     }
   }
 

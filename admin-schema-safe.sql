@@ -158,6 +158,14 @@ CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.world_chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id TEXT NOT NULL,
+  nickname TEXT,
+  content TEXT NOT NULL CHECK (char_length(content) <= 120),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ============================================
 -- 10. 索引
 -- ============================================
@@ -171,6 +179,7 @@ CREATE INDEX IF NOT EXISTS idx_cheat_alerts_unresolved ON public.cheat_alerts(is
 CREATE INDEX IF NOT EXISTS idx_kill_replay_room ON public.kill_replay_events(room_id, match_tick);
 CREATE INDEX IF NOT EXISTS idx_penalties_active ON public.player_penalties(player_id, is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_admin_audit ON public.admin_audit_logs(admin_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_world_chat_created ON public.world_chat_messages(created_at DESC);
 
 -- ============================================
 -- 11. RLS 与访问策略
@@ -186,6 +195,7 @@ ALTER TABLE public.game_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cheat_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kill_replay_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.world_chat_messages ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
@@ -221,6 +231,10 @@ BEGIN
     CREATE POLICY kill_replay_events_open_policy ON public.kill_replay_events FOR ALL USING (true) WITH CHECK (true);
   END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'world_chat_messages' AND policyname = 'world_chat_messages_open_policy') THEN
+    CREATE POLICY world_chat_messages_open_policy ON public.world_chat_messages FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'admin_audit_logs' AND policyname = 'admin_audit_logs_open_policy') THEN
     CREATE POLICY admin_audit_logs_open_policy ON public.admin_audit_logs FOR ALL USING (true) WITH CHECK (true);
   END IF;
@@ -235,16 +249,25 @@ INSERT INTO public.game_config (config_key, config_value) VALUES
     "stone_plate":{"silver":8},
     "iron_plate":{"gold":4},
     "titanium":{"jade":2},
-    "wood_sword":{"silver":4},
-    "stone_sword":{"silver":8},
+    "wood_sword":{"copper":4},
+    "stone_sword":{"silver":3},
     "iron_sword":{"gold":4},
     "diamond_sword":{"jade":2},
     "bow":{"silver":12},
     "arrow":{"silver":2},
-    "std_armor":{"gold":8},
-    "fine_armor":{"gold":16},
-    "rd_armor":{"jade":4},
-    "tnt":{"gold":8},
+    "crude_armor":{"copper":2},
+    "handmade_armor":{"silver":2},
+    "std_armor":{"silver":10},
+    "fine_armor":{"gold":8},
+    "rd_armor":{"jade":3},
+    "tnt":{"copper":1},
+    "handmade_tnt":{"silver":2},
+    "military_c4":{"gold":5},
+    "mini_nuke":{"jade":3},
+    "repair_drone":{"silver":20},
+    "bandage":{"silver":3},
+    "medkit":{"gold":5},
+    "surgery_station":{"gold":15},
     "portal":{"jade":2},
     "potion":{"gold":4},
     "revival_gold":{"gold":10},

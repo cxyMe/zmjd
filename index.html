@@ -92,12 +92,10 @@ updateOrientationGate();
     <aside class="lobby-chat-dock">
       <div class="chat-panel compact" id="worldChatPanel">
         <div class="chat-head">世界频道</div>
-        <div class="chat-lines">
+        <div class="chat-lines" id="worldChatLines">
           <p><b>系统</b> 欢迎来到筑梦大厅，选择队伍后即可开战。</p>
-          <p><b>星火</b> 有没有人一起守家冲分？</p>
-          <p><b>梦旅人</b> 新武器回旋镖太适合消耗了。</p>
         </div>
-        <div class="chat-input">输入聊天内容（展示版）</div>
+        <input class="chat-input" id="worldChatInput" maxlength="80" placeholder="输入聊天内容，回车发送">
       </div>
     </aside>
 
@@ -244,6 +242,17 @@ updateOrientationGate();
 
   <!-- Status Effects Bar -->
   <div id="statusEffects" style="display:none;"></div>
+  <div id="timedAction" style="display:none;"></div>
+
+  <div id="buildPanel" style="display:none;">
+    <div class="bp-title">建筑</div>
+    <div id="buildHpText">0/0</div>
+    <div class="bp-actions">
+      <button id="buildUpgradeBtn">升级</button>
+      <button id="buildDestroyBtn">拆毁</button>
+      <button id="buildMoveBtn">重新移动</button>
+    </div>
+  </div>
 
   <!-- Crosshair -->
   <div id="crosshair" style="display:none;"></div>
@@ -517,7 +526,7 @@ let localOnly = false;
 window.lobbyAiSlots = 0;
 
 const roleDescriptions = {
-  FOX: '狐狸 - 伪装隐身8秒 | 残血增伤',
+  FOX: '狐狸 - 伪装隐身12秒 | 残血增伤',
   PORK_DOCTOR: '猪排博士 - 额外生命膨胀 | 周期回血',
   HURRICANE: '飓风 - 位移6格 | 远程透视标记',
   DRIFTWOOD: '浮木 - 操控导弹 | 命中回收护盾',
@@ -730,6 +739,67 @@ document.getElementById('menuCustomBtn')?.addEventListener('click', () => window
 document.getElementById('worldChatPanel').addEventListener('click', () => {
   document.querySelector('.lobby-chat-dock')?.classList.toggle('expanded');
 });
+document.getElementById('worldChatInput')?.addEventListener('click', e => e.stopPropagation());
+
+const worldChat = {
+  client: null,
+  channel: null,
+  pollTimer: null,
+  async init() {
+    const lines = document.getElementById('worldChatLines');
+    if (!lines || !window.supabase || !config.supabaseUrl) return;
+    this.client = this.client || window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+    await this.load();
+    this.channel = this.client.channel('world_chat_live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'world_chat_messages' }, payload => this.append(payload.new))
+      .subscribe();
+    this.pollTimer = setInterval(() => this.load(), 8000);
+  },
+  async load() {
+    const lines = document.getElementById('worldChatLines');
+    try {
+      const { data, error } = await this.client.from('world_chat_messages').select('*').order('created_at', { ascending: false }).limit(30);
+      if (error) throw error;
+      lines.innerHTML = '';
+      (data || []).reverse().forEach(msg => this.append(msg));
+      if (!data?.length) lines.innerHTML = '<p><b>系统</b> 世界频道已连接，发送第一条消息吧。</p>';
+    } catch (e) {
+      lines.innerHTML = '<p><b>系统</b> 世界频道暂不可用，请检查数据库表 world_chat_messages。</p>';
+    }
+  },
+  append(msg) {
+    const lines = document.getElementById('worldChatLines');
+    if (!lines || !msg) return;
+    const p = document.createElement('p');
+    const name = String(msg.nickname || '玩家').replace(/[<>&]/g, '');
+    const text = String(msg.content || '').replace(/[<>&]/g, '');
+    p.innerHTML = `<b>${name}</b> ${text}`;
+    lines.appendChild(p);
+    while (lines.children.length > 35) lines.removeChild(lines.firstChild);
+    lines.scrollTop = lines.scrollHeight;
+  },
+  async send(text) {
+    if (!auth.user) return setAuthStatus('请先登录后再发送世界频道消息。', true);
+    const content = text.trim().slice(0, 80);
+    if (!content || !this.client) return;
+    await this.client.from('world_chat_messages').insert({
+      player_id: auth.user.id,
+      nickname: auth.user.nickname || auth.user.phone || '玩家',
+      content
+    });
+    await this.load();
+  }
+};
+document.getElementById('worldChatInput')?.addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  e.stopPropagation();
+  const input = e.currentTarget;
+  const text = input.value;
+  input.value = '';
+  await worldChat.send(text);
+});
+worldChat.init();
 document.querySelectorAll('[data-close-panel]').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();

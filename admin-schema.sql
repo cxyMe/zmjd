@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS world_chat_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  player_id TEXT NOT NULL,
+  nickname TEXT,
+  content TEXT NOT NULL CHECK (char_length(content) <= 120),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_active_matches_status ON active_matches(status);
 CREATE INDEX IF NOT EXISTS idx_player_economy_player ON player_economy_logs(player_id);
@@ -152,6 +160,7 @@ CREATE INDEX IF NOT EXISTS idx_cheat_alerts_unresolved ON cheat_alerts(is_resolv
 CREATE INDEX IF NOT EXISTS idx_kill_replay_room ON kill_replay_events(room_id, match_tick);
 CREATE INDEX IF NOT EXISTS idx_penalties_active ON player_penalties(player_id, is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_admin_audit ON admin_audit_logs(admin_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_world_chat_created ON world_chat_messages(created_at DESC);
 
 -- RLS
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
@@ -163,6 +172,7 @@ ALTER TABLE game_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cheat_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kill_replay_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE world_chat_messages ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "admin_all" ON admin_users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "admin_all" ON active_matches FOR ALL USING (true) WITH CHECK (true);
@@ -173,10 +183,11 @@ CREATE POLICY "admin_all" ON game_config FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "admin_all" ON cheat_alerts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "admin_all" ON kill_replay_events FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "admin_all" ON admin_audit_logs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "admin_all" ON world_chat_messages FOR ALL USING (true) WITH CHECK (true);
 
 -- 默认游戏配置插入
 INSERT INTO game_config (config_key, config_value) VALUES
-  ('shop_prices', '{"wood_plank":{"copper":1,"count":2},"stone_plate":{"silver":8},"iron_plate":{"gold":4},"titanium":{"jade":2},"wood_sword":{"silver":4},"stone_sword":{"silver":8},"iron_sword":{"gold":4},"diamond_sword":{"jade":2},"bow":{"silver":12},"arrow":{"silver":2},"std_armor":{"gold":8},"fine_armor":{"gold":16},"rd_armor":{"jade":4},"tnt":{"gold":8},"portal":{"jade":2},"potion":{"gold":4},"revival_gold":{"gold":10},"teleport_coin":{"gold":7},"cd_potion":{"gold":3},"speed_potion":{"gold":3},"burst_potion":{"gold":4}}')
+  ('shop_prices', '{"wood_plank":{"copper":1,"count":2},"stone_plate":{"silver":8},"iron_plate":{"gold":4},"titanium":{"jade":2},"wood_sword":{"copper":4},"stone_sword":{"silver":3},"iron_sword":{"gold":4},"diamond_sword":{"jade":2},"bow":{"silver":12},"arrow":{"silver":2},"crude_armor":{"copper":2},"handmade_armor":{"silver":2},"std_armor":{"silver":10},"fine_armor":{"gold":8},"rd_armor":{"jade":3},"tnt":{"copper":1},"handmade_tnt":{"silver":2},"military_c4":{"gold":5},"mini_nuke":{"jade":3},"repair_drone":{"silver":20},"bandage":{"silver":3},"medkit":{"gold":5},"surgery_station":{"gold":15},"portal":{"jade":2},"potion":{"gold":4},"revival_gold":{"gold":10},"teleport_coin":{"gold":7},"cd_potion":{"gold":3},"speed_potion":{"gold":3},"burst_potion":{"gold":4}}')
   ON CONFLICT (config_key) DO NOTHING;
 
 INSERT INTO game_config (config_key, config_value) VALUES

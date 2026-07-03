@@ -26,6 +26,7 @@ class InputManager {
       }
     });
     document.addEventListener('mousedown', e => {
+      if (e.target.closest?.('#mobileControls, #shopBtn, #socialBtn, #layoutBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel, #buildPanel, #timedAction')) return;
       if (e.button === 0) { this.buttons.attack = true; this.buttons.attackHeld = true; }
       if (e.button === 2) {
         this.buttons.build = true;
@@ -428,8 +429,8 @@ class UIManager {
     // HP / Armor
     document.getElementById('hpFill').style.width = `${(lp.hp / lp.maxHp) * 100}%`;
     document.getElementById('hpText').textContent = `${Math.ceil(lp.hp)}/${lp.maxHp}`;
-    document.getElementById('armorFill').style.width = `${Math.min(100, (lp.armor / 60) * 100)}%`;
-    document.getElementById('armorText').textContent = lp.armor;
+    document.getElementById('armorFill').style.width = `${lp.armorMax ? Math.min(100, (lp.armor / lp.armorMax) * 100) : 0}%`;
+    document.getElementById('armorText').textContent = `${Math.ceil(lp.armor)}${lp.armorMax ? '/' + lp.armorMax : ''}`;
     const currentNeed = GROWTH_CONFIG.levelXp[lp.matchLevel - 1] || 0;
     const nextNeed = GROWTH_CONFIG.levelXp[lp.matchLevel] || GROWTH_CONFIG.levelXp[GROWTH_CONFIG.levelXp.length - 1];
     const xpPct = lp.matchLevel >= GROWTH_CONFIG.maxInMatchLevel ? 100 : ((lp.matchXp - currentNeed) / Math.max(1, nextNeed - currentNeed)) * 100;
@@ -461,7 +462,9 @@ class UIManager {
       if (!slot) continue;
       const item = lp.hotbar[i];
       slot.querySelector('.slot-name').textContent = item ? ITEM_DB[item.key]?.name?.slice(0, 3) || '?' : '';
-      slot.querySelector('.slot-count').textContent = item ? (item.count > 1 ? item.count : '') : '';
+      const info = item ? ITEM_DB[item.key] : null;
+      const extra = item && info?.durability ? `耐${item.durability ?? info.durability}` : item?.usesLeft ? `用${item.usesLeft}` : (item?.count > 1 ? item.count : '');
+      slot.querySelector('.slot-count').textContent = item ? extra : '';
       if (lp.hotbarIndex === i) slot.classList.add('active');
       else slot.classList.remove('active');
     }
@@ -509,6 +512,19 @@ class UIManager {
       statusBar.style.display = effects.length > 0 ? 'flex' : 'none';
     }
 
+    const timedAction = document.getElementById('timedAction');
+    if (timedAction) {
+      if (lp.healAction) {
+        timedAction.textContent = `${lp.healAction.info.name}：${lp.healAction.remain.toFixed(1)}秒后完成，再次点击取消`;
+        timedAction.style.display = 'block';
+      } else if (lp.missileControl) {
+        timedAction.textContent = `导弹自动爆炸：${Math.max(0, lp.missileControl.life).toFixed(1)}秒`;
+        timedAction.style.display = 'block';
+      } else {
+        timedAction.style.display = 'none';
+      }
+    }
+
     const actionBtn = document.getElementById('actionBtnMobile');
     if (actionBtn) {
       const item = lp.getSelectedItem();
@@ -519,7 +535,9 @@ class UIManager {
       else if (item?.key === 'trap_device') label = '装置';
       else if (item?.key === 'bear_trap') label = '捕兽夹';
       else if (item?.key === 'sensor_mine') label = '地雷';
-      else if (item?.key === 'tnt') label = '炸药';
+      else if (info?.explosive) label = '放置';
+      else if (item?.key === 'repair_drone') label = '无人机';
+      else if (info?.healAmount || info?.healFull) label = lp.healAction ? '取消' : '治疗';
       else if (item?.key === 'portal') label = '传送';
       else if (item?.key === 'potion') label = '药水';
       else if (info?.name) label = info.name.slice(0, 3);
@@ -720,8 +738,8 @@ class UIManager {
     const tabs = {
       blocks: ['wood_plank','stone_plate','iron_plate','titanium','blast_glass'],
       weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow','armor_hammer','boomerang','frost_staff','javelin','smoke_launcher'],
-      armor: ['std_armor','fine_armor','rd_armor'],
-      specials: ['tnt','trap_device','bear_trap','sensor_mine','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion']
+      armor: ['crude_armor','handmade_armor','std_armor','fine_armor','rd_armor'],
+      specials: ['tnt','handmade_tnt','military_c4','mini_nuke','repair_drone','bandage','medkit','surgery_station','trap_device','bear_trap','sensor_mine','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion']
     };
     const items = tabs[this.shopTab] || [];
 
@@ -787,6 +805,8 @@ class Game {
     this.roleSelectionActive = false;
     this.roleSelectionTimer = 0;
     this.roleChosen = false;
+    this.selectedBlockKey = null;
+    this.movingBlockKey = null;
   }
 
   init() {
@@ -827,6 +847,9 @@ class Game {
     document.getElementById('skillBtn').onclick = () => {
       if (this.localPlayer) this.localPlayer.useSkill();
     };
+    document.getElementById('buildUpgradeBtn')?.addEventListener('click', () => this.upgradeSelectedBlock());
+    document.getElementById('buildDestroyBtn')?.addEventListener('click', () => this.destroySelectedBlock());
+    document.getElementById('buildMoveBtn')?.addEventListener('click', () => this.prepareMoveSelectedBlock());
     document.querySelectorAll('.hotbar-slot').forEach((slot, idx) => {
       const select = (e) => {
         e.preventDefault();
@@ -1093,25 +1116,31 @@ class Game {
       }
       if (this.input.consumeJump()) this.localPlayer.jump();
       if (this.input.consumeAction()) this.performMobileAction();
-      if (this.input.consumeAttack()) this.localPlayer.attack();
+      if (this.input.consumeAttack()) {
+        if (!this.tryOpenFriendlyBlockPanel()) this.localPlayer.attack();
+      }
       const heldItem = this.localPlayer.getSelectedItem();
       const heldInfo = heldItem ? ITEM_DB[heldItem.key] : null;
-      const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && !['trap_device','bear_trap','sensor_mine','tnt','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion'].includes(heldItem?.key);
+      const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && heldInfo?.type !== 'special';
       if (this.input.isAttackHeld() || canHandBreakByMobile) {
         this.localPlayer.updateHandBreak(dt, { x: window.innerWidth / 2, y: window.innerHeight / 2 });
       }
       const buildPointer = this.input.consumeBuild();
       if (buildPointer) {
-        const selectedItem = this.localPlayer.getSelectedItem();
-        const selectedInfo = selectedItem ? ITEM_DB[selectedItem.key] : null;
-        if (selectedItem?.key === 'teleport_coin') {
-          this.localPlayer.teleportCoinCharge = Math.max(0.5, this.localPlayer.teleportCoinCharge || 0);
-        } else if (selectedItem && ['trap_device','bear_trap','sensor_mine'].includes(selectedItem.key)) {
-          this.localPlayer.useHotbarItem();
-        } else if (selectedInfo?.type === 'weapon') {
-          this.localPlayer.useHotbarItem();
+        if (this.movingBlockKey) {
+          this.placeMovedBlock(buildPointer);
         } else {
-          this.localPlayer.placeBlock(buildPointer);
+          const selectedItem = this.localPlayer.getSelectedItem();
+          const selectedInfo = selectedItem ? ITEM_DB[selectedItem.key] : null;
+          if (selectedItem?.key === 'teleport_coin') {
+            this.localPlayer.teleportCoinCharge = Math.max(0.5, this.localPlayer.teleportCoinCharge || 0);
+          } else if (selectedInfo?.type === 'special') {
+            this.localPlayer.useHotbarItem();
+          } else if (selectedInfo?.type === 'weapon') {
+            this.localPlayer.useHotbarItem();
+          } else {
+            this.localPlayer.placeBlock(buildPointer);
+          }
         }
       }
       // 传送硬币蓄力与释放
@@ -1192,9 +1221,14 @@ class Game {
   performMobileAction() {
     const lp = this.localPlayer;
     if (!lp || lp.isDead) return;
+    if (this.movingBlockKey) {
+      this.placeMovedBlock({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      return;
+    }
     const item = lp.getSelectedItem();
     const info = item ? ITEM_DB[item.key] : null;
     if (!item || !info) {
+      if (this.tryOpenFriendlyBlockPanel()) return;
       lp.attack();
       return;
     }
@@ -1207,6 +1241,91 @@ class Game {
       return;
     }
     lp.useHotbarItem();
+  }
+
+  getLookedBlock(maxDist = 6) {
+    if (!this.localPlayer) return null;
+    return this.engine.raycastBlocks(
+      this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.7, 0)),
+      this.localPlayer.getForwardDir(),
+      maxDist
+    );
+  }
+
+  tryOpenFriendlyBlockPanel() {
+    const lp = this.localPlayer;
+    const rc = this.getLookedBlock(6);
+    if (!lp || !rc.hit || !rc.block || rc.block.type === 'ground') return false;
+    if (rc.block.team !== lp.team) return false;
+    this.selectedBlockKey = rc.key;
+    const panel = document.getElementById('buildPanel');
+    const hp = document.getElementById('buildHpText');
+    const info = ITEM_DB[rc.block.type];
+    if (hp) hp.textContent = `${info?.name || '建筑'} 血量：${Math.ceil(rc.block.hp)}/${rc.block.maxHp}`;
+    if (panel) panel.style.display = 'block';
+    if (document.pointerLockElement) document.exitPointerLock();
+    return true;
+  }
+
+  closeBuildPanel() {
+    const panel = document.getElementById('buildPanel');
+    if (panel) panel.style.display = 'none';
+  }
+
+  nextBlockUpgrade(type) {
+    const order = ['wood_plank','stone_plate','iron_plate','titanium'];
+    const idx = order.indexOf(type);
+    if (idx < 0 || idx >= order.length - 1) return null;
+    return order[idx + 1];
+  }
+
+  upgradeSelectedBlock() {
+    const lp = this.localPlayer;
+    const blk = this.engine.blocks.get(this.selectedBlockKey);
+    if (!lp || !blk || blk.team !== lp.team) return;
+    const next = this.nextBlockUpgrade(blk.type);
+    if (!next) return this.showMessage('该建筑已是最高等级', '#ffdd00');
+    const cost = ITEM_DB[next].cost || {};
+    for (const [k, v] of Object.entries(cost)) {
+      if ((lp.inv[k] || 0) < v) return this.showMessage(`升级需要 ${v}${RES[k.toUpperCase()]?.name || k}`, '#ff5555');
+    }
+    for (const [k, v] of Object.entries(cost)) lp.inv[k] -= v;
+    this.engine.replaceBlockType(this.selectedBlockKey, next, lp.role === 'STEEL_BONE' ? 1.2 + (lp.steelBuildBonus || 0) : 1);
+    this.showMessage(`建筑已升级为${ITEM_DB[next].name}`, '#8be9fd');
+    this.closeBuildPanel();
+  }
+
+  destroySelectedBlock() {
+    const blk = this.engine.blocks.get(this.selectedBlockKey);
+    if (!blk || blk.team !== this.localPlayer?.team) return;
+    if (['iron_plate','titanium','blast_glass'].includes(blk.type) && !confirm('这是高等级建筑，确定要拆毁吗？')) return;
+    const [x, y, z] = this.selectedBlockKey.split(',').map(Number);
+    this.engine.removeBlock(x, y, z);
+    this.showMessage('建筑已拆毁', '#ffdd00');
+    this.closeBuildPanel();
+  }
+
+  prepareMoveSelectedBlock() {
+    const blk = this.engine.blocks.get(this.selectedBlockKey);
+    if (!blk || blk.team !== this.localPlayer?.team) return;
+    this.movingBlockKey = this.selectedBlockKey;
+    this.closeBuildPanel();
+    this.showMessage('请选择新位置，右键/建造键放置，不消耗货币', '#8be9fd');
+  }
+
+  placeMovedBlock(pointer) {
+    const lp = this.localPlayer;
+    const rc = this.engine.raycastPlacement(pointer?.x, pointer?.y, 6);
+    if (!lp || !rc.hit) return;
+    const center = new THREE.Vector3(rc.x + 0.5, rc.y + 0.5, rc.z + 0.5);
+    if (center.distanceTo(lp.pos) > 6.5) return;
+    if (this.engine.moveBlock(this.movingBlockKey, rc.x, rc.y, rc.z)) {
+      this.showMessage('建筑已移动', '#8be9fd');
+      this.movingBlockKey = null;
+      this.selectedBlockKey = null;
+    } else {
+      this.showMessage('目标位置已有建筑，无法移动', '#ff5555');
+    }
   }
 
   toggleBackpack() {
