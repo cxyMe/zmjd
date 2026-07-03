@@ -1622,7 +1622,7 @@ class PlayerEntity {
     const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
     const spd = (sprint ? 1.5 : 1) * this.speed * slowMult;
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
+    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
     moveDir.addScaledVector(forward, -dz);
     moveDir.addScaledVector(right, dx);

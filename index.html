@@ -30,13 +30,57 @@
 <div id="mainMenu" style="display:none;">
   <div class="menu-bg-orb orb-a"></div>
   <div class="menu-bg-orb orb-b"></div>
-  <div class="brand-block">
-    <div class="brand-kicker">多人 3D 竞技 · 团队拆床 · 成长觉醒</div>
-    <h1>筑梦激斗</h1>
-    <div class="subtitle">移动端 / PC 互通联机对战，横屏获得最佳操作体验</div>
-  </div>
-  <div class="menu-panel">
-    <div class="auth-panel">
+  <div class="lobby-shell">
+    <aside class="lobby-left">
+      <div class="brand-block">
+        <div class="brand-kicker">多人 3D 竞技 · 团队拆床 · 成长觉醒</div>
+        <h1>筑梦激斗</h1>
+        <div class="subtitle">移动端 / PC 互通联机对战，横屏获得最佳操作体验</div>
+      </div>
+      <div class="lobby-mode-card">
+        <div class="mode-tag">当前模式</div>
+        <h2>经典拆床战</h2>
+        <p>收集资源、搭路攻防、摧毁敌方床并淘汰所有对手。</p>
+      </div>
+      <div class="lobby-quick-row">
+        <button class="menu-feature-btn" id="menuSeasonBtn">赛季</button>
+        <button class="menu-feature-btn" id="menuTasksBtn">任务</button>
+        <button class="menu-feature-btn secondary" id="menuTalentsBtn">筑梦基石</button>
+      </div>
+    </aside>
+
+    <section class="lobby-center">
+      <div class="lobby-platform"></div>
+      <div class="lobby-character">
+        <div class="hero-glow"></div>
+        <div class="hero-head"></div>
+        <div class="hero-body"></div>
+        <div class="hero-arm left"></div>
+        <div class="hero-arm right"></div>
+        <div class="hero-leg left"></div>
+        <div class="hero-leg right"></div>
+        <div class="hero-weapon"></div>
+      </div>
+      <div class="lobby-status-card">
+        <b>今日推荐</b>
+        <span>冰霜法杖 + 烟雾弹发射器，适合团队控场拆床。</span>
+      </div>
+    </section>
+
+    <aside class="lobby-right">
+      <div class="chat-panel">
+        <div class="chat-head">世界频道</div>
+        <div class="chat-lines">
+          <p><b>系统</b> 欢迎来到筑梦大厅，选择队伍后即可开战。</p>
+          <p><b>星火</b> 有没有人一起守家冲分？</p>
+          <p><b>梦旅人</b> 新武器回旋镖太适合消耗了。</p>
+        </div>
+        <div class="chat-input">输入聊天内容（展示版）</div>
+      </div>
+    </aside>
+
+    <div class="menu-panel lobby-bottom">
+      <div class="auth-panel">
       <h3>易圈账号登录</h3>
       <div id="authGuestBox">
         <div class="form-row">
@@ -57,7 +101,7 @@
       <div class="status-text" id="authStatus">登录后可创建或加入 Supabase 联机房间。</div>
     </div>
 
-    <div class="room-panel">
+      <div class="room-panel">
       <h3>主机房间</h3>
       <div class="form-row">
         <button class="small-btn" id="createRoomBtn">创建房间</button>
@@ -82,12 +126,8 @@
       <h3>角色选择规则</h3>
       <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「战士」。</div>
     </div>
-    <div class="menu-feature-row">
-      <button class="menu-feature-btn" id="menuSeasonBtn">查看赛季</button>
-      <button class="menu-feature-btn" id="menuTasksBtn">查看任务</button>
-      <button class="menu-feature-btn secondary" id="menuTalentsBtn">筑梦基石</button>
-    </div>
     <button class="start-btn" id="startBtn" disabled>开始游戏</button>
+    </div>
   </div>
 </div>
 
@@ -181,8 +221,7 @@
       <div id="joystickKnob"></div>
     </div>
     <div id="jumpBtnMobile">跳跃</div>
-    <div id="attackBtnMobile">攻击</div>
-    <div id="buildBtnMobile">放置</div>
+    <div id="actionBtnMobile">攻击</div>
   </div>
 </div>
 

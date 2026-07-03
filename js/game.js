@@ -7,9 +7,9 @@ class InputManager {
     this.keys = {};
     this.mouse = { dx: 0, dy: 0, locked: false };
     this.buildPointer = null;
-    this.touch = { active: false, x: 0, y: 0, originX: 0, originY: 0 };
+    this.touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
     this.joystick = { active: false, dx: 0, dy: 0 };
-    this.buttons = { jump: false, attack: false, build: false, skill: false };
+    this.buttons = { jump: false, attack: false, build: false, skill: false, action: false };
 
     // Keyboard
     document.addEventListener('keydown', e => {
@@ -56,13 +56,34 @@ class InputManager {
       this.mouse.locked = !!document.pointerLockElement;
     });
 
+    const isGameUiTarget = (target) => target.closest?.('#mobileControls, #shopBtn, #socialBtn, #layoutBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel');
     document.addEventListener('touchstart', e => {
       if (!window.game?.gameActive || !this.isMobile()) return;
-      if (e.target.closest?.('#mobileControls, #shopBtn, #socialBtn, #layoutBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel')) return;
+      if (isGameUiTarget(e.target)) return;
       const t = e.changedTouches[0];
-      this.buttons.build = true;
-      this.buildPointer = { x: t.clientX, y: t.clientY };
+      this.touchLook.active = true;
+      this.touchLook.id = t.identifier;
+      this.touchLook.lastX = t.clientX;
+      this.touchLook.lastY = t.clientY;
     }, { passive: true });
+    document.addEventListener('touchmove', e => {
+      if (!this.touchLook.active || !window.game?.gameActive || !this.isMobile()) return;
+      const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
+      if (!t) return;
+      this.mouse.dx += (t.clientX - this.touchLook.lastX) * 1.35;
+      this.mouse.dy += (t.clientY - this.touchLook.lastY) * 1.2;
+      this.touchLook.lastX = t.clientX;
+      this.touchLook.lastY = t.clientY;
+    }, { passive: true });
+    const endLook = (e) => {
+      if (!this.touchLook.active) return;
+      const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
+      if (!t) return;
+      this.touchLook.active = false;
+      this.touchLook.id = null;
+    };
+    document.addEventListener('touchend', endLook, { passive: true });
+    document.addEventListener('touchcancel', endLook, { passive: true });
 
     // Mobile touch
     this.setupMobile();
@@ -119,8 +140,7 @@ class InputManager {
       btn.addEventListener('touchend', e => { e.preventDefault(); this.buttons[key] = false; });
     };
     bindBtn('jumpBtnMobile', 'jump');
-    bindBtn('attackBtnMobile', 'attack');
-    bindBtn('buildBtnMobile', 'build');
+    bindBtn('actionBtnMobile', 'action');
     bindBtn('skillBtn', 'skill');
   }
 
@@ -146,6 +166,7 @@ class InputManager {
 
   isDown(code) { return !!this.keys[code]; }
   consumeAttack() { const v = this.buttons.attack; this.buttons.attack = false; return v; }
+  consumeAction() { const v = this.buttons.action; this.buttons.action = false; return v; }
   consumeBuild() {
     const v = this.buttons.build;
     this.buttons.build = false;
@@ -445,6 +466,24 @@ class UIManager {
         skillBtn.style.opacity = '1';
       }
     }
+
+    const actionBtn = document.getElementById('actionBtnMobile');
+    if (actionBtn) {
+      const item = lp.getSelectedItem();
+      const info = item ? ITEM_DB[item.key] : null;
+      let label = '攻击';
+      if (info?.type === 'block') label = '建造';
+      else if (info?.type === 'weapon') label = '攻击';
+      else if (item?.key === 'trap_device') label = '装置';
+      else if (item?.key === 'bear_trap') label = '捕兽夹';
+      else if (item?.key === 'sensor_mine') label = '地雷';
+      else if (item?.key === 'tnt') label = '炸药';
+      else if (item?.key === 'portal') label = '传送';
+      else if (item?.key === 'potion') label = '药水';
+      else if (info?.name) label = info.name.slice(0, 3);
+      actionBtn.textContent = label;
+      actionBtn.dataset.mode = info?.type || item?.key || 'attack';
+    }
   }
 
   drawMinimap() {
@@ -743,6 +782,14 @@ class Game {
     document.getElementById('skillBtn').onclick = () => {
       if (this.localPlayer) this.localPlayer.useSkill();
     };
+    document.querySelectorAll('.hotbar-slot').forEach((slot, idx) => {
+      const select = (e) => {
+        e.preventDefault();
+        if (this.gameActive) this.selectHotbar(idx);
+      };
+      slot.addEventListener('click', select);
+      slot.addEventListener('touchstart', select, { passive: false });
+    });
 
     // Hotbar keys & actions
     document.addEventListener('keydown', e => {
@@ -978,10 +1025,6 @@ class Game {
     // Local input
     if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
       const move = this.input.getMovement();
-      // Mobile auto-facing
-      if (this.input.isMobile() && (move.x !== 0 || move.z !== 0)) {
-        this.localPlayer.yaw = Math.atan2(move.x, move.z) + Math.PI;
-      }
       this.localPlayer.moveInput(move.x, move.z, this.input.isDown('ShiftLeft'));
       const look = this.input.getLook();
       this.localPlayer.look(look.dx, look.dy);
@@ -991,6 +1034,7 @@ class Game {
         this.localPlayer.setHotbarIndex((this.localPlayer.hotbarIndex + scroll + 8) % 8);
       }
       if (this.input.consumeJump()) this.localPlayer.jump();
+      if (this.input.consumeAction()) this.performMobileAction();
       if (this.input.consumeAttack()) this.localPlayer.attack();
       const buildPointer = this.input.consumeBuild();
       if (buildPointer) {
@@ -1069,6 +1113,26 @@ class Game {
     if (this.localPlayer) {
       this.localPlayer.setHotbarIndex(idx);
     }
+  }
+
+  performMobileAction() {
+    const lp = this.localPlayer;
+    if (!lp || lp.isDead) return;
+    const item = lp.getSelectedItem();
+    const info = item ? ITEM_DB[item.key] : null;
+    if (!item || !info) {
+      lp.attack();
+      return;
+    }
+    if (info.type === 'block') {
+      lp.placeBlock({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      return;
+    }
+    if (info.type === 'weapon') {
+      lp.attack();
+      return;
+    }
+    lp.useHotbarItem();
   }
 
   toggleBackpack() {
