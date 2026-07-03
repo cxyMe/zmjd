@@ -39,6 +39,12 @@ const ROLES = {
     passive: { name: '建筑加固', desc: '自己放置的建筑血量增加20%' },
     active: { name: '虚空之桥', desc: '向指定方向生成宽2格长15格能量桥，无法被爆炸摧毁，持续15秒', cd: 28 },
     starter: [{ key: 'wood_plank', count: 35 }]
+  },
+  WAIWAI: {
+    name: '歪歪', hp: 1, skinClass: 'role-waiwai',
+    passive: { name: 'miss体质', desc: '复活获得3点miss；每30秒恢复1点；每点miss抵挡一次任意伤害并无敌1.2秒' },
+    active: { name: '骨头阵', desc: '在地上生成2×4骨头阵，敌人每0.1秒损失2点生命', cd: 35 },
+    starter: [{ key: 'bow', count: 1 }, { key: 'arrow', count: 5 }]
   }
 };
 
@@ -56,7 +62,7 @@ const RES = {
 // Item Database
 // ============================================
 const ITEM_DB = {
-  wood_plank:   { name: '木板',  type: 'block',  cost: { copper: 2 },        hp: 20,  desc: '基础建筑材料', stack: 64 },
+  wood_plank:   { name: '木板',  type: 'block',  cost: { copper: 1 },        hp: 20,  desc: '基础建筑材料x2', stack: 64, count: 2 },
   stone_plate:  { name: '石板',  type: 'block',  cost: { silver: 8 },        hp: 60,  desc: '中级建筑材料', stack: 64 },
   iron_plate:   { name: '铁板',  type: 'block',  cost: { gold: 4 },          hp: 120, desc: '高级建筑材料', stack: 64 },
   titanium:     { name: '钛板',  type: 'block',  cost: { jade: 2 },          hp: 300, desc: '顶级建筑材料', stack: 64 },
@@ -107,6 +113,7 @@ class Engine {
     this.trapDevices = [];  // 陷阱装置
     this.groundDevices = []; // 捕兽夹、感应地雷、标枪踏板
     this.smokeZones = [];    // 烟雾区域
+    this.boneZones = [];     // 歪歪骨头阵
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -611,6 +618,45 @@ class Engine {
     }
   }
 
+  createBoneZone(owner) {
+    const dir = owner.getForwardDir();
+    dir.y = 0;
+    if (dir.lengthSq() < 0.0001) dir.set(0, 0, -1);
+    dir.normalize();
+    const right = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
+    const ground = owner.getGroundHeight(owner.pos.x, owner.pos.z);
+    const center = owner.pos.clone().addScaledVector(dir, 2.3);
+    center.y = Math.max(ground + 0.08, owner.pos.y - owner.radius + 0.08);
+
+    const group = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf5f0dc, transparent: true, opacity: 0.62 });
+    for (let i = 0; i < 8; i++) {
+      const row = Math.floor(i / 2);
+      const col = i % 2;
+      const pos = center.clone()
+        .addScaledVector(dir, row - 1.5)
+        .addScaledVector(right, col === 0 ? -0.5 : 0.5);
+      const bone = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), mat);
+      bone.rotation.z = Math.PI / 2;
+      bone.position.copy(pos);
+      bone.position.y += 0.08;
+      bone.userData.baseY = bone.position.y;
+      group.add(bone);
+    }
+    this.scene.add(group);
+    const zone = { owner, team: owner.team, center, dir, right, length: 4, width: 2, life: 6, tick: 0, pulse: 0, group };
+    this.boneZones.push(zone);
+    return zone;
+  }
+
+  removeBoneZone(zone) {
+    const i = this.boneZones.indexOf(zone);
+    if (i >= 0) {
+      this.scene.remove(zone.group);
+      this.boneZones.splice(i, 1);
+    }
+  }
+
   explodeAt(pos, radius, dmg) {
     // 炸毁方块
     const rx = Math.floor(pos.x);
@@ -781,6 +827,32 @@ class Engine {
         }
       }
       if (zone.life <= 0) this.removeSmokeZone(zone);
+    }
+
+    // Bone Zones（歪歪骨头阵）
+    for (let i = this.boneZones.length - 1; i >= 0; i--) {
+      const zone = this.boneZones[i];
+      zone.life -= dt;
+      zone.tick -= dt;
+      zone.pulse += dt * 8;
+      zone.group.children.forEach((bone, idx) => {
+        bone.position.y = bone.userData.baseY + Math.sin(zone.pulse + idx) * 0.05;
+        bone.rotation.y += dt * 1.8;
+        bone.material.opacity = Math.max(0.1, Math.min(0.62, zone.life / 6 * 0.62));
+      });
+      if (zone.tick <= 0) {
+        zone.tick = 0.1;
+        for (const ent of this.entities) {
+          if (ent.isDead || ent.team === zone.team) continue;
+          const rel = ent.pos.clone().sub(zone.center);
+          const f = rel.dot(zone.dir);
+          const r = rel.dot(zone.right);
+          if (Math.abs(f) <= zone.length / 2 && Math.abs(r) <= zone.width / 2 && Math.abs(ent.pos.y - zone.center.y) < 2) {
+            ent.takeDamage(2 + (zone.owner.boneZoneDamageBonus || 0), zone.owner);
+          }
+        }
+      }
+      if (zone.life <= 0) this.removeBoneZone(zone);
     }
 
     // Ground Devices (捕兽夹/感应雷/标枪踏板)
@@ -1274,6 +1346,10 @@ class PlayerEntity {
     this.speedPotionTimer = 0;
     this.burstPotionTimer = 0;
     this.voidBridgeBlocks = [];
+    this.miss = this.role === 'WAIWAI' ? 3 : 0;
+    this.maxMiss = this.role === 'WAIWAI' ? 3 : 0;
+    this.missRegenTimer = 30;
+    this.missInvulnTimer = 0;
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -1335,6 +1411,11 @@ class PlayerEntity {
     }
     if (roleKey === 'DRIFTWOOD') return new THREE.CapsuleGeometry(0.36, 0.92, 4, 8);
     if (roleKey === 'STEEL_BONE') return new THREE.BoxGeometry(0.55, 1.05, 0.55);
+    if (roleKey === 'WAIWAI') {
+      const geo = new THREE.ConeGeometry(0.42, 1.12, 5);
+      geo.scale(0.82, 0.82, 0.82);
+      return geo;
+    }
     return new THREE.CapsuleGeometry(0.35, 0.9, 4, 8);
   }
 
@@ -1343,7 +1424,9 @@ class PlayerEntity {
     const oldRatio = this.maxHp ? this.hp / this.maxHp : 1;
     this.role = roleKey;
     this.roleInfo = ROLES[roleKey];
-    this.maxHp = this.roleInfo.hp + Math.max(0, this.matchLevel - 1) * (window.GROWTH_CONFIG?.hpPerLevel || 2);
+    this.maxHp = this.role === 'WAIWAI'
+      ? 1
+      : this.roleInfo.hp + Math.max(0, this.matchLevel - 1) * (window.GROWTH_CONFIG?.hpPerLevel || 2);
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * oldRatio)));
     this.baseSpeed = 6;
     this.speed = this.baseSpeed;
@@ -1370,6 +1453,10 @@ class PlayerEntity {
     this.burstPotionTimer = 0;
     this.teleportCoinCharge = 0;
     this.hasRevivalToken = false;
+    this.maxMiss = roleKey === 'WAIWAI' ? 3 : 0;
+    this.miss = roleKey === 'WAIWAI' ? 3 : 0;
+    this.missRegenTimer = 30;
+    this.missInvulnTimer = 0;
     this.handBreakTimer = 0;
     this.handBreakKey = null;
     const oldTag = this.nameTag;
@@ -1420,6 +1507,7 @@ class PlayerEntity {
     if (this.role === 'HURRICANE') return 0x33aaff;
     if (this.role === 'DRIFTWOOD') return 0x8b5a2b;
     if (this.role === 'STEEL_BONE') return 0x9ca3af;
+    if (this.role === 'WAIWAI') return 0xf5f0dc;
     return this.teamInfo.color;
   }
 
@@ -1450,7 +1538,7 @@ class PlayerEntity {
 
     // 箭矢特殊处理
     if (key === 'arrow') {
-      this.arrowCount += info.count || 8;
+      this.arrowCount += count || info.count || 8;
       return true;
     }
 
@@ -1695,6 +1783,19 @@ class PlayerEntity {
         this.porkHealTimer = 15;
       }
     }
+    if (this.role === 'WAIWAI') {
+      if (this.missInvulnTimer > 0) this.missInvulnTimer = Math.max(0, this.missInvulnTimer - dt);
+      if (this.miss < this.maxMiss) {
+        this.missRegenTimer -= dt;
+        if (this.missRegenTimer <= 0) {
+          this.miss = Math.min(this.maxMiss, this.miss + 1);
+          this.missRegenTimer = Math.max(5, 30 - (this.missRegenBonus || 0));
+          window.game?.showMessage?.(`${this.name} 回复了1点miss`, '#f5f0dc');
+        }
+      } else {
+        this.missRegenTimer = Math.max(5, 30 - (this.missRegenBonus || 0));
+      }
+    }
 
     // Skill timers
     if (this.attackCd > 0) this.attackCd -= dt;
@@ -1773,17 +1874,39 @@ class PlayerEntity {
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.y = this.yaw;
 
-    // Invisibility visual
+    // 隐身视觉：狐狸伪装只留下非常淡的白色轮廓，武器和名称全部隐藏
     if (this.smokeInvisibleTimer <= 0 && this.camouflageTimer <= 0) this.isInvisible = false;
-    if (this.isInvisible || this.smokeInvisibleTimer > 0) {
+    if (this.camouflageTimer > 0) {
       this.mesh.material.transparent = true;
-      this.mesh.material.opacity = 0.3;
+      this.mesh.material.opacity = 0.12;
+      this.mesh.material.depthWrite = false;
+      this.mesh.material.wireframe = true;
+      this.mesh.material.color.setHex(0xf8fbff);
+      this.mesh.material.emissive?.setHex?.(0xf8fbff);
+      this.mesh.material.emissiveIntensity = 0.05;
+      if (this.weaponMesh) this.weaponMesh.visible = false;
+      if (this.nameTag) this.nameTag.visible = false;
+    } else if (this.isInvisible || this.smokeInvisibleTimer > 0) {
+      this.mesh.material.transparent = true;
+      this.mesh.material.opacity = 0.18;
+      this.mesh.material.depthWrite = false;
+      this.mesh.material.wireframe = false;
+      if (this.weaponMesh) this.weaponMesh.visible = false;
+      if (this.nameTag) this.nameTag.visible = this.revealedTimer > 0;
     } else {
       this.mesh.material.transparent = false;
       this.mesh.material.opacity = 1;
+      this.mesh.material.depthWrite = true;
+      this.mesh.material.wireframe = false;
+      if (this.weaponMesh) this.weaponMesh.visible = true;
+      if (this.nameTag) this.nameTag.visible = true;
     }
-    if (this.frostTimer > 0) this.mesh.material.color.setHex(0x8be9fd);
-    else this.mesh.material.color.setHex(this.skinColor || this.teamInfo.color);
+    if (this.camouflageTimer <= 0) {
+      this.mesh.material.emissive?.setHex?.(this.skinColor !== this.teamInfo.color ? this.skinColor : 0x000000);
+      this.mesh.material.emissiveIntensity = this.skinColor !== this.teamInfo.color ? 0.18 : 0;
+      if (this.frostTimer > 0) this.mesh.material.color.setHex(0x8be9fd);
+      else this.mesh.material.color.setHex(this.skinColor || this.teamInfo.color);
+    }
 
     // Camera follow
     if (this.isLocal && !this.missileControl) {
@@ -2038,7 +2161,8 @@ class PlayerEntity {
       const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
       if (center.distanceTo(this.pos) > 6.5) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
-      if (this.engine.placeBlock(px, py, pz, blockType, this.team, this.role === 'STEEL_BONE' ? 1.2 : 1)) {
+      const steelBonus = this.role === 'STEEL_BONE' ? 1.2 + (this.steelBuildBonus || 0) : 1;
+      if (this.engine.placeBlock(px, py, pz, blockType, this.team, steelBonus)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
         this.matchStats.blocksPlaced++;
@@ -2092,6 +2216,9 @@ class PlayerEntity {
     } else if (this.role === 'STEEL_BONE') {
       this.createVoidBridge();
       window.game?.showMessage(`${this.name} 发动虚空之桥！`, '#8be9fd');
+    } else if (this.role === 'WAIWAI') {
+      this.engine.createBoneZone(this);
+      window.game?.showMessage(`${this.name} 释放骨头阵！`, '#f5f0dc');
     }
   }
 
@@ -2196,6 +2323,17 @@ class PlayerEntity {
 
   takeDamage(amount, attacker) {
     if (this.isDead) return;
+    if (this.role === 'WAIWAI') {
+      if (this.missInvulnTimer > 0) return;
+      if (this.miss > 0) {
+        this.miss--;
+        this.missInvulnTimer = 1.2 + (this.missInvulnBonus || 0);
+        this.missRegenTimer = Math.max(5, 30 - (this.missRegenBonus || 0));
+        this.engine.spawnParticles(this.pos, 0xf5f0dc, 14);
+        window.game?.showMessage?.(`${this.name} miss！抵挡了一次伤害`, '#f5f0dc');
+        return;
+      }
+    }
     if (this.missileControl) {
       this.engine.explodeAt(this.missileControl.mesh.position.clone(), 4.5, 95);
       this.engine.scene.remove(this.missileControl.mesh);
@@ -2315,6 +2453,7 @@ class PlayerEntity {
       }
       if (killer.killHeal) killer.hp = Math.min(killer.maxHp, killer.hp + killer.killHeal);
       if (killer.killResetSkill) killer.skillCd = 0;
+      if (killer.killSkillCdReduce) killer.skillCd = Math.max(0, killer.skillCd - killer.killSkillCdReduce);
       if (killer.killArrowRefund) killer.arrowCount += killer.killArrowRefund;
     }
     window.game?.onPlayerKilled(this, killer);
@@ -2331,6 +2470,12 @@ class PlayerEntity {
     this.isDead = false;
     this.pendingElimination = false;
     this.hp = this.maxHp;
+    if (this.role === 'WAIWAI') {
+      this.maxMiss = 3;
+      this.miss = 3;
+      this.missRegenTimer = Math.max(5, 30 - (this.missRegenBonus || 0));
+      this.missInvulnTimer = 0;
+    }
     this.pos.copy(this.findSafeRespawnPosition());
     this.vel.set(0, 0, 0);
     this.mesh.visible = true;

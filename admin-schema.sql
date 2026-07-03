@@ -176,7 +176,7 @@ CREATE POLICY "admin_all" ON admin_audit_logs FOR ALL USING (true) WITH CHECK (t
 
 -- 默认游戏配置插入
 INSERT INTO game_config (config_key, config_value) VALUES
-  ('shop_prices', '{"wood_plank":{"copper":16},"stone_plate":{"silver":8},"iron_plate":{"gold":4},"titanium":{"jade":2},"wood_sword":{"silver":4},"stone_sword":{"silver":8},"iron_sword":{"gold":4},"diamond_sword":{"jade":2},"bow":{"silver":12},"arrow":{"silver":2},"std_armor":{"gold":8},"fine_armor":{"gold":16},"rd_armor":{"jade":4},"tnt":{"gold":8},"portal":{"jade":2},"potion":{"gold":4}}')
+  ('shop_prices', '{"wood_plank":{"copper":1,"count":2},"stone_plate":{"silver":8},"iron_plate":{"gold":4},"titanium":{"jade":2},"wood_sword":{"silver":4},"stone_sword":{"silver":8},"iron_sword":{"gold":4},"diamond_sword":{"jade":2},"bow":{"silver":12},"arrow":{"silver":2},"std_armor":{"gold":8},"fine_armor":{"gold":16},"rd_armor":{"jade":4},"tnt":{"gold":8},"portal":{"jade":2},"potion":{"gold":4},"revival_gold":{"gold":10},"teleport_coin":{"gold":7},"cd_potion":{"gold":3},"speed_potion":{"gold":3},"burst_potion":{"gold":4}}')
   ON CONFLICT (config_key) DO NOTHING;
 
 INSERT INTO game_config (config_key, config_value) VALUES
@@ -184,7 +184,7 @@ INSERT INTO game_config (config_key, config_value) VALUES
   ON CONFLICT (config_key) DO NOTHING;
 
 INSERT INTO game_config (config_key, config_value) VALUES
-  ('role_skills', '{"FOX":{"enabled":true,"hp":90,"camouflage_cd":16},"PORK_DOCTOR":{"enabled":true,"hp":110,"fat_cd":22},"HURRICANE":{"enabled":true,"hp":95,"dash_cd":16},"DRIFTWOOD":{"enabled":true,"hp":100,"missile_cd":30}}')
+  ('role_skills', '{"FOX":{"enabled":true,"hp":90,"camouflage_cd":16},"PORK_DOCTOR":{"enabled":true,"hp":110,"fat_cd":22},"HURRICANE":{"enabled":true,"hp":95,"dash_cd":16},"DRIFTWOOD":{"enabled":true,"hp":100,"missile_cd":30},"STEEL_BONE":{"enabled":true,"hp":105,"void_bridge_cd":28},"WAIWAI":{"enabled":true,"hp":1,"bone_zone_cd":35,"miss_max":3}}')
   ON CONFLICT (config_key) DO NOTHING;
 
 INSERT INTO game_config (config_key, config_value) VALUES

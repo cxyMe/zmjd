@@ -64,6 +64,26 @@ const AWAKENING_OPTIONS = {
       { id: 'driftwood_damage_reduce', name: '木纹缓冲', desc: '受到伤害降低6%', apply: p => { p.flatDamageReduce = 0.06; } },
       { id: 'driftwood_block_xp', name: '漂流筑桥', desc: '放置方块经验+30%', apply: p => { p.blockXpBoost = 0.3; } }
     ]
+  },
+  STEEL_BONE: {
+    3: [
+      { id: 'steel_bridge_cd', name: '桥芯冷却', desc: '虚空之桥冷却减少4秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 4; } },
+      { id: 'steel_build_more', name: '强固骨架', desc: '建筑加固额外提高10%', apply: p => { p.steelBuildBonus = 0.1; } }
+    ],
+    6: [
+      { id: 'steel_kill_bridge', name: '连桥推进', desc: '击杀后减少6秒主动技能冷却', apply: p => { p.killSkillCdReduce = 6; } },
+      { id: 'steel_tank', name: '钢化外壳', desc: '受到伤害降低6%', apply: p => { p.flatDamageReduce = 0.06; } }
+    ]
+  },
+  WAIWAI: {
+    3: [
+      { id: 'waiwai_bone_cd', name: '骨阵速写', desc: '骨头阵冷却减少5秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 5; } },
+      { id: 'waiwai_miss_regen', name: '错位恢复', desc: 'miss恢复间隔减少5秒', apply: p => { p.missRegenBonus = 5; } }
+    ],
+    6: [
+      { id: 'waiwai_invuln_plus', name: '短暂无相', desc: 'miss触发无敌时间增加0.4秒', apply: p => { p.missInvulnBonus = 0.4; } },
+      { id: 'waiwai_bone_power', name: '白骨锋刃', desc: '骨头阵单次伤害+1', apply: p => { p.boneZoneDamageBonus = 1; } }
+    ]
   }
 };
 
@@ -118,9 +138,15 @@ class GrowthManager {
       const need = GROWTH_CONFIG.levelXp[player.matchLevel] || 999999;
       if (player.matchXp < need) break;
       player.matchLevel++;
-      player.maxHp += GROWTH_CONFIG.hpPerLevel;
-      player.hp = Math.min(player.maxHp, player.hp + GROWTH_CONFIG.hpPerLevel + 4);
-      this.game.showMessage(`${player.name} 升至 ${player.matchLevel} 级：生命上限 +2`, '#8be9fd');
+      if (player.role === 'WAIWAI') {
+        player.maxHp = 1;
+        player.hp = 1;
+        this.game.showMessage(`${player.name} 升至 ${player.matchLevel} 级：歪歪生命上限固定为1`, '#f5f0dc');
+      } else {
+        player.maxHp += GROWTH_CONFIG.hpPerLevel;
+        player.hp = Math.min(player.maxHp, player.hp + GROWTH_CONFIG.hpPerLevel + 4);
+        this.game.showMessage(`${player.name} 升至 ${player.matchLevel} 级：生命上限 +2`, '#8be9fd');
+      }
       if (player.isLocal && (player.matchLevel === 3 || player.matchLevel === 6)) this.showAwakeningChoice(player, player.matchLevel);
       if (!player.isLocal && (player.matchLevel === 3 || player.matchLevel === 6)) this.autoPickAwakening(player, player.matchLevel);
     }

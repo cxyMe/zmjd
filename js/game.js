@@ -504,6 +504,7 @@ class UIManager {
       if (lp.hurricaneDamageTimer > 0) effects.push(`<span class="eff-hurricane">飓风 ${lp.hurricaneDamageTimer.toFixed(1)}s</span>`);
       if (lp.camouflageTimer > 0) effects.push(`<span class="eff-camo">隐身 ${lp.camouflageTimer.toFixed(1)}s</span>`);
       if (lp.fatTimer > 0) effects.push(`<span class="eff-fat">肥肉 ${lp.fatTimer.toFixed(1)}s</span>`);
+      if (lp.role === 'WAIWAI') effects.push(`<span class="eff-miss">miss ${lp.miss}/${lp.maxMiss}${lp.missInvulnTimer > 0 ? ` 无敌 ${lp.missInvulnTimer.toFixed(1)}s` : ''}</span>`);
       statusBar.innerHTML = effects.join(' ');
       statusBar.style.display = effects.length > 0 ? 'flex' : 'none';
     }
@@ -739,7 +740,8 @@ class UIManager {
       if (item.cost.gold) { costStr += `<span class="cost-gold">${item.cost.gold}金</span> `; if ((lp?.inv.gold || 0) < item.cost.gold) canAfford = false; }
       if (item.cost.jade) { costStr += `<span class="cost-jade">${item.cost.jade}玉</span> `; if ((lp?.inv.jade || 0) < item.cost.jade) canAfford = false; }
 
-      div.innerHTML = `<div class="item-name">${item.name}</div><div class="item-desc">${item.desc}</div><div class="item-cost">${costStr}</div>`;
+      const countStr = item.count && item.count > 1 ? `<span class="item-count">获得 x${item.count}</span>` : '';
+      div.innerHTML = `<div class="item-name">${item.name}</div><div class="item-desc">${item.desc}</div><div class="item-cost">${costStr}${countStr}</div>`;
       if (!canAfford) div.classList.add('disabled');
       div.onclick = () => { if (canAfford) this.game.buyItem(key); };
       body.appendChild(div);
@@ -961,13 +963,14 @@ class Game {
     const panel = document.getElementById('startRolePanel');
     const cards = document.getElementById('startRoleCards');
     if (!panel || !cards) return;
-    const shapeClass = { FOX: 'shape-fox', PORK_DOCTOR: 'shape-pork', HURRICANE: 'shape-hurricane', DRIFTWOOD: 'shape-driftwood', STEEL_BONE: 'shape-steel' };
+    const shapeClass = { FOX: 'shape-fox', PORK_DOCTOR: 'shape-pork', HURRICANE: 'shape-hurricane', DRIFTWOOD: 'shape-driftwood', STEEL_BONE: 'shape-steel', WAIWAI: 'shape-waiwai' };
     const subtitles = {
       FOX: '伪装突袭 / 残血反杀',
       PORK_DOCTOR: '高血抗压 / 持续恢复',
       HURRICANE: '位移爆发 / 远程标记',
       DRIFTWOOD: '导弹操控 / 护盾回收',
-      STEEL_BONE: '搭桥 / 建筑加固'
+      STEEL_BONE: '搭桥 / 建筑加固',
+      WAIWAI: '1血极限 / miss免伤'
     };
     const starterText = (role) => (role.starter || []).map(s => s.currency ? `${s.count}${s.currency === 'copper' ? '铜币' : s.currency}` : `${ITEM_DB[s.key]?.name || s.key}x${s.count}`).join('、') || '无';
     cards.innerHTML = Object.entries(ROLES).map(([key, role]) => `
@@ -1262,7 +1265,7 @@ class Game {
       lp.inv[rk] -= rv;
     }
 
-    lp.addToBackpack(key, 1);
+    lp.addToBackpack(key, item.count || 1);
     this.network?.logEconomy?.(lp.playerId, 'buy_item', Object.keys(cost)[0], -Object.values(cost)[0], key, lp.pos, Math.floor(this.gameTime));
     if (item.type === 'weapon' || item.type === 'armor') {
       lp.equip(key);

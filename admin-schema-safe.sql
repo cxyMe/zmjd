@@ -231,7 +231,7 @@ END $$;
 -- ============================================
 INSERT INTO public.game_config (config_key, config_value) VALUES
   ('shop_prices', '{
-    "wood_plank":{"copper":16},
+    "wood_plank":{"copper":1,"count":2},
     "stone_plate":{"silver":8},
     "iron_plate":{"gold":4},
     "titanium":{"jade":2},
@@ -246,7 +246,12 @@ INSERT INTO public.game_config (config_key, config_value) VALUES
     "rd_armor":{"jade":4},
     "tnt":{"gold":8},
     "portal":{"jade":2},
-    "potion":{"gold":4}
+    "potion":{"gold":4},
+    "revival_gold":{"gold":10},
+    "teleport_coin":{"gold":7},
+    "cd_potion":{"gold":3},
+    "speed_potion":{"gold":3},
+    "burst_potion":{"gold":4}
   }'::jsonb)
 ON CONFLICT (config_key) DO UPDATE SET
   config_value = EXCLUDED.config_value,
@@ -265,7 +270,9 @@ INSERT INTO public.game_config (config_key, config_value) VALUES
     "FOX":{"enabled":true,"hp":90,"camouflage_cd":16},
     "PORK_DOCTOR":{"enabled":true,"hp":110,"fat_cd":22},
     "HURRICANE":{"enabled":true,"hp":95,"dash_cd":16},
-    "DRIFTWOOD":{"enabled":true,"hp":100,"missile_cd":30}
+    "DRIFTWOOD":{"enabled":true,"hp":100,"missile_cd":30},
+    "STEEL_BONE":{"enabled":true,"hp":105,"void_bridge_cd":28},
+    "WAIWAI":{"enabled":true,"hp":1,"bone_zone_cd":35,"miss_max":3}
   }'::jsonb)
 ON CONFLICT (config_key) DO UPDATE SET
   config_value = EXCLUDED.config_value,
