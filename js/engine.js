@@ -1838,11 +1838,25 @@ class PlayerEntity {
     const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
     const roleSpeedMult = (this.camouflageTimer > 0 ? 1.5 : 1) * (this.fatTimer > 0 ? 0.75 : 1);
     const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult * (this.speedPotionTimer > 0 ? 1.25 : 1);
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
-    moveDir.addScaledVector(forward, dz);
-    moveDir.addScaledVector(right, dx);
+    if (this.isLocal) {
+      const forward = new THREE.Vector3();
+      this.engine.camera.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() < 0.0001) forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+      forward.normalize();
+      const right = new THREE.Vector3().setFromMatrixColumn(this.engine.camera.matrixWorld, 0);
+      right.y = 0;
+      right.normalize();
+      moveDir.addScaledVector(forward, dz);
+      moveDir.addScaledVector(right, dx);
+    } else {
+      const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+      const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+      moveDir.addScaledVector(forward, -dz);
+      moveDir.addScaledVector(right, dx);
+    }
+    if (moveDir.lengthSq() > 1) moveDir.normalize();
     this.vel.x = moveDir.x * spd;
     this.vel.z = moveDir.z * spd;
   }

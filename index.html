@@ -681,6 +681,14 @@ updateStartBtn();
 
 function openPanel(id) { document.getElementById(id)?.classList.add('open'); }
 function closePanel(id) { document.getElementById(id)?.classList.remove('open'); }
+function closeAllLobbyPanels() {
+  document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
+  ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel'].forEach(id => {
+    const panel = document.getElementById(id);
+    if (panel) panel.style.display = 'none';
+  });
+  if (window.hudLayoutManager?.editing) window.hudLayoutManager.toggleEdit();
+}
 function updateAiButton() {
   const btn = document.getElementById('addAiBtn');
   if (!btn) return;
@@ -817,6 +825,10 @@ const loadInterval = setInterval(() => {
       setTimeout(() => {
         document.getElementById('loadingScreen').style.display = 'none';
         document.getElementById('mainMenu').style.display = 'flex';
+        if (!auth.user) {
+          openPanel('profilePanel');
+          setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
+        }
       }, 500);
     }, 300);
   }
@@ -836,6 +848,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
     openPanel('playOptionsPanel');
     return setRoomStatus('请选择创建房间、加入房间，或本地试玩。', true);
   }
+  closeAllLobbyPanels();
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
   window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
   window.game.init();

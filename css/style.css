@@ -132,7 +132,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .ai-fill-btn { border-color: rgba(179,136,255,.38); color:#d9c2ff; background: rgba(179,136,255,.12); }
 @keyframes startGlow { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 .lobby-float-panel {
-  position: fixed; inset: 0; z-index: 1300; display: none; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 3500; display: none; align-items: center; justify-content: center;
   background: rgba(0,0,0,.68); backdrop-filter: blur(5px); padding: 14px;
 }
 .lobby-float-panel.open { display: flex; }
@@ -362,6 +362,37 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   .brand-kicker { display: none; }
   .team-select { grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .team-btn { padding: 10px 8px; font-size: 13px; }
+}
+@media (orientation: landscape) and (max-height: 520px) and (pointer: coarse) {
+  #mainMenu { padding: 5px; overflow: hidden; }
+  .lobby-shell.redesigned { width: calc(100vw - 10px); height: calc(100vh - 10px); }
+  .lobby-profile-card { width: 205px; min-height: 54px; padding: 7px; border-radius: 16px; }
+  .profile-avatar { width: 38px; height: 38px; border-radius: 12px; font-size: 17px; }
+  .profile-meta b { font-size: 13px; }
+  .profile-meta span { font-size: 10px; }
+  .lobby-top-actions { width: 220px; gap: 5px; }
+  .lobby-icon-btn { min-width: 58px; padding: 7px 10px; font-size: 12px; }
+  .pass-crystal-btn.compact { min-height: 40px; border-radius: 13px; }
+  .pass-crystal-btn span { font-size: 13px; }
+  .pass-crystal-btn small { font-size: 10px; }
+  .lobby-mini-row { grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .lobby-mini-row .menu-feature-btn { padding: 7px 4px; font-size: 11px; border-radius: 10px; }
+  .lobby-title { top: 8px; }
+  .lobby-title h1 { font-size: clamp(28px, 7vw, 44px); }
+  .lobby-character { transform: scale(.66); margin-bottom: 0; }
+  .lobby-platform { width: 250px; bottom: 40px; }
+  .lobby-chat-dock { left: 6px; bottom: 6px; width: 210px; height: 54px; padding: 7px; border-radius: 15px; }
+  .lobby-chat-dock .chat-lines, .lobby-chat-dock .chat-input { display: none; }
+  .lobby-start-dock { right: 6px; bottom: 6px; width: min(300px, 42vw); padding: 8px; gap: 6px; border-radius: 16px; }
+  .hero-start { min-height: 48px; font-size: 18px; }
+  .lobby-start-dock .status-text { font-size: 10px; max-height: 28px; overflow: hidden; }
+  .lobby-start-dock .team-select { gap: 5px; margin-bottom: 0; }
+  .lobby-start-dock .team-btn { padding: 6px 4px; font-size: 11px; border-width: 1px; }
+  .ai-fill-btn, #openPlayOptionsBtn { min-height: 30px; font-size: 11px; padding: 6px; }
+  #skillBtn { top: 8px; right: 128px; bottom: auto; width: 58px; height: 58px; font-size: 11px; }
+  .lobby-float-card, .growth-container, .pass-container, .layout-container {
+    max-height: calc(100vh - 14px);
+  }
 }
 .net-badge {
   position: absolute; top: 202px; right: 16px; min-width: 160px;
@@ -771,7 +802,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 
 /* ========== Growth System ========== */
 #awakeningPanel, #growthPanel, #menuGrowthPanel {
-  position: fixed; inset: 0; z-index: 260; background: rgba(0,0,0,0.82);
+  position: fixed; inset: 0; z-index: 3600; background: rgba(0,0,0,0.82);
   display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
 }
 .growth-container {
@@ -827,7 +858,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 
 /* ========== Season Pass ========== */
 #seasonPassPanel, #passPayPanel {
-  position: fixed; inset: 0; z-index: 290; background: rgba(0,0,0,0.84);
+  position: fixed; inset: 0; z-index: 3700; background: rgba(0,0,0,0.84);
   display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);
 }
 .pass-container {
@@ -962,7 +993,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 
 /* ========== HUD Layout Editor ========== */
 #layoutPanel {
-  position: fixed; inset: 0; z-index: 280; background: rgba(0,0,0,0.78);
+  position: fixed; inset: 0; z-index: 3650; background: rgba(0,0,0,0.78);
   display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
 }
 .layout-container {

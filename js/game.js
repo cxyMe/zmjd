@@ -472,6 +472,7 @@ class UIManager {
     // Skill CD
     const skillBtn = document.getElementById('skillBtn');
     if (skillBtn) {
+      if (!lp.isDead) skillBtn.style.display = 'flex';
       if (lp.skillCd > 0) {
         skillBtn.querySelector('.skill-cd').textContent = Math.ceil(lp.skillCd) + 's';
         skillBtn.style.opacity = '0.5';
@@ -920,6 +921,11 @@ class Game {
     }
 
     // UI
+    document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
+    ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel'].forEach(id => {
+      const panel = document.getElementById(id);
+      if (panel) panel.style.display = 'none';
+    });
     document.getElementById('mainMenu').style.display = 'none';
     document.getElementById('hud').style.display = 'block';
     document.getElementById('gameOverScreen').style.display = 'none';
@@ -931,7 +937,7 @@ class Game {
     // Show skill info
     const skillBtn = document.getElementById('skillBtn');
     if (skillBtn) {
-      skillBtn.childNodes[0].textContent = ROLES[roleKey].active.name;
+      skillBtn.querySelector('span:first-child').textContent = ROLES[roleKey].active.name;
     }
 
     // Lock pointer
@@ -1007,7 +1013,10 @@ class Game {
     const panel = document.getElementById('startRolePanel');
     if (panel) panel.style.display = 'none';
     const skillBtn = document.getElementById('skillBtn');
-    if (skillBtn) skillBtn.childNodes[0].textContent = ROLES[role].active.name;
+    if (skillBtn) {
+      skillBtn.querySelector('span:first-child').textContent = ROLES[role].active.name;
+      skillBtn.style.display = 'flex';
+    }
     this.showMessage(`已选择角色：${ROLES[role].name}｜${ROLES[role].active.name}`, '#ffdd00');
     this.roleSelectionActive = false;
     if (!this.input.isMobile()) this.engine.renderer.domElement.requestPointerLock();
