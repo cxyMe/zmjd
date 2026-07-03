@@ -863,9 +863,11 @@ class Game {
     const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India','Juliet','Kilo','Lima'];
     let nameIdx = 0;
     const roles = Object.keys(ROLES);
+    const desiredAiCount = this.onlineMode ? (window.lobbyAiSlots || 0) : Math.max(4, window.lobbyAiSlots || 0);
     for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-      const count = tkey === teamKey ? 1 : 1; // 每队1个AI，总数不超过4
+      const count = desiredAiCount > 0 ? 1 : 0; // 每队最多1个AI，总数不超过4
       for (let i = 0; i < count; i++) {
+        if (AIManager.getCount() >= desiredAiCount) break;
         if (AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
         const role = roles[Math.floor(Math.random() * roles.length)];
         const name = botNames[nameIdx++] || 'Bot';
@@ -880,6 +882,7 @@ class Game {
           this.players.push(result.entity);
         }
       }
+      if (AIManager.getCount() >= desiredAiCount) break;
       if (AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
     }
 

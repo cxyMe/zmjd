@@ -30,27 +30,28 @@
 <div id="mainMenu" style="display:none;">
   <div class="menu-bg-orb orb-a"></div>
   <div class="menu-bg-orb orb-b"></div>
-  <div class="lobby-shell">
-    <aside class="lobby-left">
-      <div class="brand-block">
-        <div class="brand-kicker">多人 3D 竞技 · 团队拆床 · 成长觉醒</div>
-        <h1>筑梦激斗</h1>
-        <div class="subtitle">移动端 / PC 互通联机对战，横屏获得最佳操作体验</div>
+  <div class="lobby-shell redesigned">
+    <button class="lobby-profile-card" id="profileCardBtn">
+      <div class="profile-avatar">梦</div>
+      <div class="profile-meta">
+        <b id="profileNameText">游客玩家</b>
+        <span id="profileRankText">沉睡梦游者 · Lv.1</span>
       </div>
-      <div class="lobby-mode-card">
-        <div class="mode-tag">当前模式</div>
-        <h2>经典拆床战</h2>
-        <p>收集资源、搭路攻防、摧毁敌方床并淘汰所有对手。</p>
-      </div>
-      <div class="lobby-quick-row">
-        <button class="pass-crystal-btn" id="seasonPassBtn"><span>通行证</span><small id="passCrystalText">Lv.1 · 0%</small></button>
+    </button>
+
+    <div class="lobby-top-actions">
+      <button class="lobby-icon-btn" id="lobbySettingsBtn">设置</button>
+      <button class="pass-crystal-btn compact" id="seasonPassBtn"><span>通行证</span><small id="passCrystalText">Lv.1 · 0%</small></button>
+      <div class="lobby-mini-row">
         <button class="menu-feature-btn" id="menuSeasonBtn">赛季</button>
         <button class="menu-feature-btn" id="menuTasksBtn">任务</button>
-        <button class="menu-feature-btn secondary" id="menuTalentsBtn">筑梦基石</button>
       </div>
-    </aside>
+    </div>
 
     <section class="lobby-center">
+      <div class="brand-block lobby-title">
+        <h1>筑梦激斗</h1>
+      </div>
       <div class="lobby-platform"></div>
       <div class="lobby-character">
         <div class="hero-glow"></div>
@@ -62,14 +63,10 @@
         <div class="hero-leg right"></div>
         <div class="hero-weapon"></div>
       </div>
-      <div class="lobby-status-card">
-        <b>今日推荐</b>
-        <span>冰霜法杖 + 烟雾弹发射器，适合团队控场拆床。</span>
-      </div>
     </section>
 
-    <aside class="lobby-right">
-      <div class="chat-panel">
+    <aside class="lobby-chat-dock">
+      <div class="chat-panel compact" id="worldChatPanel">
         <div class="chat-head">世界频道</div>
         <div class="chat-lines">
           <p><b>系统</b> 欢迎来到筑梦大厅，选择队伍后即可开战。</p>
@@ -80,8 +77,30 @@
       </div>
     </aside>
 
-    <div class="menu-panel lobby-bottom">
-      <div class="auth-panel">
+    <aside class="lobby-start-dock">
+      <button class="start-btn hero-start" id="startBtn" disabled>开始游戏</button>
+      <button class="small-btn secondary wide" id="openPlayOptionsBtn">选择模式 / 房间</button>
+      <div class="status-text" id="roomStatus">未进入房间；点击开始游戏选择创建、加入或本地试玩。</div>
+      <div class="room-members" id="roomMembers"></div>
+      <button class="small-btn ai-fill-btn" id="addAiBtn">添加AI替补（0/4）</button>
+      <div class="team-select">
+        <div class="team-btn red" data-team="RED">红队</div>
+        <div class="team-btn blue" data-team="BLUE">蓝队</div>
+        <div class="team-btn green" data-team="GREEN">绿队</div>
+        <div class="team-btn yellow" data-team="YELLOW">黄队</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div id="profilePanel" class="lobby-float-panel">
+  <div class="lobby-float-card">
+    <button class="float-close" data-close-panel="profilePanel">&times;</button>
+    <h2>玩家资料</h2>
+    <div class="profile-detail-row"><span>昵称</span><b id="profileDetailName">游客玩家</b></div>
+    <div class="profile-detail-row"><span>段位</span><b id="profileDetailRank">沉睡梦游者</b></div>
+    <div class="profile-detail-row"><span>通行证</span><b id="profileDetailPass">Lv.1</b></div>
+    <div class="auth-panel embedded">
       <h3>易圈账号登录</h3>
       <div id="authGuestBox">
         <div class="form-row">
@@ -90,7 +109,6 @@
         </div>
         <div class="form-row">
           <button class="small-btn" id="loginBtn">登录</button>
-          <button class="small-btn secondary" id="localModeBtn">本地试玩</button>
         </div>
       </div>
       <div id="authUserBox" style="display:none;">
@@ -101,33 +119,23 @@
       </div>
       <div class="status-text" id="authStatus">登录后可创建或加入 Supabase 联机房间。</div>
     </div>
+  </div>
+</div>
 
-      <div class="room-panel">
-      <h3>主机房间</h3>
-      <div class="form-row">
-        <button class="small-btn" id="createRoomBtn">创建房间</button>
-        <input id="joinRoomCode" maxlength="6" placeholder="输入房间码">
-        <button class="small-btn secondary" id="joinRoomBtn">加入</button>
-      </div>
-      <div class="form-row">
-        <button class="small-btn secondary" id="reconnectBtn">断线重连</button>
-      </div>
-      <div class="status-text" id="roomStatus">未进入房间；也可以选择“本地试玩”。</div>
-      <div class="room-members" id="roomMembers"></div>
+<div id="playOptionsPanel" class="lobby-float-panel">
+  <div class="lobby-float-card play-card">
+    <button class="float-close" data-close-panel="playOptionsPanel">&times;</button>
+    <h2>选择开战方式</h2>
+    <button class="play-option primary" id="createRoomBtn">创建房间</button>
+    <div class="join-row">
+      <input id="joinRoomCode" maxlength="6" placeholder="输入房间码">
+      <button class="play-option" id="joinRoomBtn">加入房间</button>
     </div>
-
-    <h2>选择你的队伍</h2>
-    <div class="team-select">
-      <div class="team-btn red" data-team="RED">红队</div>
-      <div class="team-btn blue" data-team="BLUE">蓝队</div>
-      <div class="team-btn green" data-team="GREEN">绿队</div>
-      <div class="team-btn yellow" data-team="YELLOW">黄队</div>
-    </div>
+    <button class="play-option" id="localModeBtn">本地试玩（与AI对战）</button>
+    <button class="play-option secondary" id="reconnectBtn">断线重连</button>
     <div class="role-select menu-role-hint">
       <h3>角色选择规则</h3>
       <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「战士」。</div>
-    </div>
-    <button class="start-btn" id="startBtn" disabled>开始游戏</button>
     </div>
   </div>
 </div>
@@ -462,11 +470,12 @@
 // ============================================
 // Menu Logic
 // ============================================
-let selectedTeam = null;
+let selectedTeam = 'RED';
 const config = window.BEDWARS_CONFIG;
 const auth = new AuthManager(config);
 let netMgr = null;
 let localOnly = false;
+window.lobbyAiSlots = 0;
 
 const roleDescriptions = {
   WARRIOR:  '战士 - 坚韧：每秒恢复1点生命 | 狂暴：5秒内攻击力翻倍',
@@ -496,7 +505,9 @@ document.querySelectorAll('.team-btn').forEach(btn => {
 function updateStartBtn() {
   const btn = document.getElementById('startBtn');
   const hasRoom = localOnly || !!netMgr?.inRoom;
-  btn.disabled = !(selectedTeam && hasRoom);
+  btn.disabled = false;
+  btn.textContent = hasRoom ? '开始游戏' : '开始游戏';
+  btn.classList.toggle('ready', !!selectedTeam && hasRoom);
 }
 
 function setAuthStatus(text, isError = false) {
@@ -516,6 +527,19 @@ function renderAuth() {
   document.getElementById('authGuestBox').style.display = loggedIn ? 'none' : 'block';
   document.getElementById('authUserBox').style.display = loggedIn ? 'block' : 'none';
   document.getElementById('authUserName').textContent = auth.user?.nickname || auth.user?.phone || '--';
+  const name = auth.user?.nickname || auth.user?.phone || '游客玩家';
+  document.getElementById('profileNameText').textContent = name;
+  document.getElementById('profileDetailName').textContent = name;
+  const profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"rankScore":0,"seasonXp":0}');
+  let rankName = '沉睡梦游者';
+  if (typeof GROWTH_CONFIG !== 'undefined') {
+    for (const r of GROWTH_CONFIG.ranks) if ((profile.rankScore || 0) >= r.min) rankName = r.name;
+  }
+  const passState = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{"xp":0}');
+  const passLv = Math.min(100, Math.floor((passState.xp || 0) / 1000) + 1);
+  document.getElementById('profileRankText').textContent = `${rankName} · 通行证Lv.${passLv}`;
+  document.getElementById('profileDetailRank').textContent = rankName;
+  document.getElementById('profileDetailPass').textContent = `Lv.${passLv}`;
   if (loggedIn) setAuthStatus('登录成功，可创建或加入房间。');
 }
 
@@ -590,6 +614,7 @@ function renderRoom() {
     });
   });
   updateStartBtn();
+  updateAiButton();
 }
 
 async function handleRoomKick(reason = '你已离开房间') {
@@ -627,6 +652,35 @@ function bindNetEvents() {
 }
 
 renderAuth();
+document.querySelector('.team-btn.red')?.classList.add('selected');
+updateStartBtn();
+
+function openPanel(id) { document.getElementById(id)?.classList.add('open'); }
+function closePanel(id) { document.getElementById(id)?.classList.remove('open'); }
+function updateAiButton() {
+  const btn = document.getElementById('addAiBtn');
+  if (!btn) return;
+  btn.textContent = `添加AI替补（${window.lobbyAiSlots}/4）`;
+  btn.disabled = window.lobbyAiSlots >= 4;
+}
+
+document.getElementById('profileCardBtn').addEventListener('click', () => openPanel('profilePanel'));
+document.getElementById('openPlayOptionsBtn').addEventListener('click', () => openPanel('playOptionsPanel'));
+document.getElementById('lobbySettingsBtn').addEventListener('click', () => window.hudLayoutManager?.open?.());
+document.getElementById('worldChatPanel').addEventListener('click', () => {
+  document.querySelector('.lobby-chat-dock')?.classList.toggle('expanded');
+});
+document.querySelectorAll('[data-close-panel]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePanel(btn.dataset.closePanel);
+  });
+});
+document.getElementById('addAiBtn').addEventListener('click', () => {
+  window.lobbyAiSlots = Math.min(4, (window.lobbyAiSlots || 0) + 1);
+  setRoomStatus(`已添加 ${window.lobbyAiSlots} 个 AI 替补，开始游戏后生效。`);
+  updateAiButton();
+});
 
 document.getElementById('loginBtn').addEventListener('click', async () => {
   const phone = document.getElementById('loginPhone').value.trim();
@@ -654,8 +708,11 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 
 document.getElementById('localModeBtn').addEventListener('click', () => {
   localOnly = true;
+  window.lobbyAiSlots = Math.max(window.lobbyAiSlots || 0, 4);
   setAuthStatus('已进入本地试玩模式，不连接 Supabase。');
-  setRoomStatus('本地试玩模式：无需登录，直接点开始游戏。');
+  setRoomStatus('本地试玩模式：将与 AI 对战，直接点右下角开始游戏。');
+  closePanel('playOptionsPanel');
+  updateAiButton();
   updateStartBtn();
 });
 
@@ -667,6 +724,7 @@ document.getElementById('createRoomBtn').addEventListener('click', async () => {
     setRoomStatus('正在创建房间...');
     const room = await netMgr.createRoom();
     renderRoom();
+    closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '创建房间失败', true);
   }
@@ -681,6 +739,7 @@ document.getElementById('joinRoomBtn').addEventListener('click', async () => {
     setRoomStatus('正在加入房间...');
     await netMgr.joinRoom(code);
     renderRoom();
+    closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '加入房间失败', true);
   }
@@ -694,6 +753,7 @@ document.getElementById('reconnectBtn').addEventListener('click', async () => {
     setRoomStatus('正在重连上次房间...');
     await netMgr.reconnect();
     renderRoom();
+    closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '断线重连失败', true);
   }
@@ -720,8 +780,14 @@ const loadInterval = setInterval(() => {
 
 // Start game
 document.getElementById('startBtn').addEventListener('click', () => {
-  if (!selectedTeam) return;
-  if (!localOnly && !netMgr?.inRoom) return setRoomStatus('请先创建或加入房间。', true);
+  if (!selectedTeam) {
+    selectedTeam = 'RED';
+    document.querySelectorAll('.team-btn').forEach(b => b.classList.toggle('selected', b.dataset.team === selectedTeam));
+  }
+  if (!localOnly && !netMgr?.inRoom) {
+    openPanel('playOptionsPanel');
+    return setRoomStatus('请选择创建房间、加入房间，或本地试玩。', true);
+  }
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
   window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
   window.game.init();
