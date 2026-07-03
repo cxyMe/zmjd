@@ -135,7 +135,7 @@
     <button class="play-option secondary" id="reconnectBtn">断线重连</button>
     <div class="role-select menu-role-hint">
       <h3>角色选择规则</h3>
-      <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「战士」。</div>
+      <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「狐狸」。</div>
     </div>
   </div>
 </div>
@@ -214,6 +214,12 @@
 
   <!-- Skill Button -->
   <div id="skillBtn" style="display:none;"><span>技能</span><span class="skill-cd">就绪</span></div>
+
+  <!-- Teleport Charge Indicator -->
+  <div id="teleportCharge" style="display:none;"></div>
+
+  <!-- Status Effects Bar -->
+  <div id="statusEffects" style="display:none;"></div>
 
   <!-- Crosshair -->
   <div id="crosshair" style="display:none;"></div>
@@ -489,7 +495,8 @@ const roleDescriptions = {
   FOX: '狐狸 - 伪装隐身8秒 | 残血增伤',
   PORK_DOCTOR: '猪排博士 - 额外生命膨胀 | 周期回血',
   HURRICANE: '飓风 - 位移6格 | 远程透视标记',
-  DRIFTWOOD: '浮木 - 操控导弹 | 命中回收护盾'
+  DRIFTWOOD: '浮木 - 操控导弹 | 命中回收护盾',
+  STEEL_BONE: '钢骨 - 虚空之桥 | 建筑加固'
 };
 
 // Team selection

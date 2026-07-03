@@ -33,6 +33,12 @@ const ROLES = {
     passive: { name: '动能回收', desc: '每次攻击命中目标获得3点护盾' },
     active: { name: '天罚', desc: '操控一枚高速导弹，8秒内自动爆炸或碰撞爆炸，可被远程武器摧毁', cd: 30 },
     starter: [{ key: 'wood_sword', count: 1 }]
+  },
+  STEEL_BONE: {
+    name: '钢骨', hp: 105, skinClass: 'role-steel',
+    passive: { name: '建筑加固', desc: '自己放置的建筑血量增加20%' },
+    active: { name: '虚空之桥', desc: '向指定方向生成宽2格长15格能量桥，无法被爆炸摧毁，持续15秒', cd: 28 },
+    starter: [{ key: 'wood_plank', count: 35 }]
   }
 };
 
@@ -74,7 +80,12 @@ const ITEM_DB = {
   bear_trap:    { name: '捕兽夹',type:'special',cost: { silver: 20 },        desc: '隐形地面陷阱，定身敌人3秒并预警', stack: 4 },
   sensor_mine:  { name: '感应地雷',type:'special',cost:{ gold: 30 },         desc: '隐形感应雷，敌人靠近后1秒延迟爆炸', stack: 3 },
   portal:       { name: '传送门',type: 'special',cost: { jade: 2 },          desc: '瞬移至基地', stack: 2 },
-  potion:       { name: '生命药水',type:'special',cost: { gold: 4 },          desc: '恢复全部生命', stack: 8 }
+  potion:       { name: '生命药水',type:'special',cost: { gold: 4 },          desc: '恢复全部生命', stack: 8 },
+  revival_gold: { name: '复活金牌',type:'special',cost: { gold: 10 },        desc: '抵挡一次致命伤害，抵挡后自动销毁', stack: 1 },
+  teleport_coin:{ name: '传送硬币',type:'special',cost: { gold: 7 },        desc: '投掷后按住越久传送越远，最大20格，命中虚空不传送', stack: 4 },
+  cd_potion:    { name: '冷却药水',type:'special',cost: { copper: 3 },       desc: '立即减少5秒主动技能冷却', stack: 8 },
+  speed_potion: { name: '极速药水',type:'special',cost: { copper: 3 },       desc: '移动速度增加25%，持续3秒', stack: 8 },
+  burst_potion: { name: '爆发药水',type:'special',cost: { copper: 4 },       desc: '造成伤害增加45%，持续3秒', stack: 8 }
 };
 
 // ============================================
@@ -154,7 +165,7 @@ class Engine {
 
   getBlockKey(x, y, z) { return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; }
 
-  placeBlock(x, y, z, typeKey, team) {
+  placeBlock(x, y, z, typeKey, team, hpMult = 1) {
     const key = this.getBlockKey(x, y, z);
     if (this.blocks.has(key)) return false;
     const info = ITEM_DB[typeKey];
@@ -174,7 +185,9 @@ class Engine {
     mesh.castShadow = true; mesh.receiveShadow = true;
     this.scene.add(mesh);
 
-    this.blocks.set(key, { mesh, type: typeKey, hp: info.hp || 20, maxHp: info.hp || 20, team });
+    const baseHp = info.hp || 20;
+    const hp = Math.round(baseHp * hpMult);
+    this.blocks.set(key, { mesh, type: typeKey, hp, maxHp: hp, team });
     return true;
   }
 
@@ -1256,6 +1269,11 @@ class PlayerEntity {
     this.hurricaneDamageTimer = 0;
     this.camouflageTimer = 0;
     this.missileControl = null;
+    this.hasRevivalToken = false;
+    this.teleportCoinCharge = 0;
+    this.speedPotionTimer = 0;
+    this.burstPotionTimer = 0;
+    this.voidBridgeBlocks = [];
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -1316,6 +1334,7 @@ class PlayerEntity {
       return geo;
     }
     if (roleKey === 'DRIFTWOOD') return new THREE.CapsuleGeometry(0.36, 0.92, 4, 8);
+    if (roleKey === 'STEEL_BONE') return new THREE.BoxGeometry(0.55, 1.05, 0.55);
     return new THREE.CapsuleGeometry(0.35, 0.9, 4, 8);
   }
 
@@ -1336,6 +1355,23 @@ class PlayerEntity {
     this.hurricaneDamageTimer = 0;
     this.camouflageTimer = 0;
     this.mesh.scale.set(1, 1, 1);
+    this.missileControl = null;
+    this.porkHealTimer = 15;
+    this.voidBridgeBlocks = [];
+    this.attackCd = 0;
+    this.rootTimer = 0;
+    this.slowTimer = 0;
+    this.frostTimer = 0;
+    this.silencedTimer = 0;
+    this.smokeBlindTimer = 0;
+    this.smokeInvisibleTimer = 0;
+    this.socialShield = 0;
+    this.speedPotionTimer = 0;
+    this.burstPotionTimer = 0;
+    this.teleportCoinCharge = 0;
+    this.hasRevivalToken = false;
+    this.handBreakTimer = 0;
+    this.handBreakKey = null;
     const oldTag = this.nameTag;
     const oldWeapon = this.weaponMesh;
     if (oldTag) this.mesh.remove(oldTag);
@@ -1383,6 +1419,7 @@ class PlayerEntity {
     if (this.role === 'PORK_DOCTOR') return 0xff6f91;
     if (this.role === 'HURRICANE') return 0x33aaff;
     if (this.role === 'DRIFTWOOD') return 0x8b5a2b;
+    if (this.role === 'STEEL_BONE') return 0x9ca3af;
     return this.teamInfo.color;
   }
 
@@ -1425,6 +1462,26 @@ class PlayerEntity {
     if (key === 'portal') {
       this.pos.copy(this.teamInfo.spawn);
       this.vel.set(0, 0, 0);
+      return true;
+    }
+    if (key === 'revival_gold') {
+      this.hasRevivalToken = true;
+      window.game?.showMessage?.('复活金牌已激活，下次致命伤害将自动抵挡！', '#ffd700');
+      return true;
+    }
+    if (key === 'cd_potion') {
+      this.skillCd = Math.max(0, this.skillCd - 5);
+      window.game?.showMessage?.('技能冷却减少5秒！', '#8be9fd');
+      return true;
+    }
+    if (key === 'speed_potion') {
+      this.speedPotionTimer = 3;
+      window.game?.showMessage?.('移动速度+25%，持续3秒！', '#50fa7b');
+      return true;
+    }
+    if (key === 'burst_potion') {
+      this.burstPotionTimer = 3;
+      window.game?.showMessage?.('伤害增加45%，持续3秒！', '#ff5555');
       return true;
     }
     if (key === 'tnt') {
@@ -1529,6 +1586,29 @@ class PlayerEntity {
       this.hp = this.maxHp;
       item.count--;
       if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+    } else if (item.key === 'revival_gold') {
+      this.hasRevivalToken = true;
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage?.('复活金牌已激活，下次致命伤害将自动抵挡！', '#ffd700');
+    } else if (item.key === 'cd_potion') {
+      this.skillCd = Math.max(0, this.skillCd - 5);
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage?.('技能冷却减少5秒！', '#8be9fd');
+    } else if (item.key === 'speed_potion') {
+      this.speedPotionTimer = 3;
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage?.('移动速度+25%，持续3秒！', '#50fa7b');
+    } else if (item.key === 'burst_potion') {
+      this.burstPotionTimer = 3;
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage?.('伤害增加45%，持续3秒！', '#ff5555');
+    } else if (item.key === 'teleport_coin') {
+      // 传送硬币由游戏循环蓄力处理，此处不执行
+      return;
     } else if (item.key === 'portal') {
       this.pos.copy(this.teamInfo.spawn);
       this.vel.set(0, 0, 0);
@@ -1624,6 +1704,8 @@ class PlayerEntity {
       if (this.skillActive <= 0) this.deactivateSkill();
     }
     if (this.fatTimer > 0) this.fatTimer -= dt;
+    if (this.speedPotionTimer > 0) this.speedPotionTimer = Math.max(0, this.speedPotionTimer - dt);
+    if (this.burstPotionTimer > 0) this.burstPotionTimer = Math.max(0, this.burstPotionTimer - dt);
     if (this.hurricaneDamageTimer > 0) this.hurricaneDamageTimer -= dt;
     if (this.camouflageTimer > 0) {
       this.camouflageTimer -= dt;
@@ -1755,7 +1837,7 @@ class PlayerEntity {
     if (this.isDead || this.isFrozen || this.rootTimer > 0) return;
     const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
     const roleSpeedMult = (this.camouflageTimer > 0 ? 1.5 : 1) * (this.fatTimer > 0 ? 0.75 : 1);
-    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult;
+    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult * (this.speedPotionTimer > 0 ? 1.25 : 1);
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
@@ -1808,6 +1890,7 @@ class PlayerEntity {
 
     if (this.role === 'FOX' && this.hp / this.maxHp < 0.2) dmg *= 1.2;
     if (this.hurricaneDamageTimer > 0) dmg += 12;
+    if (this.burstPotionTimer > 0) dmg *= 1.45;
     if (this.lowHpDamageBoost && this.hp / this.maxHp < 0.3) dmg *= (1 + this.lowHpDamageBoost);
 
     const weaponInfo = this.equipped.weapon ? ITEM_DB[this.equipped.weapon] : null;
@@ -1941,7 +2024,7 @@ class PlayerEntity {
       const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
       if (center.distanceTo(this.pos) > 6.5) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
-      if (this.engine.placeBlock(px, py, pz, blockType, this.team)) {
+      if (this.engine.placeBlock(px, py, pz, blockType, this.team, this.role === 'STEEL_BONE' ? 1.2 : 1)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
         this.matchStats.blocksPlaced++;
@@ -1992,6 +2075,9 @@ class PlayerEntity {
     } else if (this.role === 'DRIFTWOOD') {
       this.launchMissile();
       window.game?.showMessage(`${this.name} 发动天罚！`, '#ffdd00');
+    } else if (this.role === 'STEEL_BONE') {
+      this.createVoidBridge();
+      window.game?.showMessage(`${this.name} 发动虚空之桥！`, '#8be9fd');
     }
   }
 
@@ -2037,6 +2123,63 @@ class PlayerEntity {
     this.engine.projectiles.push(missile);
   }
 
+  createVoidBridge() {
+    const dir = this.getForwardDir();
+    dir.y = 0;
+    dir.normalize();
+    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    this.voidBridgeBlocks = [];
+    for (let i = 1; i <= 15; i++) {
+      const center = this.pos.clone().addScaledVector(dir, i);
+      const positions = [
+        { x: Math.floor(center.x), y: Math.floor(center.y), z: Math.floor(center.z) },
+        { x: Math.floor(center.x + right.x), y: Math.floor(center.y + right.y), z: Math.floor(center.z + right.z) }
+      ];
+      for (const p of positions) {
+        const key = this.engine.getBlockKey(p.x, p.y, p.z);
+        if (!this.engine.blocks.has(key)) {
+          this.engine.placeBlock(p.x, p.y, p.z, 'blast_glass', this.team);
+          this.voidBridgeBlocks.push(p);
+        }
+      }
+    }
+    setTimeout(() => {
+      for (const block of this.voidBridgeBlocks) {
+        this.engine.removeBlock(block.x, block.y, block.z);
+      }
+      this.voidBridgeBlocks = [];
+    }, 15000);
+  }
+
+  throwTeleportCoin() {
+    const charge = this.teleportCoinCharge || 0;
+    const dist = Math.min(20, charge * 0.5);
+    if (dist <= 0.5) return;
+    const dir = this.getForwardDir();
+    const target = this.pos.clone().addScaledVector(dir, dist);
+    target.y = this.getGroundHeight(target.x, target.z);
+    // 如果目标在虚空（y < -10），不传送，硬币消失
+    if (target.y < -10) {
+      window.game?.showMessage?.('传送硬币落入虚空，传送失败！', '#ff4444');
+      const item = this.getSelectedItem();
+      if (item && item.key === 'teleport_coin') {
+        item.count--;
+        if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      }
+      return;
+    }
+    this.engine.spawnParticles(target, 0xffdd00, 12);
+    this.pos.copy(target);
+    this.pos.y = target.y + 0.5;
+    this.vel.set(0, 0, 0);
+    const item = this.getSelectedItem();
+    if (item && item.key === 'teleport_coin') {
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+    }
+    window.game?.showMessage?.(`传送成功！距离 ${Math.round(dist)} 格`, '#ffdd00');
+  }
+
   takeDamage(amount, attacker) {
     if (this.isDead) return;
     if (this.missileControl) {
@@ -2066,6 +2209,13 @@ class PlayerEntity {
       this.vel.add(kb);
     }
     if (this.hp <= 0) {
+      if (this.hasRevivalToken) {
+        this.hasRevivalToken = false;
+        this.hp = Math.max(1, Math.floor(this.maxHp * 0.5));
+        this.engine.spawnParticles(this.pos, 0xffd700, 20);
+        window.game?.showMessage?.(`${this.name} 的复活金牌抵挡了致命伤害！`, '#ffd700');
+        return;
+      }
       this.die(attacker);
     }
   }

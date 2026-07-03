@@ -170,6 +170,7 @@ class InputManager {
   consumeAction() { const v = this.buttons.action; this.buttons.action = false; return v; }
   isAttackHeld() { return !!this.buttons.attackHeld; }
   isActionHeld() { return !!this.buttons.actionHeld; }
+  isBuildHeld() { return !!this.buttons.build; }
   consumeBuild() {
     const v = this.buttons.build;
     this.buttons.build = false;
@@ -480,6 +481,32 @@ class UIManager {
       }
     }
 
+    // 传送硬币蓄力显示
+    const teleportIndicator = document.getElementById('teleportCharge');
+    if (teleportIndicator) {
+      if (lp.teleportCoinCharge > 0) {
+        const dist = Math.min(20, Math.round(lp.teleportCoinCharge * 0.5));
+        teleportIndicator.textContent = `传送硬币: ${dist}格`;
+        teleportIndicator.style.display = 'block';
+      } else {
+        teleportIndicator.style.display = 'none';
+      }
+    }
+
+    // 状态药水计时器显示
+    const statusBar = document.getElementById('statusEffects');
+    if (statusBar) {
+      const effects = [];
+      if (lp.hasRevivalToken) effects.push('<span class="eff-revival">复活金牌</span>');
+      if (lp.speedPotionTimer > 0) effects.push(`<span class="eff-speed">极速 ${lp.speedPotionTimer.toFixed(1)}s</span>`);
+      if (lp.burstPotionTimer > 0) effects.push(`<span class="eff-burst">爆发 ${lp.burstPotionTimer.toFixed(1)}s</span>`);
+      if (lp.hurricaneDamageTimer > 0) effects.push(`<span class="eff-hurricane">飓风 ${lp.hurricaneDamageTimer.toFixed(1)}s</span>`);
+      if (lp.camouflageTimer > 0) effects.push(`<span class="eff-camo">隐身 ${lp.camouflageTimer.toFixed(1)}s</span>`);
+      if (lp.fatTimer > 0) effects.push(`<span class="eff-fat">肥肉 ${lp.fatTimer.toFixed(1)}s</span>`);
+      statusBar.innerHTML = effects.join(' ');
+      statusBar.style.display = effects.length > 0 ? 'flex' : 'none';
+    }
+
     const actionBtn = document.getElementById('actionBtnMobile');
     if (actionBtn) {
       const item = lp.getSelectedItem();
@@ -692,7 +719,7 @@ class UIManager {
       blocks: ['wood_plank','stone_plate','iron_plate','titanium','blast_glass'],
       weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow','armor_hammer','boomerang','frost_staff','javelin','smoke_launcher'],
       armor: ['std_armor','fine_armor','rd_armor'],
-      specials: ['tnt','trap_device','bear_trap','sensor_mine','portal','potion']
+      specials: ['tnt','trap_device','bear_trap','sensor_mine','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion']
     };
     const items = tabs[this.shopTab] || [];
 
@@ -928,12 +955,13 @@ class Game {
     const panel = document.getElementById('startRolePanel');
     const cards = document.getElementById('startRoleCards');
     if (!panel || !cards) return;
-    const shapeClass = { FOX: 'shape-fox', PORK_DOCTOR: 'shape-pork', HURRICANE: 'shape-hurricane', DRIFTWOOD: 'shape-driftwood' };
+    const shapeClass = { FOX: 'shape-fox', PORK_DOCTOR: 'shape-pork', HURRICANE: 'shape-hurricane', DRIFTWOOD: 'shape-driftwood', STEEL_BONE: 'shape-steel' };
     const subtitles = {
       FOX: '伪装突袭 / 残血反杀',
       PORK_DOCTOR: '高血抗压 / 持续恢复',
       HURRICANE: '位移爆发 / 远程标记',
-      DRIFTWOOD: '导弹操控 / 护盾回收'
+      DRIFTWOOD: '导弹操控 / 护盾回收',
+      STEEL_BONE: '搭桥 / 建筑加固'
     };
     const starterText = (role) => (role.starter || []).map(s => s.currency ? `${s.count}${s.currency === 'copper' ? '铜币' : s.currency}` : `${ITEM_DB[s.key]?.name || s.key}x${s.count}`).join('、') || '无';
     cards.innerHTML = Object.entries(ROLES).map(([key, role]) => `
@@ -1056,7 +1084,7 @@ class Game {
       if (this.input.consumeAttack()) this.localPlayer.attack();
       const heldItem = this.localPlayer.getSelectedItem();
       const heldInfo = heldItem ? ITEM_DB[heldItem.key] : null;
-      const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && !['trap_device','bear_trap','sensor_mine','tnt','portal','potion'].includes(heldItem?.key);
+      const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && !['trap_device','bear_trap','sensor_mine','tnt','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion'].includes(heldItem?.key);
       if (this.input.isAttackHeld() || canHandBreakByMobile) {
         this.localPlayer.updateHandBreak(dt, { x: window.innerWidth / 2, y: window.innerHeight / 2 });
       }
@@ -1064,12 +1092,24 @@ class Game {
       if (buildPointer) {
         const selectedItem = this.localPlayer.getSelectedItem();
         const selectedInfo = selectedItem ? ITEM_DB[selectedItem.key] : null;
-        if (selectedItem && ['trap_device','bear_trap','sensor_mine'].includes(selectedItem.key)) {
+        if (selectedItem?.key === 'teleport_coin') {
+          this.localPlayer.teleportCoinCharge = Math.max(0.5, this.localPlayer.teleportCoinCharge || 0);
+        } else if (selectedItem && ['trap_device','bear_trap','sensor_mine'].includes(selectedItem.key)) {
           this.localPlayer.useHotbarItem();
         } else if (selectedInfo?.type === 'weapon') {
           this.localPlayer.useHotbarItem();
         } else {
           this.localPlayer.placeBlock(buildPointer);
+        }
+      }
+      // 传送硬币蓄力与释放
+      if (this.localPlayer.teleportCoinCharge > 0) {
+        if (this.input.isBuildHeld()) {
+          this.localPlayer.teleportCoinCharge = Math.min(40, this.localPlayer.teleportCoinCharge + dt * 8);
+        } else {
+          // 释放硬币
+          this.localPlayer.throwTeleportCoin();
+          this.localPlayer.teleportCoinCharge = 0;
         }
       }
       if (this.input.consumeSkill()) this.localPlayer.useSkill();
