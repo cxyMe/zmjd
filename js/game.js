@@ -638,9 +638,9 @@ class UIManager {
     body.innerHTML = '';
     const tabs = {
       blocks: ['wood_plank','stone_plate','iron_plate','titanium'],
-      weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow'],
+      weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow','armor_hammer','boomerang','frost_staff','javelin','smoke_launcher'],
       armor: ['std_armor','fine_armor','rd_armor'],
-      specials: ['tnt','trap_device','portal','potion']
+      specials: ['tnt','trap_device','bear_trap','sensor_mine','portal','potion']
     };
     const items = tabs[this.shopTab] || [];
 
@@ -995,7 +995,10 @@ class Game {
       const buildPointer = this.input.consumeBuild();
       if (buildPointer) {
         const selectedItem = this.localPlayer.getSelectedItem();
-        if (selectedItem && selectedItem.key === 'trap_device') {
+        const selectedInfo = selectedItem ? ITEM_DB[selectedItem.key] : null;
+        if (selectedItem && ['trap_device','bear_trap','sensor_mine'].includes(selectedItem.key)) {
+          this.localPlayer.useHotbarItem();
+        } else if (selectedInfo?.type === 'weapon') {
           this.localPlayer.useHotbarItem();
         } else {
           this.localPlayer.placeBlock(buildPointer);

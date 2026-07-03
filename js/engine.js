@@ -55,12 +55,19 @@ const ITEM_DB = {
   iron_sword:   { name: '铁剑',  type: 'weapon', cost: { gold: 4 },          dmg: 12, desc: '高级近战武器', stack: 1 },
   diamond_sword:{ name: '钻石剑',type: 'weapon', cost: { jade: 2 },          dmg: 20, desc: '顶级近战武器', stack: 1 },
   bow:          { name: '弓',    type: 'weapon', cost: { silver: 12 },       dmg: 6,  desc: '远程武器', ranged: true, stack: 1 },
+  armor_hammer: { name: '破甲锤',type: 'weapon', cost: { silver: 30 },       dmg: 14, desc: '攻速极慢，对建筑和护盾3倍伤害；右键扇形击退', stack: 1, slow: true, blockMult: 3, shieldMult: 3 },
+  boomerang:    { name: '回旋镖',type: 'weapon', cost: { silver: 15 },       dmg: 7,  desc: '直线飞出后折返，去回程均可造成伤害，可被击落', stack: 1, projectileType: 'boomerang' },
+  frost_staff:  { name: '冰霜法杖',type:'weapon', cost: { gold: 40 },        dmg: 5,  desc: '远程命中造成冻伤2秒：移速-30%，跳跃减半', stack: 1, projectileType: 'frost' },
+  javelin:      { name: '标枪',  type: 'weapon', cost: { silver: 10 },       dmg: 8,  desc: '钉住敌人暴露5秒；钉在方块可作为弹跳踮脚石', stack: 1, projectileType: 'javelin' },
+  smoke_launcher:{ name:'烟雾弹发射器',type:'weapon',cost:{ silver:25 },     dmg: 0,  desc: '发射烟雾弹，落地形成8秒烟区，友军进烟隐身2秒', stack: 1, projectileType: 'smoke' },
   arrow:        { name: '箭',    type: 'ammo',   cost: { silver: 2 },        count: 8, desc: '箭矢x8', stack: 64 },
   std_armor:    { name: '标准甲',type: 'armor',  cost: { gold: 8 },          armor: 20, desc: '基础防护', stack: 1 },
   fine_armor:   { name: '精制甲',type: 'armor',  cost: { gold: 16 },         armor: 40, desc: '中级防护', stack: 1 },
   rd_armor:     { name: '研发甲',type: 'armor',  cost: { jade: 4 },          armor: 60, desc: '顶级防护', stack: 1 },
   tnt:          { name: '炸药',  type: 'special',cost: { gold: 8 },          desc: '破坏3x3范围方块', stack: 4 },
   trap_device:  { name: '追踪装置',type:'special',cost: { gold: 12 },         desc: '自动攻击附近敌人，可装填100支箭', stack: 2 },
+  bear_trap:    { name: '捕兽夹',type:'special',cost: { silver: 20 },        desc: '隐形地面陷阱，定身敌人3秒并预警', stack: 4 },
+  sensor_mine:  { name: '感应地雷',type:'special',cost:{ gold: 30 },         desc: '隐形感应雷，敌人靠近后1秒延迟爆炸', stack: 3 },
   portal:       { name: '传送门',type: 'special',cost: { jade: 2 },          desc: '瞬移至基地', stack: 2 },
   potion:       { name: '生命药水',type:'special',cost: { gold: 4 },          desc: '恢复全部生命', stack: 8 }
 };
@@ -82,6 +89,8 @@ class Engine {
     this.dropItems = [];     // 地面掉落物
     this.deathBoxes = [];   // 死亡掉落盒子
     this.trapDevices = [];  // 陷阱装置
+    this.groundDevices = []; // 捕兽夹、感应地雷、标枪踏板
+    this.smokeZones = [];    // 烟雾区域
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -482,6 +491,95 @@ class Engine {
     return canLoad;
   }
 
+  spawnWeaponProjectile(owner, type, start, dir, options = {}) {
+    const colors = { boomerang: 0xffdd00, frost: 0x8be9fd, javelin: 0xd9a066, smoke: 0x8899aa, arrow: 0x8B4513 };
+    let geo;
+    if (type === 'boomerang') geo = new THREE.TorusGeometry(0.24, 0.04, 8, 18);
+    else if (type === 'frost') geo = new THREE.SphereGeometry(0.14, 10, 10);
+    else if (type === 'smoke') geo = new THREE.SphereGeometry(0.18, 10, 10);
+    else {
+      geo = new THREE.CylinderGeometry(0.04, 0.04, type === 'javelin' ? 0.9 : 0.6);
+      geo.rotateX(Math.PI / 2);
+    }
+    const mat = new THREE.MeshBasicMaterial({ color: colors[type] || 0xffffff, transparent: true, opacity: type === 'smoke' ? 0.9 : 1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(start);
+    mesh.lookAt(start.clone().add(dir));
+    this.scene.add(mesh);
+    const speed = options.speed || (type === 'frost' ? 20 : type === 'smoke' ? 14 : type === 'boomerang' ? 18 : 24);
+    const projectile = {
+      mesh,
+      vel: dir.clone().multiplyScalar(speed),
+      life: options.life || (type === 'smoke' ? 2.2 : 3),
+      damage: options.damage || 0,
+      owner,
+      type,
+      start: start.clone(),
+      dir: dir.clone(),
+      returning: false,
+      hitSet: new Set(),
+      canBeShotDown: type === 'boomerang',
+      gravity: type === 'smoke' ? 6 : (type === 'javelin' ? 4 : 0)
+    };
+    this.projectiles.push(projectile);
+    return projectile;
+  }
+
+  createGroundDevice(pos, type, team, owner) {
+    const isMine = type === 'sensor_mine';
+    const isTrap = type === 'bear_trap';
+    const isJavelin = type === 'javelin_step';
+    const geo = isJavelin ? new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8) : new THREE.CylinderGeometry(0.42, 0.48, 0.12, 10);
+    const mat = new THREE.MeshLambertMaterial({
+      color: isMine ? 0xff5533 : isTrap ? 0x777777 : 0xd9a066,
+      transparent: true,
+      opacity: isJavelin ? 0.85 : 0.18
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.position.y = Math.max(0.12, pos.y + 0.08);
+    if (isJavelin) mesh.rotation.x = Math.PI / 2;
+    mesh.castShadow = true;
+    this.scene.add(mesh);
+    const dev = {
+      mesh, pos: mesh.position.clone(), type, team, owner,
+      life: isJavelin ? 18 : 120,
+      radius: isMine ? 2.4 : isTrap ? 0.95 : 0.8,
+      triggered: false,
+      triggerTimer: isMine ? 1 : 0
+    };
+    this.groundDevices.push(dev);
+    return dev;
+  }
+
+  removeGroundDevice(dev) {
+    const i = this.groundDevices.indexOf(dev);
+    if (i >= 0) {
+      this.scene.remove(dev.mesh);
+      this.groundDevices.splice(i, 1);
+    }
+  }
+
+  createSmokeZone(pos, team, owner) {
+    const geo = new THREE.SphereGeometry(3.2, 16, 12);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x8899aa, transparent: true, opacity: 0.35, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    mesh.position.y = Math.max(1.2, pos.y + 1.2);
+    this.scene.add(mesh);
+    const zone = { mesh, pos: mesh.position.clone(), team, owner, life: 8, radius: 3.2, pulse: 0 };
+    this.smokeZones.push(zone);
+    return zone;
+  }
+
+  removeSmokeZone(zone) {
+    const i = this.smokeZones.indexOf(zone);
+    if (i >= 0) {
+      this.scene.remove(zone.mesh);
+      this.smokeZones.splice(i, 1);
+    }
+  }
+
   explodeAt(pos, radius, dmg) {
     // 炸毁方块
     const rx = Math.floor(pos.x);
@@ -516,6 +614,14 @@ class Engine {
       if (box.pos.distanceTo(pos) <= radius + 2) {
         this.spawnParticles(box.pos, 0xff4400, 10);
         this.removeDeathBox(box);
+      }
+    }
+    // 炸毁范围内的地面装置
+    for (let i = this.groundDevices.length - 1; i >= 0; i--) {
+      const dev = this.groundDevices[i];
+      if (dev.pos.distanceTo(pos) <= radius + 1.5) {
+        this.spawnParticles(dev.pos, 0xff4400, 8);
+        this.removeGroundDevice(dev);
       }
     }
     this.spawnParticles(pos, 0xff4400, 20);
@@ -620,6 +726,77 @@ class Engine {
       }
     }
 
+    // Smoke Zones (视野压制 + 友军隐身)
+    for (let i = this.smokeZones.length - 1; i >= 0; i--) {
+      const zone = this.smokeZones[i];
+      zone.life -= dt;
+      zone.pulse += dt * 2;
+      const scale = 1 + Math.sin(zone.pulse) * 0.08;
+      zone.mesh.scale.set(scale, scale * 0.72, scale);
+      zone.mesh.material.opacity = Math.max(0.05, Math.min(0.36, zone.life / 8 * 0.36));
+      for (const ent of this.entities) {
+        if (ent.isDead) continue;
+        const dist = ent.pos.distanceTo(zone.pos);
+        if (dist < zone.radius) {
+          if (ent.team === zone.team) {
+            ent.isInvisible = true;
+            ent.smokeInvisibleTimer = Math.max(ent.smokeInvisibleTimer || 0, 2);
+          } else {
+            ent.smokeBlindTimer = Math.max(ent.smokeBlindTimer || 0, 0.4);
+          }
+        }
+      }
+      if (zone.life <= 0) this.removeSmokeZone(zone);
+    }
+
+    // Ground Devices (捕兽夹/感应雷/标枪踏板)
+    for (let i = this.groundDevices.length - 1; i >= 0; i--) {
+      const dev = this.groundDevices[i];
+      dev.life -= dt;
+      if (dev.life <= 0) {
+        this.removeGroundDevice(dev);
+        continue;
+      }
+      dev.mesh.rotation.y += dt * (dev.type === 'javelin_step' ? 1.5 : 0.2);
+
+      if (dev.type === 'sensor_mine' && dev.triggered) {
+        dev.triggerTimer -= dt;
+        dev.mesh.material.opacity = 0.75;
+        dev.mesh.scale.setScalar(1 + Math.sin(performance.now() * 0.03) * 0.12);
+        if (dev.triggerTimer <= 0) {
+          this.explodeAt(dev.pos.clone(), 3.2, 65);
+          this.removeGroundDevice(dev);
+          continue;
+        }
+      }
+
+      for (const ent of this.entities) {
+        if (ent.isDead) continue;
+        const dist = ent.pos.distanceTo(dev.pos);
+        if (dev.type === 'javelin_step' && dist < 0.85 && ent.vel.y <= 0.2) {
+          ent.vel.y = Math.max(ent.vel.y, 10);
+          this.spawnParticles(dev.pos, 0xd9a066, 5);
+          dev.life = Math.min(dev.life, 1);
+          continue;
+        }
+        if (ent.team === dev.team) continue;
+        if (dist > dev.radius) continue;
+        if (dev.type === 'bear_trap') {
+          ent.rootTimer = Math.max(ent.rootTimer || 0, 3);
+          ent.takeDamage(6, dev.owner);
+          this.spawnParticles(dev.pos, 0xffdd00, 12);
+          window.game?.showMessage?.('警报：捕兽夹触发！', '#ffdd00');
+          this.removeGroundDevice(dev);
+          break;
+        }
+        if (dev.type === 'sensor_mine' && !dev.triggered) {
+          dev.triggered = true;
+          dev.triggerTimer = 1;
+          window.game?.showMessage?.('感应地雷已触发！', '#ff5533');
+        }
+      }
+    }
+
     // Trap Devices (扫描敌人 + 发射)
     for (let i = this.trapDevices.length - 1; i >= 0; i--) {
       const trap = this.trapDevices[i];
@@ -679,14 +856,29 @@ class Engine {
     // Projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
+      if (proj.type === 'boomerang' && !proj.returning && proj.start.distanceTo(proj.mesh.position) > 9) {
+        proj.returning = true;
+      }
+      if (proj.type === 'boomerang' && proj.returning && proj.owner) {
+        const backDir = proj.owner.pos.clone().add(new THREE.Vector3(0, 0.7, 0)).sub(proj.mesh.position).normalize();
+        proj.vel.lerp(backDir.multiplyScalar(20), 0.18);
+      }
       proj.mesh.position.addScaledVector(proj.vel, dt);
-      proj.vel.y -= 9.8 * dt;
+      proj.vel.y -= (proj.gravity ?? 9.8) * dt;
       proj.life -= dt;
+      if (proj.type === 'boomerang') proj.mesh.rotation.z += dt * 14;
 
       // Block collision
       const rc = this.raycastBlocks(proj.mesh.position, proj.vel.clone().normalize(), 0.5);
       if (rc.hit) {
-        this.damageBlock(rc.pos.x, rc.pos.y, rc.pos.z, proj.damage);
+        if (proj.type === 'smoke') {
+          this.createSmokeZone(proj.mesh.position.clone(), proj.owner?.team, proj.owner);
+        } else if (proj.type === 'javelin') {
+          const pos = new THREE.Vector3(Math.floor(rc.pos.x) + 0.5, Math.floor(rc.pos.y) + 1.0, Math.floor(rc.pos.z) + 0.5);
+          this.createGroundDevice(pos, 'javelin_step', proj.owner?.team, proj.owner);
+        } else {
+          this.damageBlock(rc.pos.x, rc.pos.y, rc.pos.z, proj.damage);
+        }
         this.spawnParticles(proj.mesh.position, 0xffaa00, 4);
         this.scene.remove(proj.mesh);
         this.projectiles.splice(i, 1);
@@ -699,15 +891,35 @@ class Engine {
         if (ent.isDead) continue;
         const dist = proj.mesh.position.distanceTo(ent.mesh.position);
         if (dist < (ent.radius || 0.5) + 0.2) {
+          const key = ent.playerId || ent.name;
+          if (proj.type === 'boomerang' && proj.hitSet?.has(key + ':' + (proj.returning ? 'back' : 'out'))) continue;
+          proj.hitSet?.add(key + ':' + (proj.returning ? 'back' : 'out'));
           ent.takeDamage(proj.damage, proj.owner);
+          if (proj.type === 'frost') {
+            ent.frostTimer = Math.max(ent.frostTimer || 0, 2);
+            ent.slowTimer = Math.max(ent.slowTimer || 0, 2);
+          }
+          if (proj.type === 'javelin') {
+            ent.revealedTimer = Math.max(ent.revealedTimer || 0, 5);
+            ent.nameTag.visible = true;
+            window.game?.showMessage?.(`${ent.name} 被标枪暴露了！`, '#ffdd00');
+          }
           this.spawnParticles(proj.mesh.position, 0xff0000, 5);
-          this.scene.remove(proj.mesh);
-          this.projectiles.splice(i, 1);
+          if (proj.type !== 'boomerang') {
+            this.scene.remove(proj.mesh);
+            this.projectiles.splice(i, 1);
+          } else if (!proj.returning) {
+            proj.returning = true;
+          }
           break;
         }
       }
 
-      if (proj.life <= 0 || proj.mesh.position.y < -20) {
+      if ((proj.type === 'boomerang' && proj.returning && proj.owner && proj.mesh.position.distanceTo(proj.owner.pos) < 0.8) ||
+          proj.life <= 0 || proj.mesh.position.y < -20) {
+        if (proj.type === 'smoke' && proj.mesh.position.y > -20) {
+          this.createSmokeZone(proj.mesh.position.clone(), proj.owner?.team, proj.owner);
+        }
         this.scene.remove(proj.mesh);
         this.projectiles.splice(i, 1);
       }
@@ -969,6 +1181,11 @@ class PlayerEntity {
     this.pickupRangeBonus = 0;
     this.silencedTimer = 0;
     this.slowTimer = 0;
+    this.frostTimer = 0;
+    this.rootTimer = 0;
+    this.revealedTimer = 0;
+    this.smokeBlindTimer = 0;
+    this.smokeInvisibleTimer = 0;
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -1162,8 +1379,13 @@ class PlayerEntity {
     if (!info) return;
 
     if (info.type === 'weapon') {
-      this.equipped.weapon = item.key;
-      this.updateWeaponMesh();
+      if (this.equipped.weapon === item.key && (item.key === 'armor_hammer' || info.projectileType)) {
+        this.useWeaponAlt();
+      } else {
+        this.equipped.weapon = item.key;
+        this.updateWeaponMesh();
+        window.game?.showMessage?.(`已装备：${info.name}`, '#8be9fd');
+      }
     } else if (info.type === 'armor') {
       this.equipped.armor = item.key;
       this.armor = info.armor;
@@ -1205,6 +1427,42 @@ class PlayerEntity {
         this.arrowCount -= loaded;
         window.game?.showMessage(`已装填 ${loaded} 支箭矢`, '#ffdd00');
       }
+    } else if (item.key === 'bear_trap' || item.key === 'sensor_mine') {
+      const dir = this.getForwardDir();
+      const placePos = this.pos.clone().addScaledVector(dir, 1.6);
+      placePos.y = this.getGroundHeight(placePos.x, placePos.z);
+      this.engine.createGroundDevice(placePos, item.key, this.team, this);
+      item.count--;
+      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      window.game?.showMessage(`${this.name} 放置了${ITEM_DB[item.key].name}`, item.key === 'sensor_mine' ? '#ff5533' : '#ffdd00');
+    }
+  }
+
+  useWeaponAlt() {
+    if (!this.equipped.weapon || this.attackCd > 0 || this.isDead || this.isFrozen) return;
+    const w = ITEM_DB[this.equipped.weapon];
+    if (!w) return;
+    if (this.equipped.weapon === 'armor_hammer') {
+      this.attackCd = 1.15;
+      const dir = this.getForwardDir();
+      for (const ent of this.engine.entities) {
+        if (ent === this || ent.isDead || ent.team === this.team) continue;
+        const to = ent.pos.clone().sub(this.pos);
+        const dist = to.length();
+        if (dist > 4) continue;
+        const angle = dir.angleTo(to.clone().normalize());
+        if (angle < Math.PI / 4) {
+          ent.vel.add(to.normalize().multiplyScalar(9));
+          ent.vel.y = Math.max(ent.vel.y, 4);
+          ent.takeDamage(6, this);
+        }
+      }
+      this.engine.spawnParticles(this.pos.clone().addScaledVector(dir, 2), 0xffdd00, 12);
+      window.game?.showMessage?.('破甲锤蓄力震退！', '#ffdd00');
+      return;
+    }
+    if (w.projectileType) {
+      this.attack();
     }
   }
 
@@ -1270,6 +1528,11 @@ class PlayerEntity {
 
     if (this.silencedTimer > 0) this.silencedTimer -= dt;
     if (this.slowTimer > 0) this.slowTimer -= dt;
+    if (this.frostTimer > 0) this.frostTimer -= dt;
+    if (this.rootTimer > 0) this.rootTimer -= dt;
+    if (this.revealedTimer > 0) this.revealedTimer -= dt;
+    if (this.smokeBlindTimer > 0) this.smokeBlindTimer -= dt;
+    if (this.smokeInvisibleTimer > 0) this.smokeInvisibleTimer -= dt;
     if (this.socialShield > 0) this.socialShield -= dt;
 
     // Anti-cheat detection
@@ -1295,13 +1558,16 @@ class PlayerEntity {
     this.mesh.rotation.y = this.yaw;
 
     // Invisibility visual
-    if (this.isInvisible) {
+    if (this.smokeInvisibleTimer <= 0 && !(this.role === 'ASSASSIN' && this.skillActive > 0)) this.isInvisible = false;
+    if (this.isInvisible || this.smokeInvisibleTimer > 0) {
       this.mesh.material.transparent = true;
       this.mesh.material.opacity = 0.3;
     } else {
       this.mesh.material.transparent = false;
       this.mesh.material.opacity = 1;
     }
+    if (this.frostTimer > 0) this.mesh.material.color.setHex(0x8be9fd);
+    else this.mesh.material.color.setHex(this.teamInfo.color);
 
     // Camera follow
     if (this.isLocal) {
@@ -1352,8 +1618,8 @@ class PlayerEntity {
   }
 
   moveInput(dx, dz, sprint = false) {
-    if (this.isDead || this.isFrozen) return;
-    const slowMult = this.slowTimer > 0 ? 0.65 : 1;
+    if (this.isDead || this.isFrozen || this.rootTimer > 0) return;
+    const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
     const spd = (sprint ? 1.5 : 1) * this.speed * slowMult;
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(-Math.cos(this.yaw), 0, Math.sin(this.yaw));
@@ -1365,8 +1631,8 @@ class PlayerEntity {
   }
 
   jump() {
-    if (this.onGround && !this.isDead && !this.isFrozen) {
-      this.vel.y = this.jumpPower;
+    if (this.onGround && !this.isDead && !this.isFrozen && this.rootTimer <= 0) {
+      this.vel.y = this.jumpPower * (this.frostTimer > 0 ? 0.5 : 1);
       this.onGround = false;
       this.acJumpCount++;
       if (this.acJumpCount > 3 && this.pos.y < -5) {
@@ -1401,12 +1667,25 @@ class PlayerEntity {
       const w = ITEM_DB[this.equipped.weapon];
       dmg = w.dmg;
       isRanged = w.ranged;
+      if (w.slow) this.attackCd = 1.15;
     }
 
     if (this.role === 'WARRIOR' && this.skillActive > 0) dmg *= 2;
     if (this.lowHpDamageBoost && this.hp / this.maxHp < 0.3) dmg *= (1 + this.lowHpDamageBoost);
 
-    if (isRanged && this.arrowCount > 0) {
+    const weaponInfo = this.equipped.weapon ? ITEM_DB[this.equipped.weapon] : null;
+    if (weaponInfo?.projectileType) {
+      const dir = this.getForwardDir();
+      const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+      const type = weaponInfo.projectileType;
+      const finalDmg = type === 'frost' ? 5 : type === 'boomerang' ? 7 : type === 'javelin' ? 8 : 0;
+      this.engine.spawnWeaponProjectile(this, type, start, dir, {
+        damage: finalDmg,
+        speed: type === 'smoke' ? 14 : type === 'frost' ? 20 : type === 'boomerang' ? 18 : 24,
+        life: type === 'smoke' ? 2.1 : type === 'boomerang' ? 2.8 : 3
+      });
+      window.game?.showMessage?.(`${weaponInfo.name}已使用`, '#8be9fd');
+    } else if (isRanged && this.arrowCount > 0) {
       this.arrowCount--;
       const dir = this.getForwardDir();
       const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
@@ -1439,6 +1718,23 @@ class PlayerEntity {
           if (this.role === 'ASSASSIN' && this.backstabBoost) finalDmg *= (1 + this.backstabBoost);
           ent.takeDamage(finalDmg, this);
           if (this.shadowSilence && this.skillActive > 0) ent.silencedTimer = Math.max(ent.silencedTimer || 0, 0.5);
+        }
+      }
+
+      const rc = this.engine.raycastBlocks(this.pos.clone().add(new THREE.Vector3(0, 0.6, 0)), dir, range + 0.8);
+      if (rc.hit) {
+        const blockDmg = this.equipped.weapon === 'armor_hammer' ? dmg * 3 : dmg;
+        this.engine.damageBlock(rc.pos.x, rc.pos.y, rc.pos.z, blockDmg);
+      }
+
+      // 可击落空中的回旋镖
+      for (let i = this.engine.projectiles.length - 1; i >= 0; i--) {
+        const proj = this.engine.projectiles[i];
+        if (!proj.canBeShotDown || proj.owner?.team === this.team) continue;
+        if (proj.mesh.position.distanceTo(hitPos) < 1.2) {
+          this.engine.spawnParticles(proj.mesh.position, 0xffdd00, 8);
+          this.engine.scene.remove(proj.mesh);
+          this.engine.projectiles.splice(i, 1);
         }
       }
 
