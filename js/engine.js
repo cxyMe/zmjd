@@ -1225,7 +1225,12 @@ class PlayerEntity {
 
     // Mesh
     const geo = this.createRoleGeometry(roleKey);
-    const mat = new THREE.MeshLambertMaterial({ color: this.teamInfo.color });
+    this.skinColor = this.getEquippedSkinColor();
+    const mat = new THREE.MeshLambertMaterial({
+      color: this.skinColor,
+      emissive: this.skinColor !== this.teamInfo.color ? this.skinColor : 0x000000,
+      emissiveIntensity: this.skinColor !== this.teamInfo.color ? 0.18 : 0
+    });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.position.copy(this.pos);
     this.mesh.castShadow = true;
@@ -1283,6 +1288,20 @@ class PlayerEntity {
     if (oldTag) this.mesh.add(oldTag);
     this.weaponMesh = null;
     this.updateWeaponMesh();
+  }
+
+  getEquippedSkinColor() {
+    try {
+      const pass = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{}');
+      const equipped = pass.equippedCosmetics || {};
+      const skin = equipped['角色皮肤'] || equipped['角色换色'];
+      if (skin === 'void_team_set' || skin === 'void_warrior' || skin === 'void_assassin' || skin === 'void_chanter') return 0x2b163d;
+      if (skin === 'void_miner_uniform') return 0xff8a00;
+      if (skin === 'metal_red') return 0xff3333;
+      if (skin === 'metal_blue') return 0x33aaff;
+      if (skin === 'metal_green') return 0x44ff88;
+    } catch (e) {}
+    return this.teamInfo.color;
   }
 
   // ====== 快捷栏/背包操作 ======
@@ -1586,7 +1605,7 @@ class PlayerEntity {
       this.mesh.material.opacity = 1;
     }
     if (this.frostTimer > 0) this.mesh.material.color.setHex(0x8be9fd);
-    else this.mesh.material.color.setHex(this.teamInfo.color);
+    else this.mesh.material.color.setHex(this.skinColor || this.teamInfo.color);
 
     // Camera follow
     if (this.isLocal) {
@@ -1803,10 +1822,9 @@ class PlayerEntity {
     if (this.handBreakTimer >= 0.5) {
       this.handBreakTimer = 0;
       const [x, y, z] = key.split(',').map(Number);
-      this.hp = Math.max(1, this.hp - 1);
       this.engine.handDamageBlock(x, y, z, 1);
       this.engine.spawnParticles(blk.mesh.position, 0xffffff, 2);
-      window.game?.showMessage?.('徒手拆毁：生命 -1，建筑耐久 -1', '#ffdd00');
+      window.game?.showMessage?.('徒手拆毁：建筑耐久 -1', '#ffdd00');
     }
   }
 
@@ -1829,6 +1847,14 @@ class PlayerEntity {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
         this.matchStats.blocksPlaced++;
+        const equipped = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{}')?.equippedCosmetics || {};
+        const bridgeFx = equipped['搭路特效'];
+        const fxColor = bridgeFx === 'starlight_bridge_fx' ? 0x8be9fd
+          : bridgeFx === 'frost_path_fx' ? 0xdff9ff
+          : bridgeFx === 'flower_bridge_fx' ? 0xff78c8
+          : bridgeFx === 'miner_bridge_fx' ? 0xb388ff
+          : 0xffffff;
+        if (bridgeFx) this.engine.spawnParticles(center, fxColor, bridgeFx === 'starlight_bridge_fx' ? 12 : 8);
         const xp = GROWTH_CONFIG.xp.placeBlock * (1 + (this.blockXpBoost || 0));
         window.game?.growth?.addXp?.(this, xp, '建造');
         this.acBlocksPlaced++;
@@ -2016,7 +2042,13 @@ class PlayerEntity {
       else if (this.equipped.weapon.includes('iron')) color = 0xaaaaaa;
       else color = 0x00ffff;
     }
-    const mat = new THREE.MeshLambertMaterial({ color });
+    try {
+      const equipped = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{}')?.equippedCosmetics || {};
+      const weaponSkin = equipped['武器皮肤'];
+      if (weaponSkin === 'abyss_blade' || weaponSkin === 'abyss_bow' || weaponSkin === 'abyss_hammer') color = 0x7b2cff;
+      if (weaponSkin === 'compass_sword') color = 0xffdd00;
+    } catch (e) {}
+    const mat = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: color === 0x7b2cff ? 0.28 : 0.08 });
     this.weaponMesh = new THREE.Mesh(geo, mat);
     this.weaponMesh.position.set(0.4, 0.3, 0.3);
     this.mesh.add(this.weaponMesh);

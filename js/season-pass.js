@@ -49,6 +49,40 @@ const PASS_SEASON_CHALLENGES = [
   { id: 'season_team', name: '三人组队完成30个周常目标', reward: '头像框：三人成梦' }
 ];
 
+const PASS_COSMETICS = [
+  { id: 'void_team_set', type: '角色皮肤', rarity: '传说', name: '虚空霸主·全队套装', price: 0, source: '手册100级', desc: '战士虚空壁垒、刺客虚空之刃、射手虚空颂者统一暗金风格，出生黑雾特效。', previewClass: 'skin-void-overlord' },
+  { id: 'void_warrior', type: '角色皮肤', rarity: '传说', name: '虚空壁垒', price: 0, source: '套装部件', desc: '暗金重甲，肩甲喷发紫色粒子，待机锤击地面产生紫光冲击波。', previewClass: 'skin-void-overlord' },
+  { id: 'void_assassin', type: '角色皮肤', rarity: '传说', name: '虚空之刃', price: 0, source: '套装部件', desc: '半透明身体、移动残影、双匕紫色电弧，蹲下融入阴影。', previewClass: 'skin-void-overlord' },
+  { id: 'void_chanter', type: '角色皮肤', rarity: '传说', name: '虚空颂者', price: 0, source: '套装部件', desc: '法杖悬浮紫色核心，三颗暗能量球环绕，施法留下紫色光轨。', previewClass: 'skin-void-overlord' },
+  { id: 'abyss_blade', type: '武器皮肤', rarity: '史诗', name: '深渊之锋', price: 680, desc: '剑身刻有深渊铭文，挥砍时留下紫色弧光。', previewClass: 'skin-abyss' },
+  { id: 'abyss_bow', type: '武器皮肤', rarity: '史诗', name: '深渊之弓', price: 680, desc: '紫色骨骼弓臂，箭矢拖出暗影轨迹。', previewClass: 'skin-abyss' },
+  { id: 'abyss_hammer', type: '武器皮肤', rarity: '史诗', name: '深渊之锤', price: 680, desc: '锤头为虚空巨兽头颅，蓄力时双眼发光。', previewClass: 'skin-abyss' },
+  { id: 'compass_sword', type: '武器皮肤', rarity: '稀有', name: '圆规', price: 100, desc: '文具圆规造型，击杀目标时旋转画出金色圆环。', previewClass: 'skin-compass' },
+  { id: 'void_miner_uniform', type: '角色皮肤', rarity: '稀有', name: '虚空矿工制服', price: 1000, desc: '橙色工装与头灯，移动时掉落紫色矿尘。', previewClass: 'skin-miner' },
+  { id: 'miner_bridge_fx', type: '搭路特效', rarity: '稀有', name: '虚空矿石粒子', price: 380, desc: '放置方块时冒出紫色矿石粒子。', previewClass: 'skin-miner' },
+  { id: 'flower_bridge_fx', type: '搭路特效', rarity: '稀有', name: '步步生花', price: 520, desc: '搭路时脚下绽放花瓣光点，3局体验卡/永久均支持。', previewClass: 'skin-flower' },
+  { id: 'starlight_bridge_fx', type: '搭路特效', rarity: '史诗', name: '星光拖尾', price: 880, desc: '脚下生成蓝色星河拖尾，是每局曝光率最高的特效。', previewClass: 'skin-starlight' },
+  { id: 'frost_path_fx', type: '搭路特效', rarity: '史诗', name: '冰霜路径', price: 880, desc: '方块落地后结霜，边缘散出寒气。', previewClass: 'skin-frost' },
+  { id: 'dragon_bed', type: '床皮肤', rarity: '史诗', name: '龙巢之床', price: 760, desc: '床周围盘踞小型龙骨，敌人拆床时触发龙息光效。', previewClass: 'skin-dragon' },
+  { id: 'space_capsule_bed', type: '床皮肤', rarity: '史诗', name: '太空舱床', price: 760, desc: '银白太空舱外观，拆毁时弹出失重星尘。', previewClass: 'skin-space' },
+  { id: 'candy_house_bed', type: '床皮肤', rarity: '稀有', name: '糖果屋床', price: 420, desc: '童话糖果屋外观，拆毁时爆出彩糖粒子。', previewClass: 'skin-candy' },
+  { id: 'void_kill_banner', type: '击杀播报', rarity: '史诗', name: '虚空吞噬者', price: 900, desc: '击杀敌人时全屏闪金光并出现虚空裂缝播报。', previewClass: 'skin-void-overlord' },
+  { id: 'void_dance', type: '表情动作', rarity: '史诗', name: '嘲讽·虚空舞步', price: 520, desc: '击杀后可释放紫色舞步残影，拉满仇恨值。', previewClass: 'skin-void-overlord' },
+  { id: 'nice_emote', type: '表情', rarity: '普通', name: '干得漂亮', price: 80, desc: '基础文字表情，适合队友配合后快速发送。', previewClass: 'skin-basic' },
+  { id: 'metal_red', type: '角色换色', rarity: '普通', name: '赤焰基础换色', price: 120, desc: '红黑金属质感换色，无属性加成。', previewClass: 'skin-red' },
+  { id: 'metal_blue', type: '角色换色', rarity: '普通', name: '湛蓝基础换色', price: 120, desc: '蓝白金属质感换色，无属性加成。', previewClass: 'skin-blue' },
+  { id: 'metal_green', type: '角色换色', rarity: '普通', name: '翠绿基础换色', price: 120, desc: '绿色机能风换色，无属性加成。', previewClass: 'skin-green' }
+];
+
+const GACHA_POOL = [
+  { id: 'miner_fragment', name: '虚空矿工碎片', rarity: '稀有碎片', weight: 26, fragmentOf: 'void_miner_uniform' },
+  { id: 'abyss_fragment', name: '深渊守卫者碎片', rarity: '史诗碎片', weight: 8, fragmentOf: 'abyss_blade' },
+  { id: 'double_xp_card', name: '单日双倍经验卡', rarity: '消耗品', weight: 30 },
+  { id: 'limited_emote_laugh', name: '限定表情：偷笑', rarity: '普通', weight: 20, cosmeticId: 'nice_emote' },
+  { id: 'bridge_trial_starlight', name: '星光拖尾体验卡3局', rarity: '稀有', weight: 14, trialOf: 'starlight_bridge_fx' },
+  { id: 'rare_guarantee_skin', name: '未拥有稀有外观', rarity: '保底', weight: 2, cosmeticId: 'compass_sword' }
+];
+
 class SeasonPassSystem {
   constructor() {
     this.panel = document.getElementById('seasonPassPanel');
@@ -58,6 +92,7 @@ class SeasonPassSystem {
     this.state = this.loadState();
     this.bind();
     this.updateCrystal();
+    setTimeout(() => this.applyLobbyPreview(), 0);
   }
 
   loadState() {
@@ -70,10 +105,17 @@ class SeasonPassSystem {
       taskProgress: {},
       pendingOrders: [],
       cosmetics: [],
+      ownedCosmetics: [],
+      equippedCosmetics: {},
+      fragments: {},
+      gachaPity: 0,
+      predictionWins: 0,
       weeklyMatchXp: 0,
       lastLogin: Date.now()
     };
-    return { ...base, ...JSON.parse(localStorage.getItem('bedwars_season_pass') || '{}') };
+    const state = { ...base, ...JSON.parse(localStorage.getItem('bedwars_season_pass') || '{}') };
+    if (!Array.isArray(state.ownedCosmetics)) state.ownedCosmetics = state.cosmetics || [];
+    return state;
   }
 
   saveState() {
@@ -127,6 +169,9 @@ class SeasonPassSystem {
     document.getElementById('seasonCouponText').textContent = this.state.coupons;
     document.getElementById('passTierText').textContent = SEASON_PASS_CONFIG.tiers[this.state.tier]?.name || '免费版';
     if (this.tab === 'rewards') this.renderRewards();
+    if (this.tab === 'cosmetics') this.renderCosmetics();
+    if (this.tab === 'gacha') this.renderGacha();
+    if (this.tab === 'predict') this.renderPredict();
     if (this.tab === 'tasks') this.renderTasks();
     if (this.tab === 'team') this.renderTeam();
     if (this.tab === 'rules') this.renderRules();
@@ -167,6 +212,91 @@ class SeasonPassSystem {
     this.body.querySelectorAll('[data-preview-level]').forEach(el => {
       el.onclick = () => this.previewReward(parseInt(el.dataset.previewLevel, 10));
     });
+  }
+
+  renderCosmetics() {
+    const owned = new Set(this.state.ownedCosmetics || []);
+    this.body.innerHTML = `
+      <div class="pass-note">赛季券主要用于外观个性化：角色、武器、搭路、床、击杀播报和表情均不提供数值属性。</div>
+      <div class="cosmetic-layout">
+        <div class="cosmetic-preview">
+          <div class="preview-character ${this.currentPreviewClass()}" id="cosmeticPreviewHero">
+            <div class="preview-glow"></div><div class="preview-head"></div><div class="preview-body"></div>
+            <div class="preview-arm left"></div><div class="preview-arm right"></div><div class="preview-leg left"></div><div class="preview-leg right"></div><div class="preview-weapon"></div>
+          </div>
+          <h3>当前预览</h3>
+          <p id="cosmeticPreviewText">点击任意外观可试穿；购买后可装备到大厅和对局展示。</p>
+        </div>
+        <div class="cosmetic-shop-grid">
+          ${PASS_COSMETICS.map(item => {
+            const has = owned.has(item.id) || item.price === 0 && this.canUnlockFreeCosmetic(item);
+            const equipped = this.state.equippedCosmetics?.[item.type] === item.id;
+            return `<div class="cosmetic-card ${item.rarity}" data-preview-cosmetic="${item.id}">
+              <div class="cosmetic-rarity">${item.rarity}</div>
+              <h4>${item.name}</h4>
+              <p>${item.type}｜${item.desc}</p>
+              <div class="cosmetic-price">${item.price ? item.price + '赛季券' : item.source || '手册解锁'}</div>
+              <button data-buy-cosmetic="${item.id}" ${has ? 'disabled' : ''}>${has ? '已拥有' : '购买'}</button>
+              <button data-equip-cosmetic="${item.id}" ${has ? '' : 'disabled'}>${equipped ? '已装备' : '装备'}</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    this.body.querySelectorAll('[data-preview-cosmetic]').forEach(card => {
+      card.onclick = (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        this.previewCosmetic(card.dataset.previewCosmetic);
+      };
+    });
+    this.body.querySelectorAll('[data-buy-cosmetic]').forEach(btn => btn.onclick = () => this.buyCosmetic(btn.dataset.buyCosmetic));
+    this.body.querySelectorAll('[data-equip-cosmetic]').forEach(btn => btn.onclick = () => this.equipCosmetic(btn.dataset.equipCosmetic));
+  }
+
+  renderGacha() {
+    this.body.innerHTML = `
+      <div class="gacha-panel">
+        <div class="gacha-machine">
+          <div class="gacha-orb"></div>
+          <h3>筑梦扭蛋机</h3>
+          <p>每抽消耗50赛季券。30抽必出未拥有稀有品质道具。概率公开：稀有碎片26%，史诗碎片8%，消耗品30%，限定表情20%，体验卡14%，隐藏保底2%。</p>
+          <div class="growth-summary">
+            <span class="growth-pill">当前赛季券：${this.state.coupons}</span>
+            <span class="growth-pill">保底进度：${this.state.gachaPity || 0}/30</span>
+          </div>
+          <button class="pass-gold" id="gachaOnceBtn">抽取一次（50券）</button>
+          <button class="pass-primary" id="gachaTenBtn">十连抽（500券）</button>
+        </div>
+        <div class="gacha-fragments">
+          <h3>碎片合成</h3>
+          ${['void_miner_uniform','abyss_blade'].map(id => {
+            const item = PASS_COSMETICS.find(x => x.id === id);
+            const count = this.state.fragments?.[id] || 0;
+            return `<div class="fragment-row"><span>${item.name}</span><b>${count}/10</b><button data-craft="${id}" ${count >= 10 ? '' : 'disabled'}>合成</button></div>`;
+          }).join('')}
+          <div id="gachaResult" class="gacha-result">等待抽取结果。</div>
+        </div>
+      </div>`;
+    document.getElementById('gachaOnceBtn').onclick = () => this.rollGacha(1);
+    document.getElementById('gachaTenBtn').onclick = () => this.rollGacha(10);
+    this.body.querySelectorAll('[data-craft]').forEach(btn => btn.onclick = () => this.craftFragment(btn.dataset.craft));
+  }
+
+  renderPredict() {
+    this.body.innerHTML = `
+      <div class="growth-grid">
+        <div class="season-card"><h4>战局预测币</h4><p>观战好友对局时可用少量赛季券预测“哪队先拆床”。猜对返还双倍，单次返还上限1000赛季券。</p></div>
+        <div class="season-card"><h4>娱乐限制</h4><p>纯社区娱乐，不涉及现金提现，不影响战斗数值。</p></div>
+      </div>
+      <div class="predict-box">
+        <input id="predictStake" type="number" min="10" max="500" value="50">
+        <select id="predictTeam">
+          <option value="RED">红队先拆床</option><option value="BLUE">蓝队先拆床</option>
+          <option value="GREEN">绿队先拆床</option><option value="YELLOW">黄队先拆床</option>
+        </select>
+        <button class="pass-gold" id="predictBtn">消耗赛季券预测</button>
+        <p>已猜中次数：${this.state.predictionWins || 0}</p>
+      </div>`;
+    document.getElementById('predictBtn').onclick = () => this.makePrediction();
   }
 
   renderTasks() {
@@ -227,6 +357,12 @@ class SeasonPassSystem {
         coupons += this.extractCoupons(this.rewardFor(i, 'paid'));
         const reward = this.rewardFor(i, 'paid');
         if (reward.includes('皮肤') || reward.includes('头像框') || reward.includes('播报') || reward.includes('特效')) this.state.cosmetics.push(reward);
+        if (i === 70 && !this.state.ownedCosmetics.includes('frost_path_fx')) this.state.ownedCosmetics.push('frost_path_fx');
+        if (i === 100) {
+          ['void_team_set','void_warrior','void_assassin','void_chanter'].forEach(id => {
+            if (!this.state.ownedCosmetics.includes(id)) this.state.ownedCosmetics.push(id);
+          });
+        }
         count++;
       }
     }
@@ -239,6 +375,127 @@ class SeasonPassSystem {
   extractCoupons(text) {
     const m = String(text).match(/(\d+)赛季券/);
     return m ? parseInt(m[1], 10) : 0;
+  }
+
+  canUnlockFreeCosmetic(item) {
+    if (item.id === 'void_team_set') return this.level() >= 100 && this.hasPaid();
+    if (item.id === 'void_warrior' || item.id === 'void_assassin' || item.id === 'void_chanter') return this.level() >= 100 && this.hasPaid();
+    return false;
+  }
+
+  currentPreviewClass() {
+    const equipped = Object.values(this.state.equippedCosmetics || {}).find(Boolean);
+    return PASS_COSMETICS.find(x => x.id === equipped)?.previewClass || 'skin-basic';
+  }
+
+  previewCosmetic(id) {
+    const item = PASS_COSMETICS.find(x => x.id === id);
+    if (!item) return;
+    const hero = document.getElementById('cosmeticPreviewHero');
+    const text = document.getElementById('cosmeticPreviewText');
+    if (hero) hero.className = `preview-character ${item.previewClass}`;
+    if (text) text.textContent = `${item.name}：${item.desc}`;
+    this.applyLobbyPreview(item.previewClass);
+  }
+
+  buyCosmetic(id) {
+    const item = PASS_COSMETICS.find(x => x.id === id);
+    if (!item) return;
+    if (this.state.ownedCosmetics.includes(id)) return alert('已拥有该外观');
+    if (this.state.coupons < item.price) return alert('赛季券不足');
+    this.state.coupons -= item.price;
+    this.state.ownedCosmetics.push(id);
+    this.saveState();
+    this.renderCosmetics();
+    alert(`已购买：${item.name}`);
+  }
+
+  equipCosmetic(id) {
+    const item = PASS_COSMETICS.find(x => x.id === id);
+    if (!item) return;
+    if (!this.state.ownedCosmetics.includes(id) && !this.canUnlockFreeCosmetic(item)) return alert('尚未拥有该外观');
+    if (!this.state.ownedCosmetics.includes(id)) this.state.ownedCosmetics.push(id);
+    this.state.equippedCosmetics[item.type] = id;
+    this.saveState();
+    this.applyLobbyPreview(item.previewClass);
+    this.renderCosmetics();
+    alert(`已装备：${item.name}`);
+  }
+
+  applyLobbyPreview(cls = this.currentPreviewClass()) {
+    const hero = document.querySelector('.lobby-character');
+    if (!hero) return;
+    hero.className = `lobby-character ${cls}`;
+  }
+
+  rollGacha(times = 1) {
+    const cost = times * 50;
+    if (this.state.coupons < cost) return alert('赛季券不足');
+    this.state.coupons -= cost;
+    const results = [];
+    for (let i = 0; i < times; i++) {
+      this.state.gachaPity = (this.state.gachaPity || 0) + 1;
+      let reward = this.pickGachaReward();
+      if (this.state.gachaPity >= 30) {
+        reward = { id: 'rare_guarantee_skin', name: '未拥有稀有外观：圆规', rarity: '保底', cosmeticId: 'compass_sword' };
+        this.state.gachaPity = 0;
+      }
+      this.applyGachaReward(reward);
+      results.push(`${reward.rarity}｜${reward.name}`);
+    }
+    this.saveState();
+    this.renderGacha();
+    const el = document.getElementById('gachaResult');
+    if (el) el.innerHTML = results.map(r => `<div>${r}</div>`).join('');
+  }
+
+  pickGachaReward() {
+    const total = GACHA_POOL.reduce((s, x) => s + x.weight, 0);
+    let roll = Math.random() * total;
+    for (const item of GACHA_POOL) {
+      roll -= item.weight;
+      if (roll <= 0) return { ...item };
+    }
+    return { ...GACHA_POOL[0] };
+  }
+
+  applyGachaReward(reward) {
+    if (reward.fragmentOf) {
+      this.state.fragments[reward.fragmentOf] = (this.state.fragments[reward.fragmentOf] || 0) + 1;
+    }
+    if (reward.cosmeticId && !this.state.ownedCosmetics.includes(reward.cosmeticId)) {
+      this.state.ownedCosmetics.push(reward.cosmeticId);
+    }
+    if (reward.trialOf) {
+      this.state.fragments[reward.trialOf] = (this.state.fragments[reward.trialOf] || 0) + 3;
+    }
+  }
+
+  craftFragment(id) {
+    if ((this.state.fragments[id] || 0) < 10) return;
+    this.state.fragments[id] -= 10;
+    if (!this.state.ownedCosmetics.includes(id)) this.state.ownedCosmetics.push(id);
+    this.saveState();
+    this.renderGacha();
+    alert(`已合成：${PASS_COSMETICS.find(x => x.id === id)?.name || id}`);
+  }
+
+  makePrediction() {
+    const stake = Math.max(10, Math.min(500, parseInt(document.getElementById('predictStake').value || '50', 10)));
+    const team = document.getElementById('predictTeam').value;
+    if (this.state.coupons < stake) return alert('赛季券不足');
+    this.state.coupons -= stake;
+    const win = Math.random() < 0.48;
+    if (win) {
+      const reward = Math.min(1000, stake * 2);
+      this.state.coupons += reward;
+      this.state.predictionWins = (this.state.predictionWins || 0) + 1;
+      alert(`${team} 预测成功，返还 ${reward} 赛季券！`);
+    } else {
+      alert('预测失败，赛季券已消耗。');
+    }
+    this.saveState();
+    this.renderPredict();
   }
 
   previewReward(level) {
