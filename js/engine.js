@@ -1988,7 +1988,11 @@ class PlayerEntity {
 
     if (killer) {
       killer.matchStats.kills++;
-      window.game?.growth?.addXp?.(killer, GROWTH_CONFIG.xp.kill, '击杀');
+      // 反作弊：AI击杀不计排位段位，AI被杀时击杀者经验减半
+      if (!killer.isAI) {
+        const xpAmount = this.isAI ? GROWTH_CONFIG.xp.kill * AI_CONFIG.XP_REDUCTION : GROWTH_CONFIG.xp.kill;
+        window.game?.growth?.addXp?.(killer, xpAmount, '击杀');
+      }
       if (killer.killHeal) killer.hp = Math.min(killer.maxHp, killer.hp + killer.killHeal);
       if (killer.killResetSkill) killer.skillCd = 0;
       if (killer.killArrowRefund) killer.arrowCount += killer.killArrowRefund;

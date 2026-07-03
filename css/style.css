@@ -774,6 +774,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 .skin-starlight .hero-glow, .skin-starlight .preview-glow { background: radial-gradient(circle,rgba(139,233,253,.48),transparent 66%); }
 .skin-frost .hero-body, .skin-frost .preview-body { background: linear-gradient(160deg,#dff9ff,#277dff); }
 .skin-flower .hero-glow, .skin-flower .preview-glow { background: radial-gradient(circle,rgba(255,120,200,.38),transparent 66%); }
+.skin-dragon .cosmetic-preview, .skin-dragon .preview-bed { background: linear-gradient(135deg,#8b0000,#1a0000); box-shadow: 0 0 30px rgba(255,60,0,.35), inset 0 -20px 40px rgba(139,0,0,.3); }
+.skin-dragon .preview-bed::before { content:'🐉'; font-size:48px; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); filter:drop-shadow(0 0 12px #ff3c00); }
+.skin-space .cosmetic-preview, .skin-space .preview-bed { background: linear-gradient(180deg,#e0e8ff,#0a0a2e); box-shadow: 0 0 25px rgba(100,180,255,.3); }
+.skin-space .preview-bed::before { content:'🛸'; font-size:40px; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); }
+.skin-candy .cosmetic-preview, .skin-candy .preview-bed { background: linear-gradient(135deg,#ff69b4,#ffe4b5,#87ceeb); box-shadow: 0 0 20px rgba(255,105,180,.3); }
+.skin-candy .preview-bed::before { content:'🍬'; font-size:44px; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); }
+.skin-basic .cosmetic-preview { background: radial-gradient(circle,rgba(255,255,255,.1),rgba(0,0,0,.15)); }
 @keyframes voidPulse { 0%,100% { opacity:.3; transform:scale(.9); } 50% { opacity:.75; transform:scale(1.1); } }
 .gacha-panel { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 .gacha-machine, .gacha-fragments, .predict-box {

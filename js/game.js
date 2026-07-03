@@ -858,26 +858,29 @@ class Game {
     this.growth?.applyOutGameTalents(this.localPlayer);
     this.players.push(this.localPlayer);
 
-    // Create bots
+    // Create AI bots (max 4, controlled by AIController)
+    AIManager.removeAll();
     const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India','Juliet','Kilo','Lima'];
     let nameIdx = 0;
     const roles = Object.keys(ROLES);
     for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-      const count = tkey === teamKey ? 2 : 3; // local team 2 bots, others 3
+      const count = tkey === teamKey ? 1 : 1; // 每队1个AI，总数不超过4
       for (let i = 0; i < count; i++) {
+        if (AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
         const role = roles[Math.floor(Math.random() * roles.length)];
-        const botId = 'bot-' + Math.random().toString(36).slice(2, 10);
-        const bot = new PlayerEntity(this.engine, tkey, role, false, botNames[nameIdx++] || 'Bot', botId);
-        bot.aiState = 'collect';
-        // Give starter
-        bot.addToBackpack('wood_sword', 1);
-        bot.equip('wood_sword');
-        bot.addToBackpack('wood_plank', 32);
-        // Slight spawn offset
-        bot.pos.x += (Math.random() - 0.5) * 4;
-        bot.pos.z += (Math.random() - 0.5) * 4;
-        this.players.push(bot);
+        const name = botNames[nameIdx++] || 'Bot';
+        const result = AIManager.createAI(this.engine, this, tkey, name, role);
+        if (result) {
+          result.entity.addToBackpack('wood_sword', 1);
+          result.entity.equip('wood_sword');
+          result.entity.addToBackpack('wood_plank', 32);
+          result.entity.addToBackpack('potion', 1);
+          result.entity.pos.x += (Math.random() - 0.5) * 4;
+          result.entity.pos.z += (Math.random() - 0.5) * 4;
+          this.players.push(result.entity);
+        }
       }
+      if (AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
     }
 
     // UI
@@ -1086,10 +1089,8 @@ class Game {
       }
     }
 
-    // AI
-    for (const p of this.players) {
-      if (!p.isLocal) this.ai.update(p, dt);
-    }
+    // AI Controller update (三层架构：战略+战术+执行)
+    AIManager.updateAll(dt, this.gameTime);
 
     // Engine update
     this.social?.update?.(dt);
@@ -1307,6 +1308,9 @@ class Game {
     stats.innerHTML = '';
     const growthResult = this.growth?.settlement?.(winnerName);
     const passResult = window.seasonPass?.addMatchSettlement?.(lp?.matchStats || {}, winnerName === lp?.teamInfo?.name, false);
+    // 反作弊：AI对局经验减半
+    const aiKillRatio = Math.min(1, (lp?.matchStats?.kills || 0) / Math.max(1, this.players.length - 1));
+    const xpMult = 1 - aiKillRatio * (1 - AI_CONFIG.XP_REDUCTION);
     const rows = [
       ['存活时间', `${Math.floor(this.gameTime / 60)}分${Math.floor(this.gameTime % 60)}秒`],
       ['最终生命', `${Math.ceil(lp?.hp || 0)}/${lp?.maxHp || 0}`],
