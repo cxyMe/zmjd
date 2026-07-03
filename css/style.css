@@ -468,7 +468,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 #layoutBtn {
   position: absolute; bottom: 132px; left: 16px; width: 56px; height: 42px;
   border-radius: 14px; background: rgba(139,233,253,0.18); border: 2px solid #8be9fd;
-  color: #8be9fd; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+  color: #8be9fd; font-size: 13px; font-weight: bold; display: none; align-items: center; justify-content: center;
   cursor: pointer;
 }
 #socialBtn:active, #layoutBtn:active { transform: scale(0.95); }

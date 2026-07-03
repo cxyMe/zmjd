@@ -83,9 +83,9 @@ const ITEM_DB = {
   potion:       { name: '生命药水',type:'special',cost: { gold: 4 },          desc: '恢复全部生命', stack: 8 },
   revival_gold: { name: '复活金牌',type:'special',cost: { gold: 10 },        desc: '抵挡一次致命伤害，抵挡后自动销毁', stack: 1 },
   teleport_coin:{ name: '传送硬币',type:'special',cost: { gold: 7 },        desc: '投掷后按住越久传送越远，最大20格，命中虚空不传送', stack: 4 },
-  cd_potion:    { name: '冷却药水',type:'special',cost: { copper: 3 },       desc: '立即减少5秒主动技能冷却', stack: 8 },
-  speed_potion: { name: '极速药水',type:'special',cost: { copper: 3 },       desc: '移动速度增加25%，持续3秒', stack: 8 },
-  burst_potion: { name: '爆发药水',type:'special',cost: { copper: 4 },       desc: '造成伤害增加45%，持续3秒', stack: 8 }
+  cd_potion:    { name: '冷却药水',type:'special',cost: { gold: 3 },         desc: '立即减少5秒主动技能冷却', stack: 8 },
+  speed_potion: { name: '极速药水',type:'special',cost: { gold: 3 },         desc: '移动速度增加25%，持续3秒', stack: 8 },
+  burst_potion: { name: '爆发药水',type:'special',cost: { gold: 4 },         desc: '造成伤害增加45%，持续3秒', stack: 8 }
 };
 
 // ============================================
@@ -1841,7 +1841,7 @@ class PlayerEntity {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
-    moveDir.addScaledVector(forward, -dz);
+    moveDir.addScaledVector(forward, dz);
     moveDir.addScaledVector(right, dx);
     this.vel.x = moveDir.x * spd;
     this.vel.z = moveDir.z * spd;
@@ -2326,7 +2326,7 @@ class PlayerEntity {
   findSafeRespawnPosition() {
     const base = this.teamInfo.bedPos?.clone?.() || this.teamInfo.spawn.clone();
     const candidates = [];
-    for (let r = 1; r <= 5; r++) {
+    for (let r = 1; r <= 8; r++) {
       for (let dx = -r; dx <= r; dx++) {
         for (let dz = -r; dz <= r; dz++) {
           if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
@@ -2337,12 +2337,17 @@ class PlayerEntity {
     candidates.unshift(this.teamInfo.spawn.clone());
     for (const c of candidates) {
       const ground = this.getGroundHeight(c.x, c.z);
+      if (ground < -10) continue;
       const pos = new THREE.Vector3(c.x, Math.max(ground + this.radius + 0.05, 0.8), c.z);
       const feet = this.engine.getBlockKey(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
       const head = this.engine.getBlockKey(Math.floor(pos.x), Math.floor(pos.y + 1), Math.floor(pos.z));
+      const below = this.engine.getBlockKey(Math.floor(pos.x), Math.floor(pos.y - this.radius - 0.1), Math.floor(pos.z));
+      if (!this.engine.blocks.has(below)) continue;
       if (!this.engine.blocks.has(feet) && !this.engine.blocks.has(head)) return pos;
     }
-    return this.teamInfo.spawn.clone().add(new THREE.Vector3(0, 3, 0));
+    const spawnGround = this.getGroundHeight(this.teamInfo.spawn.x, this.teamInfo.spawn.z);
+    if (spawnGround > -10) return new THREE.Vector3(this.teamInfo.spawn.x, spawnGround + this.radius + 0.05, this.teamInfo.spawn.z);
+    return this.teamInfo.spawn.clone().add(new THREE.Vector3(0, 6, 0));
   }
 
   // 兼容旧 addItem 接口

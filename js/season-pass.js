@@ -150,6 +150,12 @@ class SeasonPassSystem {
     return this.state.tier === 'advanced' || this.state.tier === 'premium';
   }
 
+  requireLogin(action = '领取奖励') {
+    if (window.lobbyAuth?.user) return true;
+    alert(`请先登录，未登录无法${action}。`);
+    return false;
+  }
+
   open(tab = this.tab) {
     this.tab = tab;
     if (this.panel) this.panel.style.display = 'flex';
@@ -344,6 +350,7 @@ class SeasonPassSystem {
   }
 
   claimAll() {
+    if (!this.requireLogin('领取奖励')) return;
     const lv = this.level();
     let coupons = 0, count = 0;
     for (let i = 1; i <= lv; i++) {
@@ -399,6 +406,7 @@ class SeasonPassSystem {
   }
 
   buyCosmetic(id) {
+    if (!this.requireLogin('购买外观')) return;
     const item = PASS_COSMETICS.find(x => x.id === id);
     if (!item) return;
     if (this.state.ownedCosmetics.includes(id)) return alert('已拥有该外观');
@@ -411,6 +419,7 @@ class SeasonPassSystem {
   }
 
   equipCosmetic(id) {
+    if (!this.requireLogin('装备外观')) return;
     const item = PASS_COSMETICS.find(x => x.id === id);
     if (!item) return;
     if (!this.state.ownedCosmetics.includes(id) && !this.canUnlockFreeCosmetic(item)) return alert('尚未拥有该外观');
@@ -429,6 +438,7 @@ class SeasonPassSystem {
   }
 
   rollGacha(times = 1) {
+    if (!this.requireLogin('抽取奖励')) return;
     const cost = times * 50;
     if (this.state.coupons < cost) return alert('赛季券不足');
     this.state.coupons -= cost;
@@ -472,6 +482,7 @@ class SeasonPassSystem {
   }
 
   craftFragment(id) {
+    if (!this.requireLogin('合成奖励')) return;
     if ((this.state.fragments[id] || 0) < 10) return;
     this.state.fragments[id] -= 10;
     if (!this.state.ownedCosmetics.includes(id)) this.state.ownedCosmetics.push(id);
@@ -481,6 +492,7 @@ class SeasonPassSystem {
   }
 
   makePrediction() {
+    if (!this.requireLogin('参与预测')) return;
     const stake = Math.max(10, Math.min(500, parseInt(document.getElementById('predictStake').value || '50', 10)));
     const team = document.getElementById('predictTeam').value;
     if (this.state.coupons < stake) return alert('赛季券不足');
@@ -504,6 +516,7 @@ class SeasonPassSystem {
   }
 
   openPay(tier = 'advanced') {
+    if (!this.requireLogin('购买通行证')) return;
     this.buyTier = tier;
     const panel = document.getElementById('passPayPanel');
     const img = document.getElementById('payQrImage');
@@ -526,6 +539,7 @@ class SeasonPassSystem {
   }
 
   async submitPaidOrder() {
+    if (!this.requireLogin('提交付费申请')) return;
     const tier = this.buyTier;
     const contact = document.getElementById('payContactInput').value.trim();
     const order = {

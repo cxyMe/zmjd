@@ -147,11 +147,11 @@ class InputManager {
 
   getMovement() {
     if (this.isMobile() && this.joystick.active) {
-      return { x: this.joystick.dx, z: this.joystick.dy };
+      return { x: this.joystick.dx, z: -this.joystick.dy };
     }
     let x = 0, z = 0;
-    if (this.keys['KeyW'] || this.keys['ArrowUp']) z -= 1;
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) z += 1;
+    if (this.keys['KeyW'] || this.keys['ArrowUp']) z += 1;
+    if (this.keys['KeyS'] || this.keys['ArrowDown']) z -= 1;
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) x -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) x += 1;
     return { x, z };
