@@ -18,6 +18,29 @@
     <p>为了保证操作视野、快捷栏和战斗按钮不遮挡，请将手机旋转为横屏模式。</p>
   </div>
 </div>
+<script>
+function updateOrientationGate() {
+  const gate = document.getElementById('orientationGate');
+  if (!gate) return;
+  const vv = window.visualViewport;
+  const width = vv?.width || window.innerWidth || document.documentElement.clientWidth || 0;
+  const height = vv?.height || window.innerHeight || document.documentElement.clientHeight || 0;
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || navigator.maxTouchPoints > 0;
+  const screenAngle = window.screen?.orientation?.angle;
+  const legacyAngle = typeof window.orientation === 'number' ? window.orientation : null;
+  const angle = typeof screenAngle === 'number' ? screenAngle : legacyAngle;
+  const angleLandscape = Math.abs(angle || 0) === 90;
+  const viewportLandscape = width >= height;
+  const smallTouchDevice = coarsePointer && Math.min(width, height) <= 900;
+  const shouldShow = smallTouchDevice && !viewportLandscape && !angleLandscape;
+  gate.classList.toggle('show', shouldShow);
+}
+window.addEventListener('resize', updateOrientationGate);
+window.addEventListener('orientationchange', () => setTimeout(updateOrientationGate, 120));
+window.visualViewport?.addEventListener?.('resize', updateOrientationGate);
+document.addEventListener('DOMContentLoaded', updateOrientationGate);
+updateOrientationGate();
+</script>
 
 <!-- ========== Loading Screen ========== -->
 <div id="loadingScreen">
