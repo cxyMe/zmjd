@@ -136,6 +136,7 @@ class AdminSystem {
       case 'matches': break;
       case 'economy': await this.loadEconomyPage(); break;
       case 'balance': await this.loadBalancePage(); break;
+      case 'pass': await this.loadPassPage(); break;
       case 'cheat': await this.loadCheatPage(); break;
       case 'audit': await this.loadAuditPage(); break;
       case 'admins': await this.loadAdminsPage(); break;
@@ -251,6 +252,62 @@ class AdminSystem {
        <input type="text" id="banItemInput" placeholder="输入要禁用的道具key">`;
   }
 
+  async loadPassPage() {
+    this.renderPayQrAlbum();
+    const rewardCfg = JSON.parse(localStorage.getItem('bedwars_pass_reward_config') || 'null') || {
+      maxLevel: 100,
+      freeCouponsMax: 1000,
+      paidCouponsApprox: 2400,
+      keyRewards: {
+        1: ['50赛季券', '暗影刺客·初阶 + 专属入场姿势'],
+        100: ['300赛季券', '虚空霸主·全队套装']
+      }
+    };
+    const taskCfg = JSON.parse(localStorage.getItem('bedwars_pass_task_config') || 'null') || {
+      daily: ['参与1局对局', '收集50个资源', '放置20个方块'],
+      weekly: ['全队累计造成5000伤害', '全队累计拆掉2张床', '全队累计收集500银币'],
+      season: ['累计拆床50次', '使用刺客角色获胜30局']
+    };
+    document.getElementById('passRewardConfig').value = JSON.stringify(rewardCfg, null, 2);
+    document.getElementById('passTaskConfig').value = JSON.stringify(taskCfg, null, 2);
+    await this.loadPassOrders();
+  }
+
+  async loadPassOrders() {
+    let orders = [];
+    try {
+      const { data } = await this.client.from('season_pass_orders').select('*').order('created_at', { ascending: false }).limit(100);
+      orders = data || [];
+    } catch (e) {
+      orders = JSON.parse(localStorage.getItem('bedwars_pass_admin_orders') || '[]');
+    }
+    document.getElementById('passOrdersBody').innerHTML = (orders || []).map(o => `
+      <tr>
+        <td>${o.order_id || o.id || '-'}</td>
+        <td>${o.user_contact || o.contact || '-'}</td>
+        <td>${o.pass_tier || o.tier || '-'}</td>
+        <td>${o.amount || o.price || '-'}</td>
+        <td>${o.status || 'pending'}</td>
+        <td>${o.created_at ? new Date(o.created_at).toLocaleString() : '-'}</td>
+        <td>
+          <button class="btn-primary" onclick="admin.reviewPassOrder('${o.order_id || o.id}', 'approved')">通过</button>
+          <button class="btn-danger" onclick="admin.reviewPassOrder('${o.order_id || o.id}', 'rejected')">拒绝</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  renderPayQrAlbum() {
+    const album = JSON.parse(localStorage.getItem('bedwars_pay_album') || '[]');
+    const el = document.getElementById('payQrAlbum');
+    if (!el) return;
+    el.innerHTML = album.map((q, i) => `
+      <div class="qr-card">
+        <img src="${q.url}" alt="${q.name}">
+        <div>${q.name}</div>
+        <button class="btn-danger" onclick="admin.deletePayQr(${i})">删除</button>
+      </div>`).join('') || '<div style="color:#888;font-size:12px">暂无收款码</div>';
+  }
+
   async loadCheatPage() {
     if (!this.client) return;
     const { data: alerts } = await this.client.from('cheat_alerts').select('*').eq('is_resolved', false).order('created_at', { ascending: false }).limit(50);
@@ -300,6 +357,9 @@ class AdminSystem {
     document.getElementById('saveBannedItemsBtn')?.addEventListener('click', () => this.saveBannedItems());
     document.getElementById('addAdminBtn')?.addEventListener('click', () => this.addAdmin());
     document.getElementById('sendGiftBtn')?.addEventListener('click', () => this.sendGift());
+    document.getElementById('savePayQrBtn')?.addEventListener('click', () => this.savePayQr());
+    document.getElementById('savePassRewardBtn')?.addEventListener('click', () => this.savePassRewardConfig());
+    document.getElementById('savePassTaskBtn')?.addEventListener('click', () => this.savePassTaskConfig());
 
     document.querySelectorAll('#penaltyBtns button').forEach(btn => {
       btn.addEventListener('click', () => this.applyPenalty(btn.dataset.type));
@@ -418,6 +478,81 @@ class AdminSystem {
     const count = parseInt(document.getElementById('giftCount').value) || 1;
     if (!pid) return alert('请输入玩家ID');
     await this.broadcastCommand('send_gift', { player: pid, item, count });
+  }
+
+  async savePayQr() {
+    if (!this.guard(4)) return;
+    const file = document.getElementById('payQrUpload').files?.[0];
+    if (!file) return alert('请选择收款码图片');
+    const name = document.getElementById('payQrName').value.trim() || file.name;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const album = JSON.parse(localStorage.getItem('bedwars_pay_album') || '[]');
+      album.unshift({ name, url: reader.result, created_at: new Date().toISOString() });
+      localStorage.setItem('bedwars_pay_album', JSON.stringify(album.slice(0, 8)));
+      localStorage.setItem('bedwars_pay_qr', reader.result);
+      await this.logAudit('upload_pay_qr', 'season_pass', 'pay_qr', null, { name });
+      this.renderPayQrAlbum();
+      alert('收款码已上传');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async deletePayQr(index) {
+    if (!this.guard(4)) return;
+    const album = JSON.parse(localStorage.getItem('bedwars_pay_album') || '[]');
+    album.splice(index, 1);
+    localStorage.setItem('bedwars_pay_album', JSON.stringify(album));
+    localStorage.setItem('bedwars_pay_qr', album[0]?.url || '');
+    await this.logAudit('delete_pay_qr', 'season_pass', 'pay_qr', null, { index });
+    this.renderPayQrAlbum();
+  }
+
+  async savePassRewardConfig() {
+    if (!this.guard(3)) return;
+    const cfg = JSON.parse(document.getElementById('passRewardConfig').value);
+    localStorage.setItem('bedwars_pass_reward_config', JSON.stringify(cfg));
+    try {
+      await this.client.from('game_config').upsert({ config_key: 'season_pass_rewards', config_value: cfg, updated_by: this.user.id });
+    } catch (e) {}
+    await this.logAudit('update_pass_rewards', 'config', 'season_pass_rewards', null, cfg);
+    alert('手册奖励配置已保存');
+  }
+
+  async savePassTaskConfig() {
+    if (!this.guard(3)) return;
+    const cfg = JSON.parse(document.getElementById('passTaskConfig').value);
+    localStorage.setItem('bedwars_pass_task_config', JSON.stringify(cfg));
+    try {
+      await this.client.from('game_config').upsert({ config_key: 'season_pass_tasks', config_value: cfg, updated_by: this.user.id });
+    } catch (e) {}
+    await this.logAudit('update_pass_tasks', 'config', 'season_pass_tasks', null, cfg);
+    alert('手册任务配置已保存');
+  }
+
+  async reviewPassOrder(orderId, status) {
+    if (!this.guard(4)) return;
+    try {
+      await this.client.from('season_pass_orders').update({
+        status,
+        reviewed_by: this.user.id,
+        reviewed_at: new Date().toISOString()
+      }).eq('order_id', orderId);
+    } catch (e) {
+      const orders = JSON.parse(localStorage.getItem('bedwars_pass_admin_orders') || '[]');
+      const order = orders.find(o => (o.order_id || o.id) === orderId);
+      if (order) order.status = status;
+      localStorage.setItem('bedwars_pass_admin_orders', JSON.stringify(orders));
+      if (status === 'approved' && order) {
+        const pass = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{}');
+        pass.tier = order.pass_tier || order.tier || 'advanced';
+        if (pass.tier === 'premium') pass.xp = Math.max(pass.xp || 0, 24000);
+        localStorage.setItem('bedwars_season_pass', JSON.stringify(pass));
+      }
+    }
+    await this.logAudit('review_pass_order_' + status, 'season_pass_order', orderId, null, { status });
+    alert(status === 'approved' ? '已审核通过' : '已拒绝');
+    this.loadPassOrders();
   }
 
   async addAdmin() {

@@ -50,6 +50,7 @@ const ITEM_DB = {
   stone_plate:  { name: '石板',  type: 'block',  cost: { silver: 8 },        hp: 60,  desc: '中级建筑材料', stack: 64 },
   iron_plate:   { name: '铁板',  type: 'block',  cost: { gold: 4 },          hp: 120, desc: '高级建筑材料', stack: 64 },
   titanium:     { name: '钛板',  type: 'block',  cost: { jade: 2 },          hp: 300, desc: '顶级建筑材料', stack: 64 },
+  blast_glass:  { name: '防爆玻璃',type:'block', cost: { gold: 2 },          hp: 1,   desc: '阻挡一次爆炸，遇爆即碎，不可徒手拆毁', stack: 64, blastOnly: true, handImmune: true },
   wood_sword:   { name: '木剑',  type: 'weapon', cost: { silver: 4 },        dmg: 4,  desc: '基础近战武器', stack: 1 },
   stone_sword:  { name: '石剑',  type: 'weapon', cost: { silver: 8 },        dmg: 8,  desc: '中级近战武器', stack: 1 },
   iron_sword:   { name: '铁剑',  type: 'weapon', cost: { gold: 4 },          dmg: 12, desc: '高级近战武器', stack: 1 },
@@ -161,8 +162,9 @@ class Engine {
     else if (typeKey === 'stone_plate') color = 0x808080;
     else if (typeKey === 'iron_plate') color = 0xaaaaaa;
     else if (typeKey === 'titanium') color = 0x66aaff;
+    else if (typeKey === 'blast_glass') color = 0x9eefff;
 
-    const mat = new THREE.MeshLambertMaterial({ color });
+    const mat = new THREE.MeshLambertMaterial({ color, transparent: typeKey === 'blast_glass', opacity: typeKey === 'blast_glass' ? 0.48 : 1 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(Math.floor(x) + 0.5, Math.floor(y) + 0.5, Math.floor(z) + 0.5);
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -194,6 +196,18 @@ class Engine {
     const ratio = blk.hp / blk.maxHp;
     blk.mesh.material.color.setHex(ratio > 0.5 ? 0xcccccc : 0xff6666);
     return false;
+  }
+
+  handDamageBlock(x, y, z, dmg = 1) {
+    const key = this.getBlockKey(x, y, z);
+    const blk = this.blocks.get(key);
+    if (!blk) return false;
+    const info = ITEM_DB[blk.type];
+    if (info?.handImmune) {
+      window.game?.showMessage?.(`${info.name} 不可徒手拆毁`, '#8be9fd');
+      return false;
+    }
+    return this.damageBlock(x, y, z, dmg);
   }
 
   spawnParticles(pos, color, count) {
@@ -588,7 +602,10 @@ class Engine {
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dz = -1; dz <= 1; dz++) {
-          this.damageBlock(rx + dx, ry + dy, rz + dz, dmg);
+          const key = this.getBlockKey(rx + dx, ry + dy, rz + dz);
+          const blk = this.blocks.get(key);
+          if (blk?.type === 'blast_glass') this.damageBlock(rx + dx, ry + dy, rz + dz, 999);
+          else this.damageBlock(rx + dx, ry + dy, rz + dz, dmg);
         }
       }
     }
@@ -1174,6 +1191,8 @@ class PlayerEntity {
     this.matchXp = 0;
     this.awakenings = {};
     this.matchStats = { kills: 0, beds: 0, damage: 0, blocksPlaced: 0, resourceContribution: 0 };
+    this.handBreakTimer = 0;
+    this.handBreakKey = null;
     this.skillCdBonus = 0;
     this.voidGrace = 0;
     this.voidGraceTimer = 0;
@@ -1751,6 +1770,43 @@ class PlayerEntity {
           window.game?.onBedDestroyed(tkey, this);
         }
       }
+    }
+  }
+
+  updateHandBreak(dt, pointer = null) {
+    if (this.isDead || this.isFrozen || this.rootTimer > 0) return;
+    const rc = pointer
+      ? this.engine.raycastPlacement(pointer.x, pointer.y, 5.5)
+      : this.engine.raycastBlocks(this.pos.clone().add(new THREE.Vector3(0, 0.7, 0)), this.getForwardDir(), 5.5);
+    if (!rc.hit) {
+      this.handBreakTimer = 0;
+      this.handBreakKey = null;
+      return;
+    }
+    const key = rc.key || rc.baseKey || this.engine.getBlockKey(rc.x, rc.y, rc.z);
+    const blk = this.engine.blocks.get(key);
+    if (!blk || blk.type === 'ground') {
+      this.handBreakTimer = 0;
+      this.handBreakKey = null;
+      return;
+    }
+    if (ITEM_DB[blk.type]?.handImmune) {
+      this.handBreakTimer = 0;
+      this.handBreakKey = key;
+      return;
+    }
+    if (this.handBreakKey !== key) {
+      this.handBreakKey = key;
+      this.handBreakTimer = 0;
+    }
+    this.handBreakTimer += dt;
+    if (this.handBreakTimer >= 0.5) {
+      this.handBreakTimer = 0;
+      const [x, y, z] = key.split(',').map(Number);
+      this.hp = Math.max(1, this.hp - 1);
+      this.engine.handDamageBlock(x, y, z, 1);
+      this.engine.spawnParticles(blk.mesh.position, 0xffffff, 2);
+      window.game?.showMessage?.('徒手拆毁：生命 -1，建筑耐久 -1', '#ffdd00');
     }
   }
 

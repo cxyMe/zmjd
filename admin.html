@@ -42,6 +42,7 @@
       <a href="#" class="nav-item" data-page="matches"><span class="icon">⚔️</span> 对局控制</a>
       <a href="#" class="nav-item" data-page="economy"><span class="icon">💰</span> 经济调参</a>
       <a href="#" class="nav-item" data-page="balance"><span class="icon">⚖️</span> 平衡沙盒</a>
+      <a href="#" class="nav-item" data-page="pass"><span class="icon">💎</span> 手册运营</a>
       <a href="#" class="nav-item" data-page="cheat"><span class="icon">🛡️</span> 反作弊审计</a>
       <a href="#" class="nav-item" data-page="audit"><span class="icon">📋</span> 操作日志</a>
       <a href="#" class="nav-item" data-page="admins" id="navAdmins" style="display:none"><span class="icon">🔐</span> 权限管理</a>
@@ -210,6 +211,37 @@
           <h3>黑白名单道具</h3>
           <div id="bannedItemsEditor"></div>
           <button class="btn-primary" id="saveBannedItemsBtn">保存道具名单</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 赛季手册运营 ====== -->
+    <section id="page-pass" class="page">
+      <h2>赛季手册运营中心 <span class="perm-note">(Lv.3+ 配置，Lv.4 审核)</span></h2>
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>收款码相册上传</h3>
+          <input type="file" id="payQrUpload" accept="image/*">
+          <input type="text" id="payQrName" placeholder="收款码名称，如 微信/支付宝" style="margin-top:6px">
+          <button class="btn-primary" id="savePayQrBtn">上传到后台相册</button>
+          <div id="payQrAlbum" class="qr-album"></div>
+        </div>
+        <div class="panel">
+          <h3>手册奖励配置 JSON</h3>
+          <textarea id="passRewardConfig" rows="12" placeholder="可配置奖励、等级、赛季券产出"></textarea>
+          <button class="btn-primary" id="savePassRewardBtn">保存奖励配置</button>
+        </div>
+        <div class="panel">
+          <h3>任务配置 JSON</h3>
+          <textarea id="passTaskConfig" rows="12" placeholder="可配置日常、周常、赛季挑战"></textarea>
+          <button class="btn-primary" id="savePassTaskBtn">保存任务配置</button>
+        </div>
+        <div class="panel wide">
+          <h3>支付审核</h3>
+          <table class="data-table">
+            <thead><tr><th>订单</th><th>联系方式</th><th>版本</th><th>金额</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody id="passOrdersBody"></tbody>
+          </table>
         </div>
       </div>
     </section>

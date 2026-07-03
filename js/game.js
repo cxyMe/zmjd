@@ -9,7 +9,7 @@ class InputManager {
     this.buildPointer = null;
     this.touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
     this.joystick = { active: false, dx: 0, dy: 0 };
-    this.buttons = { jump: false, attack: false, build: false, skill: false, action: false };
+    this.buttons = { jump: false, attack: false, attackHeld: false, build: false, skill: false, action: false, actionHeld: false };
 
     // Keyboard
     document.addEventListener('keydown', e => {
@@ -26,7 +26,7 @@ class InputManager {
       }
     });
     document.addEventListener('mousedown', e => {
-      if (e.button === 0) this.buttons.attack = true;
+      if (e.button === 0) { this.buttons.attack = true; this.buttons.attackHeld = true; }
       if (e.button === 2) {
         this.buttons.build = true;
         this.buildPointer = document.pointerLockElement
@@ -35,7 +35,7 @@ class InputManager {
       }
     });
     document.addEventListener('mouseup', e => {
-      if (e.button === 0) this.buttons.attack = false;
+      if (e.button === 0) { this.buttons.attack = false; this.buttons.attackHeld = false; }
       if (e.button === 2) this.buttons.build = false;
     });
     document.addEventListener('contextmenu', e => e.preventDefault());
@@ -136,8 +136,9 @@ class InputManager {
     const bindBtn = (id, key) => {
       const btn = document.getElementById(id);
       if (!btn) return;
-      btn.addEventListener('touchstart', e => { e.preventDefault(); this.buttons[key] = true; });
-      btn.addEventListener('touchend', e => { e.preventDefault(); this.buttons[key] = false; });
+      btn.addEventListener('touchstart', e => { e.preventDefault(); this.buttons[key] = true; if (key === 'action') this.buttons.actionHeld = true; });
+      btn.addEventListener('touchend', e => { e.preventDefault(); this.buttons[key] = false; if (key === 'action') this.buttons.actionHeld = false; });
+      btn.addEventListener('touchcancel', e => { e.preventDefault(); this.buttons[key] = false; if (key === 'action') this.buttons.actionHeld = false; });
     };
     bindBtn('jumpBtnMobile', 'jump');
     bindBtn('actionBtnMobile', 'action');
@@ -167,6 +168,8 @@ class InputManager {
   isDown(code) { return !!this.keys[code]; }
   consumeAttack() { const v = this.buttons.attack; this.buttons.attack = false; return v; }
   consumeAction() { const v = this.buttons.action; this.buttons.action = false; return v; }
+  isAttackHeld() { return !!this.buttons.attackHeld; }
+  isActionHeld() { return !!this.buttons.actionHeld; }
   consumeBuild() {
     const v = this.buttons.build;
     this.buttons.build = false;
@@ -676,7 +679,7 @@ class UIManager {
     if (!lp) return;
     body.innerHTML = '';
     const tabs = {
-      blocks: ['wood_plank','stone_plate','iron_plate','titanium'],
+      blocks: ['wood_plank','stone_plate','iron_plate','titanium','blast_glass'],
       weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow','armor_hammer','boomerang','frost_staff','javelin','smoke_launcher'],
       armor: ['std_armor','fine_armor','rd_armor'],
       specials: ['tnt','trap_device','bear_trap','sensor_mine','portal','potion']
@@ -1036,6 +1039,12 @@ class Game {
       if (this.input.consumeJump()) this.localPlayer.jump();
       if (this.input.consumeAction()) this.performMobileAction();
       if (this.input.consumeAttack()) this.localPlayer.attack();
+      const heldItem = this.localPlayer.getSelectedItem();
+      const heldInfo = heldItem ? ITEM_DB[heldItem.key] : null;
+      const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && !['trap_device','bear_trap','sensor_mine','tnt','portal','potion'].includes(heldItem?.key);
+      if (this.input.isAttackHeld() || canHandBreakByMobile) {
+        this.localPlayer.updateHandBreak(dt, { x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      }
       const buildPointer = this.input.consumeBuild();
       if (buildPointer) {
         const selectedItem = this.localPlayer.getSelectedItem();
@@ -1297,6 +1306,7 @@ class Game {
     const stats = screen.querySelector('.stats');
     stats.innerHTML = '';
     const growthResult = this.growth?.settlement?.(winnerName);
+    const passResult = window.seasonPass?.addMatchSettlement?.(lp?.matchStats || {}, winnerName === lp?.teamInfo?.name, false);
     const rows = [
       ['存活时间', `${Math.floor(this.gameTime / 60)}分${Math.floor(this.gameTime % 60)}秒`],
       ['最终生命', `${Math.ceil(lp?.hp || 0)}/${lp?.maxHp || 0}`],
@@ -1305,7 +1315,9 @@ class Game {
       ['持有资源', `铜:${Math.floor(lp?.inv.copper||0)} 银:${Math.floor(lp?.inv.silver||0)} 金:${Math.floor(lp?.inv.gold||0)}`],
       ['筑梦星尘', `+${growthResult?.stardust || 0}`],
       ['排位变化', `${growthResult?.rankDelta >= 0 ? '+' : ''}${growthResult?.rankDelta || 0}（${growthResult?.rankName || '沉睡梦游者'}）`],
-      ['赛季积分', `${growthResult?.seasonXp || 0}`]
+      ['赛季积分', `${growthResult?.seasonXp || 0}`],
+      ['手册经验', `+${passResult?.xp || 0}${passResult?.capped ? '（对局经验周上限）' : ''}`],
+      ['赛季券', `+${passResult?.coupons || 0}`]
     ];
     for (const [label, val] of rows) {
       const row = document.createElement('div');

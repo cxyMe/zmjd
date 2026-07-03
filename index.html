@@ -43,6 +43,7 @@
         <p>收集资源、搭路攻防、摧毁敌方床并淘汰所有对手。</p>
       </div>
       <div class="lobby-quick-row">
+        <button class="pass-crystal-btn" id="seasonPassBtn"><span>通行证</span><small id="passCrystalText">Lv.1 · 0%</small></button>
         <button class="menu-feature-btn" id="menuSeasonBtn">赛季</button>
         <button class="menu-feature-btn" id="menuTasksBtn">任务</button>
         <button class="menu-feature-btn secondary" id="menuTalentsBtn">筑梦基石</button>
@@ -225,6 +226,55 @@
   </div>
 </div>
 
+<!-- ========== Season Pass Manual ========== -->
+<div id="seasonPassPanel">
+  <div class="pass-container">
+    <div class="pass-header">
+      <div>
+        <h2>赛季手册 · 梦域远征</h2>
+        <p>3个月赛季｜100级双轨奖励｜只产出外观、消耗品和赛季券，不提供数值属性</p>
+      </div>
+      <button class="pass-close" id="passCloseBtn">&times;</button>
+    </div>
+    <div class="pass-topbar">
+      <div class="pass-level-card">
+        <b id="passLevelText">Lv.1</b>
+        <span id="passXpText">0 / 1000 EXP</span>
+        <div class="pass-progress"><div id="passXpFill"></div></div>
+      </div>
+      <div class="pass-currency-card">赛季券 <b id="seasonCouponText">0</b></div>
+      <div class="pass-tier-card" id="passTierText">免费版</div>
+      <button class="pass-primary" id="claimAllPassBtn">一键领取</button>
+      <button class="pass-gold" id="upgradePassBtn">升级手册</button>
+    </div>
+    <div class="pass-tabs">
+      <button class="pass-tab active" data-pass-tab="rewards">奖励轨道</button>
+      <button class="pass-tab" data-pass-tab="tasks">任务体系</button>
+      <button class="pass-tab" data-pass-tab="team">筑梦羁绊</button>
+      <button class="pass-tab" data-pass-tab="rules">运营规则</button>
+    </div>
+    <div id="seasonPassBody" class="pass-body"></div>
+  </div>
+</div>
+
+<div id="passPayPanel">
+  <div class="pass-pay-card">
+    <button class="pass-close mini" id="passPayCloseBtn">&times;</button>
+    <h2>升级赛季手册</h2>
+    <div class="pay-options">
+      <button data-buy-pass="advanced">进阶版 24元</button>
+      <button data-buy-pass="premium">典藏版 48元｜直升25级</button>
+    </div>
+    <div class="pay-qrcode">
+      <img id="payQrImage" alt="管理员收款码">
+      <div id="payQrFallback">后台暂未上传收款码，请联系管理员。</div>
+    </div>
+    <p>扫码支付后点击“我已支付”，管理员审核通过后获得对应手册权益。</p>
+    <input id="payContactInput" placeholder="填写手机号/昵称，便于管理员核对">
+    <button class="pass-primary" id="paidConfirmBtn">我已支付，提交审核</button>
+  </div>
+</div>
+
 <!-- ========== Main Menu Season / Tasks ========== -->
 <div id="menuGrowthPanel">
   <div class="growth-container">
@@ -402,6 +452,7 @@
 <script src="js/social.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/game.js"></script>
+<script src="js/season-pass.js"></script>
 <script src="js/menu-features.js"></script>
 <script>
 // ============================================

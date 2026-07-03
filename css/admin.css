@@ -150,7 +150,16 @@ body {
   width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.3);
   border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; font-size: 13px;
 }
-.panel input:focus, .panel select:focus { outline: none; border-color: #00d4ff; }
+.panel textarea {
+  width: 100%; padding: 10px 12px; background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize: vertical;
+}
+.panel input:focus, .panel select:focus, .panel textarea:focus { outline: none; border-color: #00d4ff; }
+.qr-album { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+.qr-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px; text-align: center; }
+.qr-card img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 8px; background: #fff; }
+.qr-card div { font-size: 12px; color: #ccc; margin-top: 5px; }
 
 /* Config editor rows */
 .config-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
