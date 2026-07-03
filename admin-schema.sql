@@ -184,7 +184,7 @@ INSERT INTO game_config (config_key, config_value) VALUES
   ON CONFLICT (config_key) DO NOTHING;
 
 INSERT INTO game_config (config_key, config_value) VALUES
-  ('role_skills', '{"WARRIOR":{"enabled":true,"hp":120,"dmg_mult":1.0},"BUILDER":{"enabled":true,"hp":90,"block_discount":0.5},"ASSASSIN":{"enabled":true,"hp":80,"speed_mult":1.2},"ARCHER":{"enabled":true,"hp":100,"bow_dmg_mult":1.3}}')
+  ('role_skills', '{"FOX":{"enabled":true,"hp":90,"camouflage_cd":16},"PORK_DOCTOR":{"enabled":true,"hp":110,"fat_cd":22},"HURRICANE":{"enabled":true,"hp":95,"dash_cd":16},"DRIFTWOOD":{"enabled":true,"hp":100,"missile_cd":30}}')
   ON CONFLICT (config_key) DO NOTHING;
 
 INSERT INTO game_config (config_key, config_value) VALUES

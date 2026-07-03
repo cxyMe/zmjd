@@ -10,25 +10,29 @@ const TEAMS = {
 };
 
 const ROLES = {
-  WARRIOR: {
-    name: '战士', hp: 120,
-    passive: { name: '坚韧', desc: '每秒恢复1点生命值' },
-    active: { name: '狂暴', desc: '5秒内攻击力翻倍', cd: 30 }
+  FOX: {
+    name: '狐狸', hp: 90, skinClass: 'role-fox',
+    passive: { name: '狐假虎威', desc: '生命低于20%时，造成伤害增加20%' },
+    active: { name: '伪装', desc: '8秒隐身，移速+50%；跳跃和移动不破隐，其他操作破隐', cd: 16 },
+    starter: [{ key: 'wood_sword', count: 1 }, { currency: 'copper', count: 10 }]
   },
-  BUILDER: {
-    name: '建筑师', hp: 90,
-    passive: { name: '工匠', desc: '方块价格减半' },
-    active: { name: '要塞', desc: '面前生成3x3防御墙', cd: 20 }
+  PORK_DOCTOR: {
+    name: '猪排博士', hp: 110, skinClass: 'role-pork',
+    passive: { name: '吃饱喝足', desc: '每15秒恢复5点生命' },
+    active: { name: '五斤肥肉', desc: '获得150额外生命并立即回复150，体积+20%，移速-25%，持续8秒', cd: 22 },
+    starter: [{ currency: 'copper', count: 15 }]
   },
-  ASSASSIN: {
-    name: '刺客', hp: 80,
-    passive: { name: '疾风', desc: '移动速度+20%' },
-    active: { name: '隐匿', desc: '隐身3秒', cd: 25 }
+  HURRICANE: {
+    name: '飓风', hp: 95, skinClass: 'role-hurricane',
+    passive: { name: '透视箭', desc: '远程武器命中目标后透视标记3秒' },
+    active: { name: '飓风之力', desc: '向准心方向位移6格，5秒内伤害固定+12', cd: 16 },
+    starter: [{ key: 'bow', count: 1 }, { key: 'arrow', count: 5 }]
   },
-  ARCHER: {
-    name: '射手', hp: 100,
-    passive: { name: '精准', desc: '弓箭伤害+30%' },
-    active: { name: '连射', desc: '一次射出3支箭', cd: 15 }
+  DRIFTWOOD: {
+    name: '浮木', hp: 100, skinClass: 'role-driftwood',
+    passive: { name: '动能回收', desc: '每次攻击命中目标获得3点护盾' },
+    active: { name: '天罚', desc: '操控一枚高速导弹，8秒内自动爆炸或碰撞爆炸，可被远程武器摧毁', cd: 30 },
+    starter: [{ key: 'wood_sword', count: 1 }]
   }
 };
 
@@ -46,7 +50,7 @@ const RES = {
 // Item Database
 // ============================================
 const ITEM_DB = {
-  wood_plank:   { name: '木板',  type: 'block',  cost: { copper: 16 },       hp: 20,  desc: '基础建筑材料', stack: 64 },
+  wood_plank:   { name: '木板',  type: 'block',  cost: { copper: 2 },        hp: 20,  desc: '基础建筑材料', stack: 64 },
   stone_plate:  { name: '石板',  type: 'block',  cost: { silver: 8 },        hp: 60,  desc: '中级建筑材料', stack: 64 },
   iron_plate:   { name: '铁板',  type: 'block',  cost: { gold: 4 },          hp: 120, desc: '高级建筑材料', stack: 64 },
   titanium:     { name: '钛板',  type: 'block',  cost: { jade: 2 },          hp: 300, desc: '顶级建筑材料', stack: 64 },
@@ -873,6 +877,28 @@ class Engine {
     // Projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
+      if (proj.type !== 'missile') {
+        const missileIndex = this.projectiles.findIndex(p => p.type === 'missile' && p.owner?.team !== proj.owner?.team && p.mesh.position.distanceTo(proj.mesh.position) < 0.8);
+        if (missileIndex >= 0) {
+          const missile = this.projectiles[missileIndex];
+          this.spawnParticles(missile.mesh.position, 0xffdd00, 18);
+          if (missile.owner?.missileControl === missile) missile.owner.missileControl = null;
+          this.scene.remove(missile.mesh);
+          this.scene.remove(proj.mesh);
+          this.projectiles.splice(Math.max(i, missileIndex), 1);
+          this.projectiles.splice(Math.min(i, missileIndex), 1);
+          continue;
+        }
+      }
+      if (proj.type === 'missile' && proj.owner) {
+        const dir = proj.owner.getForwardDir().normalize();
+        proj.vel.lerp(dir.multiplyScalar(5), 0.22);
+        proj.mesh.lookAt(proj.mesh.position.clone().add(proj.vel));
+        if (proj.owner.isLocal && proj.owner.missileControl === proj) {
+          this.camera.position.lerp(proj.mesh.position.clone().addScaledVector(proj.vel.clone().normalize(), -3).add(new THREE.Vector3(0, 1.2, 0)), 0.35);
+          this.camera.lookAt(proj.mesh.position);
+        }
+      }
       if (proj.type === 'boomerang' && !proj.returning && proj.start.distanceTo(proj.mesh.position) > 9) {
         proj.returning = true;
       }
@@ -888,7 +914,10 @@ class Engine {
       // Block collision
       const rc = this.raycastBlocks(proj.mesh.position, proj.vel.clone().normalize(), 0.5);
       if (rc.hit) {
-        if (proj.type === 'smoke') {
+        if (proj.type === 'missile') {
+          this.explodeAt(proj.mesh.position.clone(), 4.5, 95);
+          if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
+        } else if (proj.type === 'smoke') {
           this.createSmokeZone(proj.mesh.position.clone(), proj.owner?.team, proj.owner);
         } else if (proj.type === 'javelin') {
           const pos = new THREE.Vector3(Math.floor(rc.pos.x) + 0.5, Math.floor(rc.pos.y) + 1.0, Math.floor(rc.pos.z) + 0.5);
@@ -912,9 +941,18 @@ class Engine {
           if (proj.type === 'boomerang' && proj.hitSet?.has(key + ':' + (proj.returning ? 'back' : 'out'))) continue;
           proj.hitSet?.add(key + ':' + (proj.returning ? 'back' : 'out'));
           ent.takeDamage(proj.damage, proj.owner);
+          if (proj.owner?.role === 'DRIFTWOOD') proj.owner.extraShield = Math.min(60 + (proj.owner.shieldCapBonus || 0), (proj.owner.extraShield || 0) + 3);
+          if (proj.type === 'missile') {
+            this.explodeAt(proj.mesh.position.clone(), 4.5, 95);
+            if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
+          }
           if (proj.type === 'frost') {
             ent.frostTimer = Math.max(ent.frostTimer || 0, 2);
             ent.slowTimer = Math.max(ent.slowTimer || 0, 2);
+          }
+          if (proj.owner?.role === 'HURRICANE' && proj.owner.equipped.weapon === 'bow') {
+            ent.revealedTimer = Math.max(ent.revealedTimer || 0, 3);
+            ent.nameTag.visible = true;
           }
           if (proj.type === 'javelin') {
             ent.revealedTimer = Math.max(ent.revealedTimer || 0, 5);
@@ -936,6 +974,10 @@ class Engine {
           proj.life <= 0 || proj.mesh.position.y < -20) {
         if (proj.type === 'smoke' && proj.mesh.position.y > -20) {
           this.createSmokeZone(proj.mesh.position.clone(), proj.owner?.team, proj.owner);
+        }
+        if (proj.type === 'missile' && proj.mesh.position.y > -20) {
+          this.explodeAt(proj.mesh.position.clone(), 4.5, 95);
+          if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
         }
         this.scene.remove(proj.mesh);
         this.projectiles.splice(i, 1);
@@ -1148,11 +1190,11 @@ class PlayerEntity {
   constructor(engine, teamKey, roleKey, isLocal = false, name = 'Player', playerId = null) {
     this.engine = engine;
     this.team = teamKey;
-    this.role = roleKey;
+    this.role = ROLES[roleKey] ? roleKey : 'FOX';
     this.isLocal = isLocal;
     this.name = name;
     this.playerId = playerId || name;
-    this.roleInfo = ROLES[roleKey];
+    this.roleInfo = ROLES[this.role];
     this.teamInfo = TEAMS[teamKey];
 
     // Stats
@@ -1161,13 +1203,16 @@ class PlayerEntity {
     this.armor = 0;
     this.isDead = false;
     this.respawnTimer = 0;
+    this.deathCount = 0;
+    this.pendingElimination = false;
     this.radius = 0.4;
 
     // Movement
     this.pos = this.teamInfo.spawn.clone();
     this.vel = new THREE.Vector3();
     this.onGround = false;
-    this.speed = roleKey === 'ASSASSIN' ? 7 : 6;
+    this.baseSpeed = 6;
+    this.speed = this.baseSpeed;
     this.jumpPower = 7;
     this.yaw = 0; this.pitch = 0;
 
@@ -1205,6 +1250,12 @@ class PlayerEntity {
     this.revealedTimer = 0;
     this.smokeBlindTimer = 0;
     this.smokeInvisibleTimer = 0;
+    this.extraShield = 0;
+    this.fatTimer = 0;
+    this.porkHealTimer = 15;
+    this.hurricaneDamageTimer = 0;
+    this.camouflageTimer = 0;
+    this.missileControl = null;
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -1224,7 +1275,7 @@ class PlayerEntity {
     this.isInvisible = false;
 
     // Mesh
-    const geo = this.createRoleGeometry(roleKey);
+    const geo = this.createRoleGeometry(this.role);
     this.skinColor = this.getEquippedSkinColor();
     const mat = new THREE.MeshLambertMaterial({
       color: this.skinColor,
@@ -1257,37 +1308,64 @@ class PlayerEntity {
   }
 
   createRoleGeometry(roleKey) {
-    if (roleKey === 'WARRIOR') return new THREE.BoxGeometry(0.8, 1.35, 0.8);
-    if (roleKey === 'BUILDER') return new THREE.CylinderGeometry(0.48, 0.48, 1.35, 6);
-    if (roleKey === 'ASSASSIN') return new THREE.ConeGeometry(0.5, 1.45, 5);
-    if (roleKey === 'ARCHER') {
+    if (roleKey === 'FOX') return new THREE.ConeGeometry(0.48, 1.35, 6);
+    if (roleKey === 'PORK_DOCTOR') return new THREE.SphereGeometry(0.68, 12, 10);
+    if (roleKey === 'HURRICANE') {
       const geo = new THREE.OctahedronGeometry(0.72, 0);
-      geo.scale(0.72, 1.1, 0.72);
+      geo.scale(0.62, 1.05, 0.62);
       return geo;
     }
+    if (roleKey === 'DRIFTWOOD') return new THREE.CapsuleGeometry(0.36, 0.92, 4, 8);
     return new THREE.CapsuleGeometry(0.35, 0.9, 4, 8);
   }
 
-  setRole(roleKey) {
+  setRole(roleKey, grantStarter = false) {
     if (!ROLES[roleKey]) return;
     const oldRatio = this.maxHp ? this.hp / this.maxHp : 1;
     this.role = roleKey;
     this.roleInfo = ROLES[roleKey];
     this.maxHp = this.roleInfo.hp + Math.max(0, this.matchLevel - 1) * (window.GROWTH_CONFIG?.hpPerLevel || 2);
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * oldRatio)));
-    this.speed = roleKey === 'ASSASSIN' ? 7 : 6;
+    this.baseSpeed = 6;
+    this.speed = this.baseSpeed;
     this.skillCd = 0;
     this.skillActive = 0;
     this.isInvisible = false;
+    this.extraShield = 0;
+    this.fatTimer = 0;
+    this.hurricaneDamageTimer = 0;
+    this.camouflageTimer = 0;
+    this.mesh.scale.set(1, 1, 1);
     const oldTag = this.nameTag;
     const oldWeapon = this.weaponMesh;
     if (oldTag) this.mesh.remove(oldTag);
     if (oldWeapon) this.mesh.remove(oldWeapon);
     this.mesh.geometry.dispose();
     this.mesh.geometry = this.createRoleGeometry(roleKey);
+    this.skinColor = this.getEquippedSkinColor();
+    this.mesh.material.color.setHex(this.skinColor);
     if (oldTag) this.mesh.add(oldTag);
     this.weaponMesh = null;
     this.updateWeaponMesh();
+    if (grantStarter) this.applyStarterGear();
+  }
+
+  applyStarterGear() {
+    this.hotbar = Array(8).fill(null);
+    this.backpack = Array(20).fill(null);
+    this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
+    this.equipped = { weapon: null, armor: null };
+    this.arrowCount = 0;
+    for (const starter of (this.roleInfo.starter || [])) {
+      if (starter.currency) {
+        this.inv[starter.currency] = (this.inv[starter.currency] || 0) + starter.count;
+      } else if (starter.key === 'arrow') {
+        this.arrowCount += starter.count;
+      } else {
+        this.addToBackpack(starter.key, starter.count);
+        if (ITEM_DB[starter.key]?.type === 'weapon') this.equip(starter.key);
+      }
+    }
   }
 
   getEquippedSkinColor() {
@@ -1301,6 +1379,10 @@ class PlayerEntity {
       if (skin === 'metal_blue') return 0x33aaff;
       if (skin === 'metal_green') return 0x44ff88;
     } catch (e) {}
+    if (this.role === 'FOX') return 0xff8a00;
+    if (this.role === 'PORK_DOCTOR') return 0xff6f91;
+    if (this.role === 'HURRICANE') return 0x33aaff;
+    if (this.role === 'DRIFTWOOD') return 0x8b5a2b;
     return this.teamInfo.color;
   }
 
@@ -1394,6 +1476,7 @@ class PlayerEntity {
 
   // 丢弃当前快捷栏选中的物品
   dropSelectedItem() {
+    this.breakCamouflage();
     const item = this.hotbar[this.hotbarIndex];
     if (!item) return false;
     const dropPos = this.pos.clone();
@@ -1411,6 +1494,7 @@ class PlayerEntity {
 
   // 快捷栏物品使用/装备
   useHotbarItem() {
+    this.breakCamouflage();
     const item = this.getSelectedItem();
     if (!item) return;
     const info = ITEM_DB[item.key];
@@ -1477,6 +1561,7 @@ class PlayerEntity {
   }
 
   useWeaponAlt() {
+    this.breakCamouflage();
     if (!this.equipped.weapon || this.attackCd > 0 || this.isDead || this.isFrozen) return;
     const w = ITEM_DB[this.equipped.weapon];
     if (!w) return;
@@ -1522,9 +1607,13 @@ class PlayerEntity {
       return;
     }
 
-    // Passive heal (Warrior)
-    if (this.role === 'WARRIOR' && this.hp < this.maxHp) {
-      this.hp = Math.min(this.maxHp, this.hp + dt);
+    // 新角色被动
+    if (this.role === 'PORK_DOCTOR') {
+      this.porkHealTimer -= dt;
+      if (this.porkHealTimer <= 0) {
+        this.hp = Math.min(this.maxHp, this.hp + 5 + (this.porkHealBonus || 0));
+        this.porkHealTimer = 15;
+      }
     }
 
     // Skill timers
@@ -1533,6 +1622,13 @@ class PlayerEntity {
     if (this.skillActive > 0) {
       this.skillActive -= dt;
       if (this.skillActive <= 0) this.deactivateSkill();
+    }
+    if (this.fatTimer > 0) this.fatTimer -= dt;
+    if (this.hurricaneDamageTimer > 0) this.hurricaneDamageTimer -= dt;
+    if (this.camouflageTimer > 0) {
+      this.camouflageTimer -= dt;
+      this.isInvisible = true;
+      if (this.camouflageTimer <= 0) this.breakCamouflage(false);
     }
 
     // Physics
@@ -1596,7 +1692,7 @@ class PlayerEntity {
     this.mesh.rotation.y = this.yaw;
 
     // Invisibility visual
-    if (this.smokeInvisibleTimer <= 0 && !(this.role === 'ASSASSIN' && this.skillActive > 0)) this.isInvisible = false;
+    if (this.smokeInvisibleTimer <= 0 && this.camouflageTimer <= 0) this.isInvisible = false;
     if (this.isInvisible || this.smokeInvisibleTimer > 0) {
       this.mesh.material.transparent = true;
       this.mesh.material.opacity = 0.3;
@@ -1608,7 +1704,7 @@ class PlayerEntity {
     else this.mesh.material.color.setHex(this.skinColor || this.teamInfo.color);
 
     // Camera follow
-    if (this.isLocal) {
+    if (this.isLocal && !this.missileControl) {
       const camDist = 4;
       const camHeight = 2.5;
       const targetPos = new THREE.Vector3(
@@ -1658,7 +1754,8 @@ class PlayerEntity {
   moveInput(dx, dz, sprint = false) {
     if (this.isDead || this.isFrozen || this.rootTimer > 0) return;
     const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
-    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult;
+    const roleSpeedMult = (this.camouflageTimer > 0 ? 1.5 : 1) * (this.fatTimer > 0 ? 0.75 : 1);
+    const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult;
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const moveDir = new THREE.Vector3();
@@ -1695,6 +1792,7 @@ class PlayerEntity {
 
   attack() {
     if (this.isDead || this.isFrozen || this.attackCd > 0 || this.silencedTimer > 0) return;
+    this.breakCamouflage();
     this.attackCd = 0.35;
 
     let dmg = this.baseDmg;
@@ -1708,7 +1806,8 @@ class PlayerEntity {
       if (w.slow) this.attackCd = 1.15;
     }
 
-    if (this.role === 'WARRIOR' && this.skillActive > 0) dmg *= 2;
+    if (this.role === 'FOX' && this.hp / this.maxHp < 0.2) dmg *= 1.2;
+    if (this.hurricaneDamageTimer > 0) dmg += 12;
     if (this.lowHpDamageBoost && this.hp / this.maxHp < 0.3) dmg *= (1 + this.lowHpDamageBoost);
 
     const weaponInfo = this.equipped.weapon ? ITEM_DB[this.equipped.weapon] : null;
@@ -1716,7 +1815,7 @@ class PlayerEntity {
       const dir = this.getForwardDir();
       const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
       const type = weaponInfo.projectileType;
-      const finalDmg = type === 'frost' ? 5 : type === 'boomerang' ? 7 : type === 'javelin' ? 8 : 0;
+      const finalDmg = (type === 'frost' ? 5 : type === 'boomerang' ? 7 : type === 'javelin' ? 8 : 0) + (this.hurricaneDamageTimer > 0 ? 12 : 0);
       this.engine.spawnWeaponProjectile(this, type, start, dir, {
         damage: finalDmg,
         speed: type === 'smoke' ? 14 : type === 'frost' ? 20 : type === 'boomerang' ? 18 : 24,
@@ -1736,7 +1835,6 @@ class PlayerEntity {
       this.engine.scene.add(arrowMesh);
       const speed = 25;
       let finalDmg = dmg;
-      if (this.role === 'ARCHER') finalDmg *= 1.3;
       if (this.arrowDamageBoost) finalDmg *= (1 + this.arrowDamageBoost);
       this.engine.projectiles.push({
         mesh: arrowMesh, vel: dir.multiplyScalar(speed), life: 3,
@@ -1753,9 +1851,8 @@ class PlayerEntity {
         const dist = ent.pos.distanceTo(this.pos);
         if (dist < range) {
           let finalDmg = dmg;
-          if (this.role === 'ASSASSIN' && this.backstabBoost) finalDmg *= (1 + this.backstabBoost);
           ent.takeDamage(finalDmg, this);
-          if (this.shadowSilence && this.skillActive > 0) ent.silencedTimer = Math.max(ent.silencedTimer || 0, 0.5);
+          if (this.role === 'DRIFTWOOD') this.extraShield = Math.min(60 + (this.shieldCapBonus || 0), (this.extraShield || 0) + 3);
         }
       }
 
@@ -1830,6 +1927,7 @@ class PlayerEntity {
 
   placeBlock(pointer = null) {
     if (this.isDead || this.isFrozen) return;
+    this.breakCamouflage();
     const blockType = this.getSelectedBlockType();
     if (!blockType) return;
     const item = this.getSelectedItem();
@@ -1867,48 +1965,96 @@ class PlayerEntity {
 
   useSkill() {
     if (this.isDead || this.isFrozen || this.skillCd > 0) return;
+    if (this.role !== 'FOX') this.breakCamouflage();
     const info = this.roleInfo;
     this.skillCd = Math.max(3, info.active.cd - (this.skillCdBonus || 0));
-    this.skillActive = info.active.name === '狂暴' ? 5 : info.active.name === '隐匿' ? 3 : 0;
+    this.skillActive = 0;
 
-    if (this.role === 'WARRIOR') {
-      window.game?.showMessage(`${this.name} 发动了狂暴！`);
-    } else if (this.role === 'ASSASSIN') {
+    if (this.role === 'FOX') {
       this.isInvisible = true;
-      window.game?.showMessage(`${this.name} 隐身了！`);
-    } else if (this.role === 'ARCHER') {
-      for (let i = 0; i < 3; i++) {
-        setTimeout(() => this.attack(), i * 100);
-      }
-      window.game?.showMessage(`${this.name} 三连射！`);
-    } else if (this.role === 'BUILDER') {
+      this.camouflageTimer = 8;
+      window.game?.showMessage(`${this.name} 发动伪装！`, '#8be9fd');
+    } else if (this.role === 'PORK_DOCTOR') {
+      this.maxHp += 150;
+      this.hp = Math.min(this.maxHp, this.hp + 150);
+      this.fatTimer = 8;
+      this.skillActive = 8;
+      this.mesh.scale.set(1.2, 1.2, 1.2);
+      window.game?.showMessage(`${this.name} 发动五斤肥肉！`, '#ff8a00');
+    } else if (this.role === 'HURRICANE') {
       const dir = this.getForwardDir();
-      const face = Math.abs(dir.x) > Math.abs(dir.z) ? 'x' : 'z';
-      const center = this.pos.clone().addScaledVector(dir, 2);
-      for (let dy = 0; dy < 3; dy++) {
-        for (let ds = -1; ds <= 1; ds++) {
-          const px = face === 'x' ? Math.floor(center.x) + 1 : Math.floor(center.x) + ds;
-          const pz = face === 'z' ? Math.floor(center.z) + 1 : Math.floor(center.z) + ds;
-          const py = Math.floor(center.y) + dy;
-          const blockType = this.fortressIronCore && ds === 0 ? 'iron_plate' : 'wood_plank';
-          this.engine.placeBlock(px, py, pz, blockType, this.team);
-        }
-      }
-      window.game?.showMessage(`${this.name} 建造了防御墙！`);
+      const target = this.pos.clone().addScaledVector(dir, 6);
+      target.y = Math.max(this.getGroundHeight(target.x, target.z) + this.radius, target.y);
+      this.pos.copy(target);
+      this.hurricaneDamageTimer = 5;
+      this.engine.spawnParticles(this.pos, 0x8be9fd, 18);
+      window.game?.showMessage(`${this.name} 发动飓风之力！`, '#8be9fd');
+    } else if (this.role === 'DRIFTWOOD') {
+      this.launchMissile();
+      window.game?.showMessage(`${this.name} 发动天罚！`, '#ffdd00');
     }
   }
 
   deactivateSkill() {
-    if (this.role === 'ASSASSIN') {
-      this.isInvisible = false;
+    if (this.role === 'PORK_DOCTOR') {
+      this.maxHp = Math.max(this.roleInfo.hp, this.maxHp - 150);
+      this.hp = Math.min(this.hp, this.maxHp);
+      this.mesh.scale.set(1, 1, 1);
     }
+  }
+
+  breakCamouflage(show = true) {
+    if (this.camouflageTimer > 0) {
+      this.camouflageTimer = 0;
+      this.isInvisible = false;
+      if (show) window.game?.showMessage?.(`${this.name} 退出伪装`, '#cccccc');
+    }
+  }
+
+  launchMissile() {
+    if (this.missileControl) return;
+    const dir = this.getForwardDir().normalize();
+    const start = this.pos.clone().add(new THREE.Vector3(0, 1, 0)).addScaledVector(dir, 1.2);
+    const geo = new THREE.ConeGeometry(0.22, 0.75, 10);
+    geo.rotateX(Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffdd00 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(start);
+    mesh.lookAt(start.clone().add(dir));
+    this.engine.scene.add(mesh);
+    const missile = {
+      mesh,
+      vel: dir.multiplyScalar(5),
+      life: 8,
+      damage: 0,
+      owner: this,
+      type: 'missile',
+      start: start.clone(),
+      dir: dir.clone(),
+      gravity: 0
+    };
+    this.missileControl = missile;
+    this.engine.projectiles.push(missile);
   }
 
   takeDamage(amount, attacker) {
     if (this.isDead) return;
+    if (this.missileControl) {
+      this.engine.explodeAt(this.missileControl.mesh.position.clone(), 4.5, 95);
+      this.engine.scene.remove(this.missileControl.mesh);
+      const idx = this.engine.projectiles.indexOf(this.missileControl);
+      if (idx >= 0) this.engine.projectiles.splice(idx, 1);
+      this.missileControl = null;
+    }
     const reduction = this.armor / (this.armor + 50);
     const shieldReduce = this.socialShield > 0 ? 0.35 : 0;
-    const actual = Math.max(1, amount * (1 - reduction) * (1 - shieldReduce));
+    let actual = Math.max(1, amount * (1 - reduction) * (1 - shieldReduce) * (1 - (this.flatDamageReduce || 0)));
+    if (this.extraShield > 0) {
+      const absorbed = Math.min(this.extraShield, actual);
+      this.extraShield -= absorbed;
+      actual -= absorbed;
+    }
+    if (actual <= 0) return;
     this.hp -= actual;
     if (attacker) {
       attacker.matchStats.damage += actual;
@@ -1929,7 +2075,17 @@ class PlayerEntity {
     this.isDead = true;
     this.hp = 0;
     this.mesh.visible = false;
-    this.respawnTimer = 5;
+    if (this.fatTimer > 0 || this.skillActive > 0) this.deactivateSkill();
+    this.fatTimer = 0;
+    if (this.missileControl) {
+      this.engine.scene.remove(this.missileControl.mesh);
+      const missileIdx = this.engine.projectiles.indexOf(this.missileControl);
+      if (missileIdx >= 0) this.engine.projectiles.splice(missileIdx, 1);
+      this.missileControl = null;
+    }
+    this.deathCount++;
+    this.respawnTimer = Math.min(30, 3 + (this.deathCount - 1) * 2);
+    this.pendingElimination = !this.teamInfo.bedAlive;
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
 
     if (isVoidDeath) {
@@ -2003,15 +2159,40 @@ class PlayerEntity {
   respawn() {
     const canRespawn = this.teamInfo.bedAlive;
     if (!canRespawn) {
+      this.pendingElimination = true;
+      this.respawnTimer = 999999;
       window.game?.checkWinCondition();
       return;
     }
     this.isDead = false;
+    this.pendingElimination = false;
     this.hp = this.maxHp;
-    this.pos.copy(this.teamInfo.spawn);
+    this.pos.copy(this.findSafeRespawnPosition());
     this.vel.set(0, 0, 0);
     this.mesh.visible = true;
     this.mesh.position.copy(this.pos);
+  }
+
+  findSafeRespawnPosition() {
+    const base = this.teamInfo.bedPos?.clone?.() || this.teamInfo.spawn.clone();
+    const candidates = [];
+    for (let r = 1; r <= 5; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+          candidates.push(new THREE.Vector3(base.x + dx, base.y + 1, base.z + dz));
+        }
+      }
+    }
+    candidates.unshift(this.teamInfo.spawn.clone());
+    for (const c of candidates) {
+      const ground = this.getGroundHeight(c.x, c.z);
+      const pos = new THREE.Vector3(c.x, Math.max(ground + this.radius + 0.05, 0.8), c.z);
+      const feet = this.engine.getBlockKey(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+      const head = this.engine.getBlockKey(Math.floor(pos.x), Math.floor(pos.y + 1), Math.floor(pos.z));
+      if (!this.engine.blocks.has(feet) && !this.engine.blocks.has(head)) return pos;
+    }
+    return this.teamInfo.spawn.clone().add(new THREE.Vector3(0, 3, 0));
   }
 
   // 兼容旧 addItem 接口

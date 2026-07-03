@@ -580,6 +580,33 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 
 /* Mobile Controls */
 #mobileControls { display: none; }
+#deathOverlay {
+  position: fixed; inset: 0; z-index: 220; display: none; align-items: center; justify-content: center;
+  pointer-events: none; border: 10px solid rgba(255, 88, 88, 0.42);
+  background: radial-gradient(circle, rgba(255, 80, 80, 0.08), rgba(0,0,0,0.18));
+}
+#hud.dead-state #deathOverlay { display: flex; }
+#hud.dead-state #resourceBar,
+#hud.dead-state #teamInfo,
+#hud.dead-state #minimap,
+#hud.dead-state #playerStatus,
+#hud.dead-state #hotbar,
+#hud.dead-state #shopBtn,
+#hud.dead-state #socialBtn,
+#hud.dead-state #layoutBtn,
+#hud.dead-state #comboBar,
+#hud.dead-state #rescueBtn,
+#hud.dead-state #skillBtn,
+#hud.dead-state #crosshair,
+#hud.dead-state #mobileControls { display: none !important; }
+.death-card {
+  padding: 22px 34px; border-radius: 22px; text-align: center; color: #fff;
+  background: rgba(30, 0, 0, 0.72); border: 1px solid rgba(255,120,120,0.5);
+  box-shadow: 0 0 42px rgba(255,80,80,0.28); backdrop-filter: blur(8px);
+}
+.death-card h2 { color: #ffb0b0; margin-bottom: 8px; font-size: 28px; }
+.death-card p { color: #fff; font-size: 18px; font-weight: bold; margin-bottom: 6px; }
+.death-card span { color: #ffc6c6; font-size: 13px; }
 @media (hover: none) and (pointer: coarse) {
   #mobileControls { display: block; }
 }
@@ -686,12 +713,13 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   display: flex; align-items: center; justify-content: center; color: #ffdd00; font-size: 26px; font-weight: bold;
 }
 .start-role-cards {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 18px;
+  display: flex; gap: 14px; padding: 18px; overflow-x: auto; scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
 }
 .start-role-card {
-  position: relative; min-height: 270px; border-radius: 18px; padding: 16px;
+  position: relative; min-height: 290px; min-width: 260px; flex: 0 0 260px; border-radius: 18px; padding: 16px;
   background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12);
-  color: #fff; cursor: pointer; transition: .2s ease; overflow: hidden;
+  color: #fff; cursor: pointer; transition: .2s ease; overflow: hidden; scroll-snap-align: center;
 }
 .start-role-card:hover { transform: translateY(-4px); border-color: rgba(139,233,253,.6); background: rgba(139,233,253,.1); }
 .start-role-card.selected { border-color: #ffdd00; box-shadow: 0 0 24px rgba(255,221,0,.22); }
@@ -699,10 +727,11 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   width: 70px; height: 70px; margin: 0 auto 14px; position: relative;
   filter: drop-shadow(0 0 14px rgba(139,233,253,.35));
 }
-.shape-warrior { background: linear-gradient(135deg,#ff5555,#ffb86c); border-radius: 14px; transform: rotate(45deg); }
-.shape-builder { background: linear-gradient(135deg,#55ff88,#8be9fd); clip-path: polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); }
-.shape-assassin { background: linear-gradient(135deg,#b388ff,#111827); clip-path: polygon(50% 0,100% 100%,0 100%); }
-.shape-archer { background: linear-gradient(135deg,#8be9fd,#4488ff); clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%); }
+.shape-fox { background: linear-gradient(135deg,#ff8a00,#ffe0a3); clip-path: polygon(50% 0,78% 28%,100% 18%,78% 62%,50% 100%,22% 62%,0 18%,22% 28%); }
+.shape-pork { background: radial-gradient(circle at 35% 30%,#ffd0d0,#ff6f91 58%,#7a1c36); border-radius: 50%; }
+.shape-hurricane { background: conic-gradient(from 0deg,#8be9fd,#3b82f6,#ffffff,#8be9fd); border-radius: 50%; animation: hurricaneSpin 1.5s linear infinite; }
+.shape-driftwood { background: linear-gradient(135deg,#7a4a22,#d6a35e,#3b2413); border-radius: 45% 28% 38% 22%; box-shadow: inset 0 0 18px rgba(0,0,0,.35); }
+@keyframes hurricaneSpin { to { transform: rotate(360deg); } }
 .start-role-card h3 { text-align: center; color: #ffdd00; margin-bottom: 10px; font-size: 20px; }
 .role-stat { display: flex; justify-content: space-between; gap: 8px; color: #cbd5e1; font-size: 12px; margin-bottom: 8px; }
 .role-skill-box { margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.08); }
@@ -710,8 +739,8 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .role-skill-box p { color: #d9e2ff; font-size: 12px; line-height: 1.5; margin-top: 4px; }
 .start-role-foot { padding: 0 20px 18px; color: #9aa7c7; font-size: 12px; text-align: center; }
 @media (max-width: 820px) and (orientation: landscape) {
-  .start-role-cards { grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 10px; padding: 12px; }
-  .start-role-card { min-height: 220px; padding: 12px; }
+  .start-role-cards { gap: 10px; padding: 12px; }
+  .start-role-card { min-height: 220px; min-width: 190px; flex-basis: 190px; padding: 12px; }
   .role-shape { width: 50px; height: 50px; margin-bottom: 8px; }
   .start-role-head { padding: 12px 16px; }
   .countdown-ring { width: 58px; height: 58px; }

@@ -25,44 +25,44 @@ const GROWTH_CONFIG = {
 };
 
 const AWAKENING_OPTIONS = {
-  WARRIOR: {
+  FOX: {
     3: [
-      { id: 'warrior_rage_cd', name: '战意回涌', desc: '狂暴冷却减少5秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 5; } },
-      { id: 'warrior_rage_armor', name: '破阵血甲', desc: '狂暴期间受到伤害降低15%', apply: p => { p.rageDamageReduce = 0.15; } }
+      { id: 'fox_camouflage_cd', name: '灵狐潜踪', desc: '伪装冷却减少3秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 3; } },
+      { id: 'fox_lowhp_boost', name: '狐影威慑', desc: '低血增伤额外提高10%', apply: p => { p.lowHpDamageBoost = 0.1; } }
     ],
     6: [
-      { id: 'warrior_last_stand', name: '不屈战魂', desc: '生命低于30%时近战伤害+15%', apply: p => { p.lowHpDamageBoost = 0.15; } },
-      { id: 'warrior_kill_heal', name: '凯旋汲血', desc: '击杀后恢复20点生命', apply: p => { p.killHeal = 20; } }
+      { id: 'fox_kill_reset', name: '狐火收割', desc: '击杀刷新主动技能冷却', apply: p => { p.killResetSkill = true; } },
+      { id: 'fox_kill_heal', name: '狡狐回生', desc: '击杀后恢复15点生命', apply: p => { p.killHeal = 15; } }
     ]
   },
-  BUILDER: {
+  PORK_DOCTOR: {
     3: [
-      { id: 'builder_fort_cd', name: '速筑要塞', desc: '要塞冷却减少4秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 4; } },
-      { id: 'builder_reinforce', name: '加固工艺', desc: '自己放置的方块耐久+20%', apply: p => { p.blockHpBoost = 0.2; } }
+      { id: 'pork_fat_cd', name: '热量储备', desc: '五斤肥肉冷却减少4秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 4; } },
+      { id: 'pork_heal_plus', name: '营养过剩', desc: '被动恢复额外+2生命', apply: p => { p.porkHealBonus = 2; } }
     ],
     6: [
-      { id: 'builder_bridge_xp', name: '筑桥大师', desc: '放置方块获得经验+50%', apply: p => { p.blockXpBoost = 0.5; } },
-      { id: 'builder_fort_titan', name: '钛心壁垒', desc: '要塞中间列变为铁板', apply: p => { p.fortressIronCore = true; } }
+      { id: 'pork_tank', name: '厚切装甲', desc: '受到伤害降低8%', apply: p => { p.flatDamageReduce = 0.08; } },
+      { id: 'pork_kill_heal', name: '加餐时间', desc: '击杀后恢复25点生命', apply: p => { p.killHeal = 25; } }
     ]
   },
-  ASSASSIN: {
+  HURRICANE: {
     3: [
-      { id: 'assassin_shadow_cd', name: '暗影步', desc: '隐匿冷却减少3秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 3; } },
-      { id: 'assassin_silence', name: '封喉一击', desc: '隐匿后第一次普攻附带0.5秒沉默', apply: p => { p.shadowSilence = true; } }
+      { id: 'hurricane_dash_cd', name: '顺风而行', desc: '飓风之力冷却减少3秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 3; } },
+      { id: 'hurricane_arrow_slow', name: '风压箭', desc: '远程命中附带短暂减速', apply: p => { p.arrowSlow = true; } }
     ],
     6: [
-      { id: 'assassin_backstab', name: '背刺精通', desc: '背刺/偷袭伤害提升20%', apply: p => { p.backstabBoost = 0.2; } },
-      { id: 'assassin_reset', name: '暗影收割', desc: '击杀刷新主动技能冷却', apply: p => { p.killResetSkill = true; } }
+      { id: 'hurricane_arrow_boost', name: '穿风箭意', desc: '弓箭伤害+15%', apply: p => { p.arrowDamageBoost = 0.15; } },
+      { id: 'hurricane_refund', name: '回旋箭袋', desc: '弓箭击杀返还2支箭', apply: p => { p.killArrowRefund = 2; } }
     ]
   },
-  ARCHER: {
+  DRIFTWOOD: {
     3: [
-      { id: 'archer_volley_cd', name: '轻弦连射', desc: '连射冷却减少3秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 3; } },
-      { id: 'archer_slow', name: '缚影箭', desc: '弓箭命中使目标短暂减速', apply: p => { p.arrowSlow = true; } }
+      { id: 'driftwood_missile_cd', name: '冷却木芯', desc: '天罚冷却减少5秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 5; } },
+      { id: 'driftwood_shield_plus', name: '回收强化', desc: '命中获得护盾上限提高20', apply: p => { p.shieldCapBonus = 20; } }
     ],
     6: [
-      { id: 'archer_pierce', name: '穿云箭意', desc: '弓箭伤害额外+15%', apply: p => { p.arrowDamageBoost = 0.15; } },
-      { id: 'archer_refund', name: '鹰眼回收', desc: '弓箭击杀返还2支箭', apply: p => { p.killArrowRefund = 2; } }
+      { id: 'driftwood_damage_reduce', name: '木纹缓冲', desc: '受到伤害降低6%', apply: p => { p.flatDamageReduce = 0.06; } },
+      { id: 'driftwood_block_xp', name: '漂流筑桥', desc: '放置方块经验+30%', apply: p => { p.blockXpBoost = 0.3; } }
     ]
   }
 };

@@ -605,14 +605,13 @@ const AIManager = {
   controllers: [],
   activeCount: 0,
 
-  createAI(engine, game, team, name, role = 'WARRIOR') {
+  createAI(engine, game, team, name, role = 'FOX') {
     if (this.activeCount >= AI_CONFIG.MAX_AI_COUNT) return null;
     this.activeCount++;
 
-    const entity = new PlayerEntity(name, team, role, engine, false);
+    const entity = new PlayerEntity(engine, team, role, false, name, 'ai_' + name + '_' + Date.now());
     entity.aiTakeover = true;
     entity.isAI = true;
-    entity.playerId = 'ai_' + name + '_' + Date.now();
 
     // AI初始资源（少量，模拟新玩家）
     entity.inv.copper = 10 + Math.floor(Math.random() * 20);

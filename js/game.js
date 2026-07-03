@@ -322,10 +322,10 @@ class AISystem {
       + bot.backpack.reduce((s, slot) => s + (slot && slot.key === 'wood_plank' ? slot.count : 0), 0);
     // Buy blocks
     if (woodCount < 64) {
-      const cost = bot.role === 'BUILDER' ? 8 : 16;
+      const cost = ITEM_DB.wood_plank.cost.copper;
       if ((res.copper || 0) >= cost) {
         res.copper -= cost;
-        bot.addToBackpack('wood_plank', 16);
+        bot.addToBackpack('wood_plank', 1);
       }
     }
     // Buy weapon
@@ -406,6 +406,16 @@ class UIManager {
   update() {
     const lp = this.game.localPlayer;
     if (!lp) return;
+    const hud = document.getElementById('hud');
+    if (hud) hud.classList.toggle('dead-state', !!lp.isDead);
+    const countdown = document.getElementById('respawnCountdown');
+    const hint = document.getElementById('respawnHint');
+    if (lp.isDead && countdown) {
+      countdown.textContent = lp.pendingElimination
+        ? '床已被摧毁，无法复活'
+        : `还剩 ${Math.max(0, Math.ceil(lp.respawnTimer))} 秒复活`;
+      if (hint) hint.textContent = lp.pendingElimination ? '等待队友获胜或对局结束' : '床仍存在，正在寻找安全复活点';
+    }
 
     // Resources
     const r = lp.inv;
@@ -693,7 +703,7 @@ class UIManager {
       let costStr = '';
       let canAfford = true;
       if (item.cost.copper) {
-        const cost = (lp?.role === 'BUILDER' && item.type === 'block') ? Math.floor(item.cost.copper / 2) : item.cost.copper;
+        const cost = item.cost.copper;
         costStr += `<span class="cost-copper">${cost}铜</span> `;
         if ((lp?.inv.copper || 0) < cost) canAfford = false;
       }
@@ -720,9 +730,11 @@ class Game {
     this.localPlayer = null;
     this.gameTime = 0;
     this.gameActive = false;
-    this.shrinkTimer = 1800; // 30 分钟后开始死亡边界
+    this.shrinkStartTime = 1500; // 第25分钟开始死亡边界
+    this.shrinkTimer = this.shrinkStartTime;
     this.shrinkActive = false;
-    this.shrinkRadius = 105;
+    this.shrinkInitialRadius = 125;
+    this.shrinkRadius = this.shrinkInitialRadius;
     this.nextDreamTide = 300;
     this.input = new InputManager();
     this.ai = null;
@@ -832,9 +844,9 @@ class Game {
   start(teamKey, roleKey) {
     this.gameActive = true;
     this.gameTime = 0;
-    this.shrinkTimer = 1800; // 30 分钟后开始死亡边界
+    this.shrinkTimer = this.shrinkStartTime;
     this.shrinkActive = false;
-    this.shrinkRadius = 105;
+    this.shrinkRadius = this.shrinkInitialRadius;
     this.nextDreamTide = 300;
 
     // Reset teams
@@ -851,10 +863,6 @@ class Game {
       ? this.network.auth.user.id
       : 'local-' + Math.random().toString(36).slice(2, 10);
     this.localPlayer = new PlayerEntity(this.engine, teamKey, roleKey, true, this.playerName, localId);
-    this.localPlayer.addToBackpack('wood_sword', 1);
-    this.localPlayer.equip('wood_sword');
-    this.localPlayer.addToBackpack('wood_plank', 32);
-    this.localPlayer.addToBackpack('potion', 2);
     this.growth?.applyOutGameTalents(this.localPlayer);
     this.players.push(this.localPlayer);
 
@@ -873,10 +881,8 @@ class Game {
         const name = botNames[nameIdx++] || 'Bot';
         const result = AIManager.createAI(this.engine, this, tkey, name, role);
         if (result) {
-          result.entity.addToBackpack('wood_sword', 1);
-          result.entity.equip('wood_sword');
+          result.entity.applyStarterGear?.();
           result.entity.addToBackpack('wood_plank', 32);
-          result.entity.addToBackpack('potion', 1);
           result.entity.pos.x += (Math.random() - 0.5) * 4;
           result.entity.pos.z += (Math.random() - 0.5) * 4;
           this.players.push(result.entity);
@@ -922,19 +928,21 @@ class Game {
     const panel = document.getElementById('startRolePanel');
     const cards = document.getElementById('startRoleCards');
     if (!panel || !cards) return;
-    const shapeClass = { WARRIOR: 'shape-warrior', BUILDER: 'shape-builder', ASSASSIN: 'shape-assassin', ARCHER: 'shape-archer' };
+    const shapeClass = { FOX: 'shape-fox', PORK_DOCTOR: 'shape-pork', HURRICANE: 'shape-hurricane', DRIFTWOOD: 'shape-driftwood' };
     const subtitles = {
-      WARRIOR: '正面冲阵 / 续航压制',
-      BUILDER: '守床筑防 / 快速铺路',
-      ASSASSIN: '高速绕后 / 偷袭拆床',
-      ARCHER: '远程牵制 / 火力覆盖'
+      FOX: '伪装突袭 / 残血反杀',
+      PORK_DOCTOR: '高血抗压 / 持续恢复',
+      HURRICANE: '位移爆发 / 远程标记',
+      DRIFTWOOD: '导弹操控 / 护盾回收'
     };
+    const starterText = (role) => (role.starter || []).map(s => s.currency ? `${s.count}${s.currency === 'copper' ? '铜币' : s.currency}` : `${ITEM_DB[s.key]?.name || s.key}x${s.count}`).join('、') || '无';
     cards.innerHTML = Object.entries(ROLES).map(([key, role]) => `
       <div class="start-role-card" data-role="${key}">
         <div class="role-shape ${shapeClass[key]}"></div>
         <h3>${role.name}</h3>
         <div class="role-stat"><span>定位</span><b>${subtitles[key]}</b></div>
         <div class="role-stat"><span>生命</span><b>${role.hp}</b></div>
+        <div class="role-stat"><span>初始</span><b>${starterText(role)}</b></div>
         <div class="role-skill-box"><b>被动：${role.passive.name}</b><p>${role.passive.desc}</p></div>
         <div class="role-skill-box"><b>主动：${role.active.name}</b><p>${role.active.desc}｜冷却 ${role.active.cd} 秒</p></div>
       </div>
@@ -951,7 +959,7 @@ class Game {
     if (!this.roleSelectionActive) return;
     this.roleSelectionTimer -= dt;
     this.updateRoleSelectionUI();
-    if (this.roleSelectionTimer <= 0) this.confirmRoleSelection('WARRIOR');
+    if (this.roleSelectionTimer <= 0) this.confirmRoleSelection('FOX');
   }
 
   updateRoleSelectionUI() {
@@ -965,8 +973,8 @@ class Game {
   confirmRoleSelection(roleKey) {
     if (!this.roleSelectionActive || this.roleChosen) return;
     this.roleChosen = true;
-    const role = ROLES[roleKey] ? roleKey : 'WARRIOR';
-    this.localPlayer?.setRole?.(role);
+    const role = ROLES[roleKey] ? roleKey : 'FOX';
+    this.localPlayer?.setRole?.(role, true);
     if (this.localPlayer) this.localPlayer.isFrozen = false;
     const panel = document.getElementById('startRolePanel');
     if (panel) panel.style.display = 'none';
@@ -1006,13 +1014,13 @@ class Game {
       this.showMessage('警告：死亡边界开始收缩！', '#ff4444');
     }
     if (this.shrinkActive) {
-      this.shrinkRadius = Math.max(8, 105 - (this.gameTime - 1800) * 0.323);
+      this.shrinkRadius = Math.max(8, this.shrinkInitialRadius - (this.gameTime - this.shrinkStartTime) * 0.203);
       // Damage players outside
       for (const p of this.players) {
         if (p.isDead) continue;
         const dist = Math.sqrt(p.pos.x * p.pos.x + p.pos.z * p.pos.z);
         if (dist > this.shrinkRadius) {
-          p.takeDamage(20 * dt, null);
+          p.takeDamage(10 * dt, null);
         }
       }
       // Destroy beds outside
@@ -1023,6 +1031,7 @@ class Game {
           tinfo.bedAlive = false;
           tinfo.bedMesh.visible = false;
           this.onBedDestroyed(tkey, null);
+          this.showMessage(`${tinfo.name} 的床被毒圈吞没并自动销毁！`, '#ff4444');
         }
       }
       // 第 35 分钟按存活人数判定胜负
@@ -1192,7 +1201,7 @@ class Game {
 
     // Check cost
     const cost = {};
-    if (item.cost.copper) cost.copper = (lp.role === 'BUILDER' && item.type === 'block') ? Math.floor(item.cost.copper / 2) : item.cost.copper;
+    if (item.cost.copper) cost.copper = item.cost.copper;
     if (item.cost.silver) cost.silver = item.cost.silver;
     if (item.cost.gold) cost.gold = item.cost.gold;
     if (item.cost.jade) cost.jade = item.cost.jade;

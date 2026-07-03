@@ -232,6 +232,14 @@
     <div id="jumpBtnMobile">跳跃</div>
     <div id="actionBtnMobile">攻击</div>
   </div>
+
+  <div id="deathOverlay">
+    <div class="death-card">
+      <h2>等待复活</h2>
+      <p id="respawnCountdown">还剩 3 秒复活</p>
+      <span id="respawnHint">床仍存在，正在寻找安全复活点</span>
+    </div>
+  </div>
 </div>
 
 <!-- ========== Season Pass Manual ========== -->
@@ -478,10 +486,10 @@ let localOnly = false;
 window.lobbyAiSlots = 0;
 
 const roleDescriptions = {
-  WARRIOR:  '战士 - 坚韧：每秒恢复1点生命 | 狂暴：5秒内攻击力翻倍',
-  BUILDER:  '建筑师 - 工匠：方块价格减半 | 要塞：面前生成3x3防御墙',
-  ASSASSIN: '刺客 - 疾风：移动速度+20% | 隐匿：隐身3秒',
-  ARCHER:   '射手 - 精准：弓箭伤害+30% | 连射：一次射出3支箭'
+  FOX: '狐狸 - 伪装隐身8秒 | 残血增伤',
+  PORK_DOCTOR: '猪排博士 - 额外生命膨胀 | 周期回血',
+  HURRICANE: '飓风 - 位移6格 | 远程透视标记',
+  DRIFTWOOD: '浮木 - 操控导弹 | 命中回收护盾'
 };
 
 // Team selection
@@ -791,7 +799,7 @@ document.getElementById('startBtn').addEventListener('click', () => {
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
   window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
   window.game.init();
-  window.game.start(selectedTeam, 'WARRIOR');
+  window.game.start(selectedTeam, 'FOX');
   if (!localOnly && netMgr?.isHost) {
     netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
     netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);
