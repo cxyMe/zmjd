@@ -1525,6 +1525,65 @@ class Game {
       row.innerHTML = `<span>${label}</span><span>${val}</span>`;
       stats.appendChild(row);
     }
+
+    // MVP 计算
+    let mvp = null, mvpScore = -1;
+    for (const p of this.players) {
+      const s = (p.matchStats?.kills || 0) * 3 + (p.matchStats?.beds || 0) * 10 + (p.matchStats?.blocksPlaced || 0);
+      if (s > mvpScore) { mvpScore = s; mvp = p; }
+    }
+    const mvpSection = document.getElementById('mvpSection');
+    if (mvp && mvpSection) {
+      const winTeam = Object.entries(TEAMS).find(([k]) => TEAMS[k].name === winnerName);
+      let finalMvp = mvp;
+      if (winTeam) {
+        let winMvpScore = -1;
+        for (const p of this.players) {
+          if (p.team === winTeam[0]) {
+            const s = (p.matchStats?.kills || 0) * 3 + (p.matchStats?.beds || 0) * 10 + (p.matchStats?.blocksPlaced || 0);
+            if (s > winMvpScore) { winMvpScore = s; finalMvp = p; }
+          }
+        }
+      }
+      mvpSection.style.display = 'block';
+      document.getElementById('mvpName').textContent = finalMvp ? `${finalMvp.name} (${TEAMS[finalMvp.team]?.name || ''})` : '--';
+      document.getElementById('mvpStats').textContent = finalMvp ? `击杀:${finalMvp.matchStats?.kills || 0} 拆床:${finalMvp.matchStats?.beds || 0} 建造:${finalMvp.matchStats?.blocksPlaced || 0}` : '--';
+    }
+
+    // 友方对战数据
+    if (lp) {
+      const allies = this.players.filter(p => p.team === lp.team && p !== lp);
+      const allySection = document.getElementById('allyStatsSection');
+      if (allies.length > 0 && allySection) {
+        allySection.style.display = 'block';
+        document.getElementById('allyStatsList').innerHTML = allies.map(a =>
+          `<div class="ally-stat-row"><span>${a.name}</span><span>击杀:${a.matchStats?.kills || 0} 拆床:${a.matchStats?.beds || 0} 建筑:${a.matchStats?.blocksPlaced || 0}</span></div>`
+        ).join('');
+      }
+    }
+
+    // 段位变化（总段位，不按角色）
+    const gm = this.growth;
+    const rankScore = gm?.profile?.rankScore || 0;
+    const isWinner = winnerName === (lp?.teamInfo?.name);
+    const rankDelta = isWinner ? (15 + Math.floor((lp?.matchStats?.kills || 0) * 2 + (lp?.matchStats?.beds || 0) * 5)) : -10;
+    const newRankScore = Math.max(0, rankScore + rankDelta);
+    if (gm?.profile) {
+      gm.profile.rankScore = newRankScore;
+      localStorage.setItem('bedwars_profile', JSON.stringify(gm.profile));
+    }
+    const rankChangeEl = document.getElementById('rankChange');
+    if (rankChangeEl) {
+      rankChangeEl.style.display = 'block';
+      const rn = gm?.rankName?.(newRankScore) || '沉睡梦游者';
+      rankChangeEl.innerHTML = `<span class="rank-${isWinner ? 'up' : 'down'}">${isWinner ? '▲' : '▼'} 段位 ${rankDelta >= 0 ? '+' : ''}${rankDelta}</span><br><span>${rn}</span>`;
+    }
+
+    // 失败队伍提前退出
+    const exitBtn = document.getElementById('earlyExitBtn');
+    if (exitBtn && !isWinner) {
+      exitBtn.style.display = 'block';
+    }
   }
 
   showMessage(text, color = '#fff') {

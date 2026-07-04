@@ -1217,3 +1217,51 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 }
 .map-thumb.default { background: linear-gradient(135deg, #3a5a3a, #5a7a5a); }
 .map-thumb.forest { background: linear-gradient(135deg, #1a2a1a, #2a4a2a); }
+
+/* 好友列表 */
+.friend-loading, .friend-empty { color: #889; text-align: center; padding: 12px 0; font-size: 13px; }
+.friend-item {
+  padding: 8px 12px;
+  color: #ccd;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  transition: background 0.15s;
+}
+.friend-item:hover { background: rgba(255,255,255,0.06); }
+.friend-item.selected { background: rgba(100,150,255,0.15); color: #aaf; }
+.friend-invite-btn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #4a6a9a, #6a8aba);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.friend-invite-btn:active { opacity: 0.7; }
+
+/* 游戏结算增强 */
+.mvp-section, .ally-stats-section { text-align: center; margin: 10px 0; color: #ccd; }
+.mvp-section h3, .ally-stats-section h3 { font-size: 16px; color: #ffdd00; margin-bottom: 6px; }
+.mvp-name { font-size: 22px; font-weight: bold; color: #fff; margin: 4px 0; }
+.mvp-stats { font-size: 14px; color: #aab; }
+.ally-stats-list { max-height: 150px; overflow-y: auto; }
+.ally-stat-row {
+  display: flex; justify-content: space-between;
+  padding: 6px 12px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 13px; color: #bbc;
+}
+.rank-change { text-align: center; margin: 10px 0; font-size: 16px; }
+.rank-up { color: #4f4; }
+.rank-down { color: #f44; }
+.exit-btn {
+  display: block; width: 100%; margin-top: 8px; padding: 10px;
+  border: 1px solid rgba(255,80,80,0.3); border-radius: 8px;
+  background: rgba(255,50,50,0.15); color: #f88;
+  font-size: 14px; cursor: pointer;
+}
+.exit-btn:active { background: rgba(255,50,50,0.3); }

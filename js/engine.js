@@ -252,6 +252,11 @@ class Engine {
     const blk = this.blocks.get(key);
     if (!blk) return false;
     if (blk.type === 'ground') return false;
+    if (blk.type === 'bed_block') {
+      // 床方块被任何伤害都会破坏
+      this.destroyBedBlock(x, y, z, blk);
+      return true;
+    }
     blk.hp -= dmg;
     if (blk.hp <= 0) {
       this.removeBlock(x, y, z);
@@ -262,11 +267,34 @@ class Engine {
     return false;
   }
 
+  destroyBedBlock(x, y, z, blk) {
+    this.blocks.delete(this.getBlockKey(x, y, z));
+    // 检查这个队伍的所有床方块是否都被清除
+    const teamKey = blk.teamKey;
+    const team = TEAMS[teamKey];
+    if (!team || !team.bedAlive) return;
+    // 检查是否还有其他床方块
+    let remaining = false;
+    for (const [k, v] of this.blocks) {
+      if (v.type === 'bed_block' && v.teamKey === teamKey) { remaining = true; break; }
+    }
+    if (!remaining) {
+      team.bedAlive = false;
+      team.bedMesh.visible = false;
+      this.spawnParticles(team.bedPos, team.color, 20);
+      window.game?.onBedDestroyed(teamKey, null);
+    }
+  }
+
   handDamageBlock(x, y, z, dmg = 1) {
     const key = this.getBlockKey(x, y, z);
     const blk = this.blocks.get(key);
     if (!blk) return false;
     if (blk.type === 'ground') return false;
+    if (blk.type === 'bed_block') {
+      this.destroyBedBlock(x, y, z, blk);
+      return true;
+    }
     const info = ITEM_DB[blk.type];
     if (info?.handImmune) {
       window.game?.showMessage?.(`${info.name} 不可徒手拆毁`, '#8be9fd');
@@ -1375,6 +1403,11 @@ function generateWorld(engine, mapId = 'classic') {
     bed.position.set(s.x, 0.8, s.z);
     bed.castShadow = true;
     engine.scene.add(bed);
+    // 床碰撞方块：2格宽1格高
+    for (let dx = 0; dx <= 1; dx++) {
+      const bk = engine.getBlockKey(s.x + dx, 1, s.z);
+      engine.blocks.set(bk, { mesh: bed, type: 'bed_block', hp: 9999, maxHp: 9999, teamKey: key, bedRef: true });
+    }
     team.bedMesh = bed;
     team.bedPos = new THREE.Vector3(s.x, 0.8, s.z);
     team.bedAlive = true;
@@ -1622,6 +1655,12 @@ function generateTwilightForest(engine) {
     bed.position.copy(team.bedPos = team.spawn.clone().add(new THREE.Vector3(0, -0.5, 0)));
     bed.castShadow = true;
     engine.scene.add(bed);
+    // 床碰撞方块
+    const bx = team.spawn.x, bz = team.spawn.z, by = Math.floor(team.spawn.y) - 1;
+    for (let dx = 0; dx <= 1; dx++) {
+      const bk = engine.getBlockKey(bx + dx, by, bz);
+      engine.blocks.set(bk, { mesh: bed, type: 'bed_block', hp: 9999, maxHp: 9999, teamKey: key, bedRef: true });
+    }
     team.bedMesh = bed;
     team.bedAlive = true;
   }
@@ -1702,6 +1741,8 @@ class PlayerEntity {
     this.armorProtectRate = 0;
     this.armorReflectChance = 0;
     this.armorReflectRate = 0;
+    this.armorInfo = null;
+    this._lastArmorText = '';
     this.isDead = false;
     this.respawnTimer = 0;
     this.deathCount = 0;
@@ -1811,6 +1852,18 @@ class PlayerEntity {
     this.nameTag.scale.set(2, 0.5, 1);
     this.nameTag.position.y = 1.4;
     this.mesh.add(this.nameTag);
+
+    // 护甲信息标签
+    const armorCanvas = document.createElement('canvas');
+    armorCanvas.width = 256; armorCanvas.height = 48;
+    const armorCtx = armorCanvas.getContext('2d');
+    const armorTex = new THREE.CanvasTexture(armorCanvas);
+    const armorSpriteMat = new THREE.SpriteMaterial({ map: armorTex, transparent: true });
+    this.armorTag = new THREE.Sprite(armorSpriteMat);
+    this.armorTag.scale.set(1.6, 0.3, 1);
+    this.armorTag.position.y = 1.0;
+    this.armorTag.visible = false;
+    this.mesh.add(this.armorTag);
 
     // Weapon mesh
     this.weaponMesh = null;
@@ -2077,6 +2130,7 @@ class PlayerEntity {
       }
     } else if (info.type === 'armor') {
       this.equipped.armor = item.key;
+      this.armorInfo = item.key;
       this.armor = info.armor;
       this.armorMax = info.armor;
       this.armorProtectRate = info.protectRate || 0;
@@ -2375,7 +2429,39 @@ class PlayerEntity {
       this.mesh.material.depthWrite = true;
       this.mesh.material.wireframe = false;
       if (this.weaponMesh) this.weaponMesh.visible = true;
-      if (this.nameTag) this.nameTag.visible = true;
+      // 距离检测：10格以内显示名签
+      if (this.nameTag) {
+        const localPlayer = this.engine.entities.find(e => e.isLocal);
+        if (localPlayer) {
+          const dist = this.pos.distanceTo(localPlayer.pos);
+          this.nameTag.visible = dist < 10;
+        } else {
+          this.nameTag.visible = true;
+        }
+      }
+    }
+    // 死亡时隐藏名签和护甲标签
+    if (this.isDead && this.nameTag) this.nameTag.visible = false;
+    // 更新护甲信息标签
+    if (this.armorTag) {
+      if (this.isLocal || !this.nameTag?.visible) {
+        this.armorTag.visible = false;
+      } else {
+        this.armorTag.visible = true;
+        const armor = this.armor || 0;
+        const armorInfo = this.armorInfo ? ITEM_DB[this.armorInfo] : null;
+        const text = armor > 0 ? `\u{1F6E1}${Math.ceil(armor)}` : '';
+        if (text !== this._lastArmorText) {
+          this._lastArmorText = text;
+          const ac = this.armorTag.material.map.image.getContext('2d');
+          ac.clearRect(0, 0, 256, 48);
+          ac.fillStyle = '#ffffff';
+          ac.font = 'bold 24px Arial';
+          ac.textAlign = 'center';
+          ac.fillText(text, 128, 32);
+          this.armorTag.material.map.needsUpdate = true;
+        }
+      }
     }
     if (this.camouflageTimer <= 0) {
       this.mesh.material.emissive?.setHex?.(this.skinColor !== this.teamInfo.color ? this.skinColor : 0x000000);
@@ -2728,7 +2814,7 @@ class PlayerEntity {
   launchMissile() {
     if (this.missileControl) return;
     const dir = this.getForwardDir().normalize();
-    const start = this.pos.clone().add(new THREE.Vector3(0, 1, 0)).addScaledVector(dir, 1.2);
+    const start = this.pos.clone().add(new THREE.Vector3(0, 1, 0)).addScaledVector(dir, 2);
     const geo = new THREE.ConeGeometry(0.22, 0.75, 10);
     geo.rotateX(Math.PI / 2);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffdd00 });
@@ -2842,6 +2928,7 @@ class PlayerEntity {
         this.armorProtectRate = 0;
         this.armorReflectChance = 0;
         this.armorReflectRate = 0;
+        this.armorInfo = null;
         window.game?.showMessage?.(`${this.name} 的护甲已损坏`, '#ff5555');
       }
       if (attacker && this.armorReflectChance > 0 && Math.random() < this.armorReflectChance) {
@@ -2907,6 +2994,7 @@ class PlayerEntity {
       this.armorProtectRate = 0;
       this.armorReflectChance = 0;
       this.armorReflectRate = 0;
+      this.armorInfo = null;
       this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
       this.updateWeaponMesh();
       window.game?.showMessage(`${this.name} 坠入虚空，装备和物品全部清空！`, '#ff4444');
@@ -2938,6 +3026,7 @@ class PlayerEntity {
         this.armorProtectRate = 0;
         this.armorReflectChance = 0;
         this.armorReflectRate = 0;
+        this.armorInfo = null;
       }
       // 箭矢也掉落
       if (this.arrowCount > 0) {
@@ -3036,6 +3125,7 @@ class PlayerEntity {
       this.updateWeaponMesh();
     } else if (item.type === 'armor') {
       this.equipped.armor = key;
+      this.armorInfo = key;
       this.armor = item.armor;
       this.armorMax = item.armor;
       this.armorProtectRate = item.protectRate || 0;

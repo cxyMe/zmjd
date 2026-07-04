@@ -90,12 +90,12 @@ updateOrientationGate();
     </section>
 
     <aside class="lobby-chat-dock">
-      <div class="chat-panel compact" id="worldChatPanel">
-        <div class="chat-head">世界频道</div>
-        <div class="chat-lines" id="worldChatLines">
-          <p><b>系统</b> 欢迎来到筑梦大厅，选择队伍后即可开战。</p>
+      <div class="chat-panel compact" id="friendListPanel">
+        <div class="chat-head">好友列表</div>
+        <div class="chat-lines" id="friendListContent">
+          <p class="friend-loading">加载中...</p>
         </div>
-        <input class="chat-input" id="worldChatInput" maxlength="80" placeholder="输入聊天内容，回车发送">
+        <button class="friend-invite-btn" id="inviteFriendBtn" style="display:none;">邀请加入房间</button>
       </div>
     </aside>
 
@@ -515,8 +515,19 @@ updateOrientationGate();
 <div id="gameOverScreen">
   <h1>游戏结束</h1>
   <div class="winner">--</div>
+  <div class="mvp-section" id="mvpSection" style="display:none;">
+    <h3>本场MVP</h3>
+    <div class="mvp-name" id="mvpName">--</div>
+    <div class="mvp-stats" id="mvpStats">--</div>
+  </div>
+  <div class="ally-stats-section" id="allyStatsSection" style="display:none;">
+    <h3>友方对战数据</h3>
+    <div class="ally-stats-list" id="allyStatsList"></div>
+  </div>
+  <div class="rank-change" id="rankChange" style="display:none;"></div>
   <div class="stats"></div>
   <button class="restart-btn" onclick="location.reload()">再来一局</button>
+  <button class="exit-btn" id="earlyExitBtn" style="display:none;" onclick="location.reload()">提前退出</button>
 </div>
 
 <!-- ========== 3D Canvas ========== -->
@@ -776,70 +787,59 @@ document.getElementById('seasonPassBtn')?.addEventListener('click', () => window
 document.getElementById('menuSeasonBtn')?.addEventListener('click', () => window.menuGrowthUI?.open?.('season'));
 document.getElementById('menuTasksBtn')?.addEventListener('click', () => window.menuGrowthUI?.open?.('tasks'));
 document.getElementById('menuCustomBtn')?.addEventListener('click', () => window.hudLayoutManager?.open?.());
-document.getElementById('worldChatPanel').addEventListener('click', () => {
+document.getElementById('friendListPanel')?.addEventListener('click', () => {
   document.querySelector('.lobby-chat-dock')?.classList.toggle('expanded');
 });
-document.getElementById('worldChatInput')?.addEventListener('click', e => e.stopPropagation());
 
-const worldChat = {
-  client: null,
-  channel: null,
-  pollTimer: null,
-  async init() {
-    const lines = document.getElementById('worldChatLines');
-    if (!lines || !window.supabase || !config.supabaseUrl) return;
-    this.client = this.client || window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
-    await this.load();
-    this.channel = this.client.channel('world_chat_live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'world_chat_messages' }, payload => this.append(payload.new))
-      .subscribe();
-    this.pollTimer = setInterval(() => this.load(), 8000);
-  },
-  async load() {
-    const lines = document.getElementById('worldChatLines');
-    try {
-      const { data, error } = await this.client.from('world_chat_messages').select('*').order('created_at', { ascending: false }).limit(30);
-      if (error) throw error;
-      lines.innerHTML = '';
-      (data || []).reverse().forEach(msg => this.append(msg));
-      if (!data?.length) lines.innerHTML = '<p><b>系统</b> 世界频道已连接，发送第一条消息吧。</p>';
-    } catch (e) {
-      lines.innerHTML = '<p><b>系统</b> 世界频道暂不可用，请检查数据库表 world_chat_messages。</p>';
+  // 好友列表
+  const friendList = {
+    friends: [],
+    selectedFriend: null,
+    async load() {
+      const panel = document.getElementById('friendListContent');
+      if (!panel) return;
+      const supabase = window.supabaseClient;
+      if (!supabase || !auth.user) {
+        panel.innerHTML = '<p class="friend-empty">请先登录查看好友</p>';
+        return;
+      }
+      try {
+        // 尝试从易圈API获取关注列表
+        const { data, error } = await supabase.from('player_follows').select('followed_id, nickname').eq('follower_id', auth.user.id).limit(50);
+        if (!error && data && data.length > 0) {
+          this.friends = data.map(f => ({ id: f.followed_id, name: f.nickname || '玩家' }));
+        } else {
+          this.friends = [];
+        }
+      } catch (e) {
+        this.friends = [];
+      }
+      if (this.friends.length === 0) {
+        panel.innerHTML = '<p class="friend-empty">暂无好友，去关注其他玩家吧</p>';
+      } else {
+        panel.innerHTML = this.friends.map((f, i) => `<div class="friend-item" data-idx="${i}" data-id="${f.id}">${f.name}</div>`).join('');
+        panel.querySelectorAll('.friend-item').forEach(el => {
+          el.addEventListener('click', () => {
+            panel.querySelectorAll('.friend-item').forEach(e => e.classList.remove('selected'));
+            el.classList.add('selected');
+            friendList.selectedFriend = el.dataset.id;
+            document.getElementById('inviteFriendBtn').style.display = 'block';
+          });
+        });
+      }
+    },
+    async invite() {
+      if (!this.selectedFriend || !netMgr?.inRoom) return;
+      try {
+        await netMgr.roomNet.sendEvent('room_invite', { targetId: this.selectedFriend, roomId: netMgr.roomId });
+        window.game?.showMessage?.('邀请已发送', '#8be9fd');
+      } catch (e) {
+        window.game?.showMessage?.('邀请发送失败', '#ff5555');
+      }
     }
-  },
-  append(msg) {
-    const lines = document.getElementById('worldChatLines');
-    if (!lines || !msg) return;
-    const p = document.createElement('p');
-    const name = String(msg.nickname || '玩家').replace(/[<>&]/g, '');
-    const text = String(msg.content || '').replace(/[<>&]/g, '');
-    p.innerHTML = `<b>${name}</b> ${text}`;
-    lines.appendChild(p);
-    while (lines.children.length > 35) lines.removeChild(lines.firstChild);
-    lines.scrollTop = lines.scrollHeight;
-  },
-  async send(text) {
-    if (!auth.user) return setAuthStatus('请先登录后再发送世界频道消息。', true);
-    const content = text.trim().slice(0, 80);
-    if (!content || !this.client) return;
-    await this.client.from('world_chat_messages').insert({
-      player_id: auth.user.id,
-      nickname: auth.user.nickname || auth.user.phone || '玩家',
-      content
-    });
-    await this.load();
-  }
-};
-document.getElementById('worldChatInput')?.addEventListener('keydown', async e => {
-  if (e.key !== 'Enter') return;
-  e.preventDefault();
-  e.stopPropagation();
-  const input = e.currentTarget;
-  const text = input.value;
-  input.value = '';
-  await worldChat.send(text);
-});
-worldChat.init();
+  };
+  friendList.load();
+  document.getElementById('inviteFriendBtn')?.addEventListener('click', () => friendList.invite());
 document.querySelectorAll('[data-close-panel]').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
