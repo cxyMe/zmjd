@@ -10,6 +10,8 @@ class InputManager {
     this.touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
     this.joystick = { active: false, dx: 0, dy: 0 };
     this.buttons = { jump: false, attack: false, attackHeld: false, build: false, skill: false, action: false, actionHeld: false };
+    this.lookSensitivity = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
+    this.lastTouchAction = { x: 0, y: 0 };
 
     // Keyboard
     document.addEventListener('keydown', e => {
@@ -137,7 +139,7 @@ class InputManager {
     const bindBtn = (id, key) => {
       const btn = document.getElementById(id);
       if (!btn) return;
-      btn.addEventListener('touchstart', e => { e.preventDefault(); this.buttons[key] = true; if (key === 'action') this.buttons.actionHeld = true; });
+      btn.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; this.lastTouchAction.x = t.clientX; this.lastTouchAction.y = t.clientY; this.buttons[key] = true; if (key === 'action') this.buttons.actionHeld = true; });
       btn.addEventListener('touchend', e => { e.preventDefault(); this.buttons[key] = false; if (key === 'action') this.buttons.actionHeld = false; });
       btn.addEventListener('touchcancel', e => { e.preventDefault(); this.buttons[key] = false; if (key === 'action') this.buttons.actionHeld = false; });
     };
@@ -1243,7 +1245,8 @@ class Game {
       return;
     }
     if (info.type === 'block') {
-      lp.placeBlock({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      const touchPt = this.input.lastTouchAction;
+      lp.placeBlock({ x: touchPt.x, y: touchPt.y }, true);
       return;
     }
     if (info.type === 'weapon') {

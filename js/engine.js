@@ -251,6 +251,7 @@ class Engine {
     const key = this.getBlockKey(x, y, z);
     const blk = this.blocks.get(key);
     if (!blk) return false;
+    if (blk.type === 'ground') return false;
     blk.hp -= dmg;
     if (blk.hp <= 0) {
       this.removeBlock(x, y, z);
@@ -265,6 +266,7 @@ class Engine {
     const key = this.getBlockKey(x, y, z);
     const blk = this.blocks.get(key);
     if (!blk) return false;
+    if (blk.type === 'ground') return false;
     const info = ITEM_DB[blk.type];
     if (info?.handImmune) {
       window.game?.showMessage?.(`${info.name} 不可徒手拆毁`, '#8be9fd');
@@ -2621,7 +2623,7 @@ class PlayerEntity {
     }
   }
 
-  placeBlock(pointer = null) {
+  placeBlock(pointer = null, mobileMode = false) {
     if (this.isDead || this.isFrozen) return;
     this.breakCamouflage();
     const blockType = this.getSelectedBlockType();
@@ -2629,7 +2631,7 @@ class PlayerEntity {
     const item = this.getSelectedItem();
     if (!item || item.count <= 0) return;
 
-    const rc = this.engine.raycastPlacement(pointer?.x, pointer?.y, 6);
+    const rc = this.engine.raycastPlacement(mobileMode && pointer ? pointer.x : (pointer?.x || window.innerWidth / 2), mobileMode && pointer ? pointer.y : (pointer?.y || window.innerHeight / 2), 6);
     if (rc.hit) {
       const px = rc.x;
       const py = rc.y;
@@ -2638,6 +2640,10 @@ class PlayerEntity {
       if (center.distanceTo(this.pos) > 6.5) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
       const steelBonus = this.role === 'STEEL_BONE' ? 1.2 + (this.steelBuildBonus || 0) : 1;
+      // 检查方块下方是否有支撑（不能悬空放置）
+      const belowKey = this.engine.getBlockKey(px, py - 1, pz);
+      const belowBlock = this.engine.blocks.get(belowKey);
+      if (!belowBlock) return;
       if (this.engine.placeBlock(px, py, pz, blockType, this.team, steelBonus, this)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
