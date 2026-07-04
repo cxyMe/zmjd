@@ -506,6 +506,15 @@ class UIManager {
       if (lp.burstPotionTimer > 0) effects.push(`<span class="eff-burst">爆发 ${lp.burstPotionTimer.toFixed(1)}s</span>`);
       if (lp.hurricaneDamageTimer > 0) effects.push(`<span class="eff-hurricane">飓风 ${lp.hurricaneDamageTimer.toFixed(1)}s</span>`);
       if (lp.camouflageTimer > 0) effects.push(`<span class="eff-camo">隐身 ${lp.camouflageTimer.toFixed(1)}s</span>`);
+      const camoOverlay = document.getElementById('camoOverlay');
+      if (camoOverlay) {
+        if (lp.camouflageTimer > 0) {
+          camoOverlay.style.display = 'block';
+          document.getElementById('camoTime').textContent = lp.camouflageTimer.toFixed(1);
+        } else {
+          camoOverlay.style.display = 'none';
+        }
+      }
       if (lp.fatTimer > 0) effects.push(`<span class="eff-fat">肥肉 ${lp.fatTimer.toFixed(1)}s</span>`);
       if (lp.role === 'WAIWAI') effects.push(`<span class="eff-miss">miss ${lp.miss}/${lp.maxMiss}${lp.missInvulnTimer > 0 ? ` 无敌 ${lp.missInvulnTimer.toFixed(1)}s` : ''}</span>`);
       statusBar.innerHTML = effects.join(' ');
@@ -807,12 +816,13 @@ class Game {
     this.roleChosen = false;
     this.selectedBlockKey = null;
     this.movingBlockKey = null;
+    this.selectedMap = 'classic';
   }
 
   init() {
     const container = document.getElementById('gameCanvas');
     this.engine = new Engine(container);
-    this.gens = generateWorld(this.engine);
+    this.gens = generateWorld(this.engine, this.selectedMap);
     this.social?.initMatch?.();
     this.ai = new AISystem(this);
     this.ui = new UIManager(this);

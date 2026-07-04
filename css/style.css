@@ -1120,3 +1120,74 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   #hotbar { left: 54%; max-width: calc(100vw - 110px); }
   .hotbar-slot { width: 38px; height: 38px; }
 }
+
+/* 隐身倒计时大字 */
+#camoOverlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  font-weight: bold;
+  color: rgba(200, 220, 255, 0.7);
+  text-shadow: 0 0 10px rgba(100, 150, 255, 0.5);
+  pointer-events: none;
+  z-index: 1000;
+  display: none;
+  letter-spacing: 2px;
+}
+
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-3px, 2px); }
+  20% { transform: translate(4px, -3px); }
+  30% { transform: translate(-5px, 4px); }
+  40% { transform: translate(3px, -5px); }
+  50% { transform: translate(-4px, 3px); }
+  60% { transform: translate(5px, -2px); }
+  70% { transform: translate(-3px, 5px); }
+  80% { transform: translate(4px, -4px); }
+  90% { transform: translate(-5px, 3px); }
+}
+.shake-small { animation: screen-shake 0.3s ease-out; }
+.shake-medium { animation: screen-shake 0.5s ease-out; }
+.shake-large { animation: screen-shake 0.8s ease-out; }
+
+/* Map selection */
+.map-select {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  justify-content: center;
+}
+.map-select h3 {
+  width: 100%;
+  text-align: center;
+  margin: 0 0 5px;
+  font-size: 14px;
+  color: #aab;
+}
+.map-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 90px;
+  padding: 6px 8px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(30,30,50,0.6);
+}
+.map-card:hover { border-color: rgba(255,255,255,0.4); transform: translateY(-2px); }
+.map-card.selected { border-color: #6af; background: rgba(60,80,140,0.5); box-shadow: 0 0 12px rgba(100,150,255,0.3); }
+.map-card b { color: #ddf; font-size: 12px; }
+.map-card span { color: #889; font-size: 10px; margin-top: 2px; text-align: center; }
+.map-thumb {
+  width: 50px;
+  height: 40px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+.map-thumb.default { background: linear-gradient(135deg, #3a5a3a, #5a7a5a); }
+.map-thumb.forest { background: linear-gradient(135deg, #1a2a1a, #2a4a2a); }

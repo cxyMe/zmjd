@@ -105,6 +105,19 @@ updateOrientationGate();
       <div class="status-text" id="roomStatus">未进入房间；点击开始游戏选择创建、加入或本地试玩。</div>
       <div class="room-members" id="roomMembers"></div>
       <button class="small-btn ai-fill-btn" id="addAiBtn">添加AI替补（0/4）</button>
+      <div class="map-select">
+        <h3>地图选择</h3>
+        <div class="map-card selected" data-map="classic">
+          <div class="map-thumb default"></div>
+          <b>经典方块</b>
+          <span>四队基地环绕中心岛</span>
+        </div>
+        <div class="map-card" data-map="twilight_forest">
+          <div class="map-thumb forest"></div>
+          <b>暮色森林</b>
+          <span>树冠基地·迷雾封锁</span>
+        </div>
+      </div>
       <div class="team-select">
         <div class="team-btn red" data-team="RED">红队</div>
         <div class="team-btn blue" data-team="BLUE">蓝队</div>
@@ -242,6 +255,7 @@ updateOrientationGate();
 
   <!-- Status Effects Bar -->
   <div id="statusEffects" style="display:none;"></div>
+  <div id="camoOverlay">隐身 <span id="camoTime">0.0</span>s</div>
   <div id="timedAction" style="display:none;"></div>
 
   <div id="buildPanel" style="display:none;">
@@ -549,6 +563,16 @@ document.querySelectorAll('.team-btn').forEach(btn => {
       }
     }
     updateStartBtn();
+  });
+});
+
+// Map selection
+document.querySelectorAll('.map-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.map-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    if (window.game) window.game.selectedMap = card.dataset.map;
+    else window._selectedMap = card.dataset.map;
   });
 });
 
@@ -944,7 +968,9 @@ document.getElementById('startBtn').addEventListener('click', () => {
   }
   closeAllLobbyPanels();
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
+  if (!window._selectedMap) window._selectedMap = 'classic';
   window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
+  window.game.selectedMap = window._selectedMap || 'classic';
   window.game.init();
   window.game.start(selectedTeam, 'FOX');
   if (!localOnly && netMgr?.isHost) {

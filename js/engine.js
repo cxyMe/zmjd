@@ -116,6 +116,8 @@ class Engine {
     this.entities = [];
     this.blocks = new Map(); // key="x,y,z"
     this.particles = [];
+    this.shakeTimer = 0;
+    this.shakeIntensity = 0;
     this.projectiles = [];
     this.dropItems = [];     // 地面掉落物
     this.deathBoxes = [];   // 死亡掉落盒子
@@ -286,6 +288,46 @@ class Engine {
         vel: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3)
       });
     }
+  }
+
+  spawnExplosionFX(pos, radius, itemKey) {
+    // 爆炸物等级 -> 粒子数量和闪耀度
+    const fxMap = {
+      tnt:          { count: 30, emissiveIntensity: 0.3, colors: [0xff4400, 0xff6600, 0xffaa00] },
+      handmade_tnt: { count: 50, emissiveIntensity: 0.5, colors: [0xff2200, 0xff5500, 0xffcc00, 0xff8800] },
+      military_c4:  { count: 80, emissiveIntensity: 0.8, colors: [0xff0000, 0xff4400, 0xffdd00, 0xffffff] },
+      mini_nuke:    { count: 150, emissiveIntensity: 1.2, colors: [0xff0000, 0xff6600, 0xffff00, 0xffffff, 0x00ffff] }
+    };
+    const fx = fxMap[itemKey] || fxMap.tnt;
+    for (let i = 0; i < fx.count; i++) {
+      const c = fx.colors[Math.floor(Math.random() * fx.colors.length)];
+      const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+      const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true });
+      mat.emissive = new THREE.Color(c);
+      mat.emissiveIntensity = fx.emissiveIntensity;
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * radius * 1.5;
+      mesh.position.x += (Math.random() - 0.5) * 1.5;
+      mesh.position.y += Math.random() * 0.5;
+      mesh.position.z += (Math.random() - 0.5) * 1.5;
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh, life: 1.0 + Math.random() * 0.8,
+        vel: new THREE.Vector3(
+          Math.cos(angle) * speed * (0.5 + Math.random()),
+          Math.random() * radius * 2.5 + 2,
+          Math.sin(angle) * speed * (0.5 + Math.random())
+        ),
+        emissiveIntensity: fx.emissiveIntensity
+      });
+    }
+    // 屏幕抖动
+    const intensity = radius <= 2 ? 1 : radius <= 4 ? 2 : 3;
+    const duration = radius <= 2 ? 0.3 : radius <= 4 ? 0.5 : 0.8;
+    this.shakeTimer = duration;
+    this.shakeIntensity = intensity;
   }
 
   raycastBlocks(origin, dir, maxDist = 5) {
@@ -759,7 +801,7 @@ class Engine {
     return drone;
   }
 
-  explodeAt(pos, radius, dmg, owner = null) {
+  explodeAt(pos, radius, dmg, owner = null, itemKey = '') {
     // 炸毁方块
     const rx = Math.floor(pos.x);
     const ry = Math.floor(pos.y);
@@ -816,6 +858,7 @@ class Engine {
         this.removeGroundDevice(dev);
       }
     }
+    this.spawnExplosionFX(pos, radius, itemKey || '');
     this.spawnParticles(pos, 0xff4400, 20);
   }
 
@@ -830,9 +873,20 @@ class Engine {
       p.mesh.position.addScaledVector(p.vel, dt);
       p.vel.y -= 5 * dt;
       p.mesh.material.opacity = p.life;
+      if (p.emissiveIntensity) {
+        p.mesh.material.emissiveIntensity = p.emissiveIntensity * p.life;
+      }
       p.mesh.rotation.x += dt * 3;
       p.mesh.rotation.y += dt * 2;
       if (p.life <= 0) { this.scene.remove(p.mesh); this.particles.splice(i, 1); }
+    }
+
+    // Screen shake
+    if (this.shakeTimer > 0) {
+      this.shakeTimer -= dt;
+      const s = this.shakeIntensity * (this.shakeTimer / 0.8);
+      this.camera.position.x += (Math.random() - 0.5) * s * 0.15;
+      this.camera.position.y += (Math.random() - 0.5) * s * 0.15;
     }
 
     // Drop Items (浮动动画 + 自动拾取 + 超时消失)
@@ -974,7 +1028,7 @@ class Engine {
       ex.mesh.rotation.y += dt * 2.5;
       this.updateTextSprite(ex.label, `${Math.max(0, ex.life).toFixed(1)}s`);
       if (ex.life <= 0) {
-        this.explodeAt(ex.pos.clone(), ex.radius, ex.damage, ex.owner);
+        this.explodeAt(ex.pos.clone(), ex.radius, ex.damage, ex.owner, ex.itemKey);
         this.scene.remove(ex.mesh);
         this.explosives.splice(i, 1);
       }
@@ -1224,9 +1278,24 @@ class Engine {
 }
 
 // ============================================
+// Map System
+// ============================================
+const MAPS = {
+  classic: {
+    id: 'classic', name: '经典方块', desc: '四队基地环绕中心岛，梦域潮汐带来随机资源浮岛',
+    thumbnail: 'default'
+  },
+  twilight_forest: {
+    id: 'twilight_forest', name: '暮色森林', desc: '树冠基地、地面黑雾迷雾，视线封锁，幻影爪痕持续伤害',
+    thumbnail: 'forest'
+  }
+};
+
+// ============================================
 // World Generator (减少资源点)
 // ============================================
-function generateWorld(engine) {
+function generateWorld(engine, mapId = 'classic') {
+  if (mapId === 'twilight_forest') return generateTwilightForest(engine);
   const geo = new THREE.BoxGeometry(1, 1, 1);
   engine.tidalIslands = [];
   engine.temporaryGens = [];
@@ -1412,6 +1481,197 @@ function generateWorld(engine) {
       const gen = { mesh, type, pos: mesh.position.clone(), timer: 0, spawnSec: Math.max(15, RES[type].spawnSec - 10), ready: true, active: true, temporary: true, tempIsland };
       engine.temporaryGens.push(gen);
       gensRef.push(gen);
+    }
+  };
+
+  return gens;
+}
+
+function generateTwilightForest(engine) {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  engine.tidalIslands = [];
+  engine.temporaryGens = [];
+  engine.mapFeatures = { fogZones: [], jadeSpawnPoints: [], fogDmgTimer: 0 };
+
+  const treeColor = 0x3d2b1f;
+  const leafColor = 0x1a4d1a;
+  const fogColor = 0x0a0a15;
+  const platformColor = 0x4a3a2a;
+
+  function createIsland(cx, cz, size, color, options = {}) {
+    const mat = new THREE.MeshLambertMaterial({ color });
+    const island = { cx, cz, baseX: cx, baseZ: cz, size, color, blocks: [], active: true, tidal: !!options.tidal };
+    for (let x = -size; x <= size; x++) {
+      for (let z = -size; z <= size; z++) {
+        if (x * x + z * z > size * size + 2) continue;
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(cx + x, 0, cz + z);
+        mesh.receiveShadow = true;
+        engine.scene.add(mesh);
+        const key = engine.getBlockKey(cx + x, 0, cz + z);
+        engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999, island });
+        const mesh2 = new THREE.Mesh(geo, mat);
+        mesh2.position.set(cx + x, -1, cz + z);
+        engine.scene.add(mesh2);
+        island.blocks.push({ relX: x, relZ: z, mesh, mesh2, key });
+      }
+    }
+    if (options.tidal) engine.tidalIslands.push(island);
+    return island;
+  }
+
+  function createTreeTrunk(cx, cz, height) {
+    const trunkMat = new THREE.MeshLambertMaterial({ color: treeColor });
+    for (let y = 1; y <= height; y++) {
+      const mesh = new THREE.Mesh(geo, trunkMat);
+      mesh.position.set(cx, y, cz);
+      engine.scene.add(mesh);
+      const key = engine.getBlockKey(cx, y, cz);
+      engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+    }
+  }
+
+  function createTreeCrown(cx, cy, cz, radius) {
+    const leafMat = new THREE.MeshLambertMaterial({ color: leafColor, transparent: true, opacity: 0.85 });
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          if (dx * dx + dz * dz > radius * radius + 1) continue;
+          const mesh = new THREE.Mesh(geo, leafMat.clone());
+          mesh.position.set(cx + dx, cy + dy, cz + dz);
+          mesh.receiveShadow = true;
+          engine.scene.add(mesh);
+          const key = engine.getBlockKey(cx + dx, cy + dy, cz + dz);
+          engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+        }
+      }
+    }
+  }
+
+  function createFogZone(x, z, radius) {
+    const fogMat = new THREE.MeshBasicMaterial({ color: fogColor, transparent: true, opacity: 0.92 });
+    const fogGeo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+    const fogMesh = new THREE.Mesh(fogGeo, fogMat);
+    fogMesh.rotation.x = -Math.PI / 2;
+    fogMesh.position.set(x, 0.05, z);
+    engine.scene.add(fogMesh);
+    engine.mapFeatures.fogZones.push({ mesh: fogMesh, x, z, radius });
+  }
+
+  // Four giant trees at cardinal positions (bases in canopy)
+  const treePositions = [
+    { cx: -60, cz: -60, team: TEAMS.RED },
+    { cx:  60, cz: -60, team: TEAMS.BLUE },
+    { cx: -60, cz:  60, team: TEAMS.GREEN },
+    { cx:  60, cz:  60, team: TEAMS.YELLOW }
+  ];
+  const treeHeight = 20;
+  const crownY = treeHeight + 1;
+  const crownRadius = 7;
+  const platformRadius = 7;
+
+  for (const tp of treePositions) {
+    // Tree trunk
+    createTreeTrunk(tp.cx, tp.cz, treeHeight);
+    // Crown leaves
+    createTreeCrown(tp.cx, crownY, crownRadius);
+    // Base platform in canopy
+    createIsland(tp.cx, tp.cz, platformRadius, platformColor);
+    // Move TEAMS spawn positions up to canopy
+    tp.team.spawn.set(tp.cx, crownY + 2, tp.cz);
+  }
+
+  // Center枯木广场 (dead tree plaza) - small dark island
+  createIsland(0, 0, 3, 0x1a1a1a);
+
+  // Ground fog covering entire map except tree bases and center
+  // Fog is everywhere below y=18 (ground level)
+  const fogRadius = 100;
+  createFogZone(0, 0, fogRadius);
+
+  // Silver on corner towers (4 high points)
+  const towerPositions = [
+    { x: -90, z: -90 }, { x: 90, z: -90 },
+    { x: -90, z: 90 }, { x: 90, z: 90 }
+  ];
+  for (const t of towerPositions) {
+    createIsland(t.x, t.z, 3, 0x3a3a3a);
+    // Tower pillar
+    const pillarMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+    for (let y = 1; y <= 15; y++) {
+      const mesh = new THREE.Mesh(geo, pillarMat);
+      mesh.position.set(t.x, y, t.z);
+      engine.scene.add(mesh);
+      const key = engine.getBlockKey(t.x, y, t.z);
+      engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+    }
+    // Platform at top
+    const topMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+    const topMesh = new THREE.Mesh(geo, topMat);
+    topMesh.position.set(t.x, 16, t.z);
+    topMesh.scale.set(5, 1, 5);
+    engine.scene.add(topMesh);
+  }
+
+  // Beds (in canopy bases)
+  const bedGeo = new THREE.BoxGeometry(2, 0.6, 1.2);
+  for (const [key, team] of Object.entries(TEAMS)) {
+    const bed = new THREE.Mesh(bedGeo, new THREE.MeshLambertMaterial({ color: team.color }));
+    bed.position.copy(team.bedPos = team.spawn.clone().add(new THREE.Vector3(0, -0.5, 0)));
+    bed.castShadow = true;
+    engine.scene.add(bed);
+    team.bedMesh = bed;
+    team.bedAlive = true;
+  }
+
+  // Resource generators
+  const genGeo = new THREE.CylinderGeometry(0.6, 0.8, 1.2, 8);
+  const gens = [];
+
+  // Gold: in tree root caves (safe, at base of each tree)
+  for (const tp of treePositions) {
+    const mat = new THREE.MeshLambertMaterial({ color: RES.GOLD.color, emissive: RES.GOLD.color, emissiveIntensity: 0.2 });
+    const mesh = new THREE.Mesh(genGeo, mat);
+    mesh.position.set(tp.cx + 5, 1.1, tp.cz);
+    engine.scene.add(mesh);
+    gens.push({ mesh, type: 'GOLD', team: undefined, pos: mesh.position.clone(), timer: 0, spawnSec: RES.GOLD.spawnSec, ready: true });
+  }
+
+  // Jade: 3 random spawn points in center枯木广场 (rotating every 30s)
+  for (let i = 0; i < 3; i++) {
+    const angle = (Math.PI * 2 / 3) * i;
+    const r = 2;
+    const pos = new THREE.Vector3(Math.cos(angle) * r, 1.1, Math.sin(angle) * r);
+    const mat = new THREE.MeshLambertMaterial({ color: RES.JADE.color, emissive: RES.JADE.color, emissiveIntensity: 0.3 });
+    const mesh = new THREE.Mesh(genGeo, mat);
+    mesh.position.copy(pos);
+    engine.scene.add(mesh);
+    gens.push({ mesh, type: 'JADE', team: undefined, pos: pos.clone(), timer: 0, spawnSec: RES.JADE.spawnSec, ready: true, rotating: true });
+    engine.mapFeatures.jadeSpawnPoints.push({ mesh, basePos: pos.clone() });
+  }
+
+  // Silver: on corner tower tops
+  for (const t of towerPositions) {
+    const mat = new THREE.MeshLambertMaterial({ color: RES.SILVER.color, emissive: RES.SILVER.color, emissiveIntensity: 0.2 });
+    const mesh = new THREE.Mesh(genGeo, mat);
+    mesh.position.set(t.x, 17.1, t.z);
+    engine.scene.add(mesh);
+    gens.push({ mesh, type: 'SILVER', team: undefined, pos: mesh.position.clone(), timer: 0, spawnSec: RES.SILVER.spawnSec, ready: true });
+  }
+
+  // Dream tide for twilight forest (re-position jade points)
+  engine.triggerDreamTide = function(gensRef) {
+    // Move jade spawn points to new random positions near center
+    for (const jp of engine.mapFeatures.jadeSpawnPoints) {
+      const angle = Math.random() * Math.PI * 2;
+      const r = 1 + Math.random() * 3;
+      const nx = Math.cos(angle) * r;
+      const nz = Math.sin(angle) * r;
+      jp.mesh.position.set(nx, 1.1, nz);
+      jp.basePos.set(nx, 1.1, nz);
+      // Update corresponding gen position
+      const gen = gensRef.find(g => g.rotating && g.mesh === jp.mesh);
+      if (gen) gen.pos.set(nx, 1.1, nz);
     }
   };
 
