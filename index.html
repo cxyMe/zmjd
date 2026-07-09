@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>3D 起床战争 - Bed Wars 3D</title>
   <link rel="stylesheet" href="css/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -69,7 +69,6 @@ updateOrientationGate();
         <button class="menu-feature-btn" id="menuSeasonBtn">赛季</button>
         <button class="menu-feature-btn" id="menuTasksBtn">任务</button>
         <button class="menu-feature-btn" id="menuSkinShopBtn">外观商店</button>
-        <button class="menu-feature-btn" id="menuCustomBtn">自定义</button>
       </div>
     </div>
 
@@ -90,27 +89,10 @@ updateOrientationGate();
       </div>
     </section>
 
-    <aside class="lobby-chat-dock">
-      <div class="chat-panel compact" id="friendListPanel">
-        <div class="chat-head">好友列表</div>
-        <div class="chat-lines" id="friendListContent">
-          <p class="friend-loading">加载中...</p>
-        </div>
-        <button class="friend-invite-btn" id="inviteFriendBtn" style="display:none;">邀请加入房间</button>
-      </div>
-    </aside>
-
     <aside class="lobby-start-dock">
       <button class="small-btn secondary wide" id="openPlayOptionsBtn">选择模式 / 房间</button>
       <div class="status-text" id="roomStatus">未进入房间；点击选择模式创建、加入或本地试玩。</div>
       <div class="room-members" id="roomMembers"></div>
-      <button class="small-btn ai-fill-btn" id="addAiBtn">添加AI替补（0/4）</button>
-      <div class="team-select">
-        <div class="team-btn red" data-team="RED">红队</div>
-        <div class="team-btn blue" data-team="BLUE">蓝队</div>
-        <div class="team-btn green" data-team="GREEN">绿队</div>
-        <div class="team-btn yellow" data-team="YELLOW">黄队</div>
-      </div>
     </aside>
   </div>
 </div>
@@ -423,7 +405,16 @@ updateOrientationGate();
         <h3>模式选择</h3>
         <div class="mode-select" id="roomModeSelect">
           <div class="mode-card selected" data-mode="classic">经典模式</div>
-          <div class="mode-card" data-mode="rush">极速模式</div>
+        </div>
+      </div>
+      <div class="room-panel-section">
+        <h3>队伍选择</h3>
+        <button class="small-btn ai-fill-btn" id="addAiBtn">添加AI替补（0/4）</button>
+        <div class="team-select">
+          <div class="team-btn red" data-team="RED">红队</div>
+          <div class="team-btn blue" data-team="BLUE">蓝队</div>
+          <div class="team-btn green" data-team="GREEN">绿队</div>
+          <div class="team-btn yellow" data-team="YELLOW">黄队</div>
         </div>
       </div>
       <button class="start-btn hero-start" id="roomStartBtn" style="display:none;">开始游戏</button>
@@ -902,63 +893,7 @@ document.getElementById('lobbySettingsBtn').addEventListener('click', () => wind
     });
   }
 document.getElementById('seasonPassBtn')?.addEventListener('click', () => window.seasonPass?.open?.('rewards'));
-document.getElementById('menuSeasonBtn')?.addEventListener('click', () => window.menuGrowthUI?.open?.('season'));
-document.getElementById('menuTasksBtn')?.addEventListener('click', () => window.menuGrowthUI?.open?.('tasks'));
-document.getElementById('menuCustomBtn')?.addEventListener('click', () => window.hudLayoutManager?.open?.());
 document.getElementById('menuSkinShopBtn')?.addEventListener('click', () => window.seasonPass?.openSkinShop?.());
-document.getElementById('friendListPanel')?.addEventListener('click', () => {
-  document.querySelector('.lobby-chat-dock')?.classList.toggle('expanded');
-});
-
-  // 好友列表
-  const friendList = {
-    friends: [],
-    selectedFriend: null,
-    async load() {
-      const panel = document.getElementById('friendListContent');
-      if (!panel) return;
-      const supabase = window.supabaseClient;
-      if (!supabase || !auth.user) {
-        panel.innerHTML = '<p class="friend-empty">请先登录查看好友</p>';
-        return;
-      }
-      try {
-        // 尝试从易圈API获取关注列表
-        const { data, error } = await supabase.from('player_follows').select('followed_id, nickname').eq('follower_id', auth.user.id).limit(50);
-        if (!error && data && data.length > 0) {
-          this.friends = data.map(f => ({ id: f.followed_id, name: f.nickname || '玩家' }));
-        } else {
-          this.friends = [];
-        }
-      } catch (e) {
-        this.friends = [];
-      }
-      if (this.friends.length === 0) {
-        panel.innerHTML = '<p class="friend-empty">暂无好友，去关注其他玩家吧</p>';
-      } else {
-        panel.innerHTML = this.friends.map((f, i) => `<div class="friend-item" data-idx="${i}" data-id="${f.id}">${f.name}</div>`).join('');
-        panel.querySelectorAll('.friend-item').forEach(el => {
-          el.addEventListener('click', () => {
-            panel.querySelectorAll('.friend-item').forEach(e => e.classList.remove('selected'));
-            el.classList.add('selected');
-            friendList.selectedFriend = el.dataset.id;
-            document.getElementById('inviteFriendBtn').style.display = 'block';
-          });
-        });
-      }
-    },
-    async invite() {
-      if (!this.selectedFriend || !netMgr?.inRoom) return;
-      try {
-        await netMgr.roomNet.sendEvent('room_invite', { targetId: this.selectedFriend, roomId: netMgr.roomId });
-        window.game?.showMessage?.('邀请已发送', '#8be9fd');
-      } catch (e) {
-        window.game?.showMessage?.('邀请发送失败', '#ff5555');
-      }
-    }
-  };
-  friendList.load();
-  document.getElementById('inviteFriendBtn')?.addEventListener('click', () => friendList.invite());
 document.getElementById('skinShopCloseBtn')?.addEventListener('click', () => document.getElementById('skinShopPanel').style.display = 'none');
 document.getElementById('roomPanelCloseBtn')?.addEventListener('click', () => document.getElementById('roomPanel').style.display = 'none');
 document.querySelectorAll('[data-close-panel]').forEach(btn => {

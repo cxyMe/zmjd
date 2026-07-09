@@ -15,7 +15,11 @@ class AuthManager {
     try {
       const saved = JSON.parse(localStorage.getItem('bedwars_auth') || 'null');
       if (!saved?.session?.access_token) return;
+      // 检查 session 自身的过期时间
       if (saved.session.expires_at && saved.session.expires_at * 1000 < Date.now()) return;
+      // 检查14天有效期上限
+      const savedTime = saved.savedAt || 0;
+      if (savedTime && (Date.now() - savedTime > 14 * 24 * 60 * 60 * 1000)) return;
       this.user = saved.user;
       this.session = saved.session;
     } catch (_) {
@@ -47,7 +51,7 @@ class AuthManager {
 
     this.user = data.user;
     this.session = data.session;
-    localStorage.setItem('bedwars_auth', JSON.stringify({ user: this.user, session: this.session }));
+    localStorage.setItem('bedwars_auth', JSON.stringify({ user: this.user, session: this.session, savedAt: Date.now() }));
     return data;
   }
 

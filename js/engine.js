@@ -449,6 +449,7 @@ class Engine {
       pos: mesh.position.clone(),
       typeKey,
       count,
+      isCurrency: false, // 普通道具掉落物：拾取时走 addToBackpack 物品分支，而非货币分支
       life: 60, // 60秒后消失
       floatOffset: Math.random() * Math.PI * 2,
       radius: 0.35
@@ -1678,6 +1679,15 @@ function generateTwilightForest(engine) {
     gm.position.set(baseX + 1.5, baseY, baseZ + 0.8);
     engine.scene.add(gm);
     gens.push({ mesh: gm, type: 'GOLD', pos: gm.position.clone(), timer: 0, spawnSec: slowSpawn(RES.GOLD.spawnSec), ready: true });
+  }
+
+  // Copper near each bed
+  for (const tp of treePositions) {
+    const mat = new THREE.MeshLambertMaterial({ color: RES.COPPER.color, emissive: RES.COPPER.color, emissiveIntensity: 0.2 });
+    const mesh = new THREE.Mesh(genGeo, mat);
+    mesh.position.set(tp.cx - 3, 42, tp.cz);  // 床铺附近
+    engine.scene.add(mesh);
+    gens.push({ mesh, type: 'COPPER', team: undefined, pos: mesh.position.clone(), timer: 0, spawnSec: RES.COPPER.spawnSec, ready: true });
   }
 
   // Diamond points (JADE): center (0,5,0), radius 8 circle, 3 points, 45s, 2 each
