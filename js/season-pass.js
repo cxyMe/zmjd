@@ -127,7 +127,8 @@ class SeasonPassSystem {
     document.getElementById('seasonPassBtn')?.addEventListener('click', () => this.open('rewards'));
     document.getElementById('passCloseBtn')?.addEventListener('click', () => this.close());
     document.getElementById('claimAllPassBtn')?.addEventListener('click', () => this.claimAll());
-    document.getElementById('upgradePassBtn')?.addEventListener('click', () => this.openPay('advanced'));
+    document.getElementById('sponsorDevBtn')?.addEventListener('click', () => this.openPay('advanced'));
+    document.getElementById('upgradePassBtn')?.addEventListener('click', () => this.openPay('premium'));
     document.getElementById('passPayCloseBtn')?.addEventListener('click', () => this.closePay());
     document.getElementById('paidConfirmBtn')?.addEventListener('click', () => this.submitPaidOrder());
     document.querySelectorAll('[data-buy-pass]').forEach(btn => {
@@ -167,6 +168,60 @@ class SeasonPassSystem {
     if (this.panel) this.panel.style.display = 'none';
   }
 
+  openSkinShop() {
+    const panel = document.getElementById('skinShopPanel');
+    const body = document.getElementById('skinShopBody');
+    const couponText = document.getElementById('skinShopCouponText');
+    if (couponText) couponText.textContent = this.state.coupons;
+    if (panel) panel.style.display = 'flex';
+    if (!body) return;
+    const owned = new Set(this.state.ownedCosmetics || []);
+    body.innerHTML = `
+      <div class="pass-note">赛季券主要用于外观个性化：角色、武器、搭路、床、击杀播报和表情均不提供数值属性。</div>
+      <div class="cosmetic-layout">
+        <div class="cosmetic-preview">
+          <div class="preview-character ${this.currentPreviewClass()}" id="skinShopPreviewHero">
+            <div class="preview-glow"></div><div class="preview-head"></div><div class="preview-body"></div>
+            <div class="preview-arm left"></div><div class="preview-arm right"></div><div class="preview-leg left"></div><div class="preview-leg right"></div><div class="preview-weapon"></div>
+          </div>
+          <h3>当前预览</h3>
+          <p id="skinShopPreviewText">点击任意外观可试穿；购买后可装备到大厅和对局展示。</p>
+        </div>
+        <div class="cosmetic-shop-grid">
+          ${PASS_COSMETICS.map(item => {
+            const has = owned.has(item.id) || item.price === 0 && this.canUnlockFreeCosmetic(item);
+            const equipped = this.state.equippedCosmetics?.[item.type] === item.id;
+            return `<div class="cosmetic-card ${item.rarity}" data-preview-cosmetic="${item.id}">
+              <div class="cosmetic-rarity">${item.rarity}</div>
+              <h4>${item.name}</h4>
+              <p>${item.type}｜${item.desc}</p>
+              <div class="cosmetic-price">${item.price ? item.price + '赛季券' : item.source || '手册解锁'}</div>
+              <button data-buy-cosmetic="${item.id}" ${has ? 'disabled' : ''}>${has ? '已拥有' : '购买'}</button>
+              <button data-equip-cosmetic="${item.id}" ${has ? '' : 'disabled'}>${equipped ? '已装备' : '装备'}</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    body.querySelectorAll('[data-preview-cosmetic]').forEach(card => {
+      card.onclick = (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        this.previewCosmeticInShop(card.dataset.previewCosmetic);
+      };
+    });
+    body.querySelectorAll('[data-buy-cosmetic]').forEach(btn => btn.onclick = () => this.buyCosmetic(btn.dataset.buyCosmetic));
+    body.querySelectorAll('[data-equip-cosmetic]').forEach(btn => btn.onclick = () => this.equipCosmetic(btn.dataset.equipCosmetic));
+  }
+
+  previewCosmeticInShop(id) {
+    const item = PASS_COSMETICS.find(x => x.id === id);
+    if (!item) return;
+    const hero = document.getElementById('skinShopPreviewHero');
+    const text = document.getElementById('skinShopPreviewText');
+    if (hero) hero.className = `preview-character ${item.previewClass}`;
+    if (text) text.textContent = `${item.name}：${item.desc}`;
+    this.applyLobbyPreview(item.previewClass);
+  }
+
   render() {
     const lv = this.level();
     document.getElementById('passLevelText').textContent = `Lv.${lv}`;
@@ -175,12 +230,7 @@ class SeasonPassSystem {
     document.getElementById('seasonCouponText').textContent = this.state.coupons;
     document.getElementById('passTierText').textContent = SEASON_PASS_CONFIG.tiers[this.state.tier]?.name || '免费版';
     if (this.tab === 'rewards') this.renderRewards();
-    if (this.tab === 'cosmetics') this.renderCosmetics();
-    if (this.tab === 'gacha') this.renderGacha();
-    if (this.tab === 'predict') this.renderPredict();
     if (this.tab === 'tasks') this.renderTasks();
-    if (this.tab === 'team') this.renderTeam();
-    if (this.tab === 'rules') this.renderRules();
   }
 
   rewardFor(level, track) {
@@ -414,7 +464,7 @@ class SeasonPassSystem {
     this.state.coupons -= item.price;
     this.state.ownedCosmetics.push(id);
     this.saveState();
-    this.renderCosmetics();
+    if (document.getElementById('skinShopPanel')?.style.display === 'flex') this.openSkinShop();
     alert(`已购买：${item.name}`);
   }
 
@@ -427,7 +477,7 @@ class SeasonPassSystem {
     this.state.equippedCosmetics[item.type] = id;
     this.saveState();
     this.applyLobbyPreview(item.previewClass);
-    this.renderCosmetics();
+    if (document.getElementById('skinShopPanel')?.style.display === 'flex') this.openSkinShop();
     alert(`已装备：${item.name}`);
   }
 

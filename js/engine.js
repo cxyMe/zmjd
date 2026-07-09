@@ -1326,6 +1326,7 @@ const MAPS = {
 // World Generator (减少资源点)
 // ============================================
 function generateWorld(engine, mapId = 'classic') {
+  engine.mapId = mapId;
   if (mapId === 'twilight_forest') return generateTwilightForest(engine);
   const geo = new THREE.BoxGeometry(1, 1, 1);
   engine.tidalIslands = [];
@@ -1527,53 +1528,56 @@ function generateTwilightForest(engine) {
   const geo = new THREE.BoxGeometry(1, 1, 1);
   engine.tidalIslands = [];
   engine.temporaryGens = [];
-  engine.mapFeatures = { fogZones: [], jadeSpawnPoints: [], fogDmgTimer: 0 };
+  engine.mapFeatures = { canopyCenters: [], rootCaveTimers: [] };
 
-  const treeColor = 0x3d2b1f;
+  const trunkColor = 0x3d2b1f;
   const leafColor = 0x1a4d1a;
+  const plankColor = 0x8B5A2B;
+  const birchColor = 0xE3CAA5;
   const fogColor = 0x0a0a15;
-  const platformColor = 0x4a3a2a;
+  const stoneColor = 0x555555;
 
-  function createIsland(cx, cz, size, color, options = {}) {
+  function placeBlock(x, y, z, color, type = 'ground') {
     const mat = new THREE.MeshLambertMaterial({ color });
-    const island = { cx, cz, baseX: cx, baseZ: cz, size, color, blocks: [], active: true, tidal: !!options.tidal };
-    for (let x = -size; x <= size; x++) {
-      for (let z = -size; z <= size; z++) {
-        if (x * x + z * z > size * size + 2) continue;
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(cx + x, 0, cz + z);
-        mesh.receiveShadow = true;
-        engine.scene.add(mesh);
-        const key = engine.getBlockKey(cx + x, 0, cz + z);
-        engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999, island });
-        const mesh2 = new THREE.Mesh(geo, mat);
-        mesh2.position.set(cx + x, -1, cz + z);
-        engine.scene.add(mesh2);
-        island.blocks.push({ relX: x, relZ: z, mesh, mesh2, key });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    if (type === 'ground') mesh.receiveShadow = true;
+    else mesh.castShadow = true;
+    engine.scene.add(mesh);
+    const key = engine.getBlockKey(x, y, z);
+    engine.blocks.set(key, { mesh, type, hp: 9999, maxHp: 9999 });
+    return mesh;
+  }
+
+  function createTrunk(cx, cz, yStart, height, diameter) {
+    const r = Math.floor(diameter / 2);
+    const mat = new THREE.MeshLambertMaterial({ color: trunkColor });
+    for (let y = yStart; y < yStart + height; y++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx * dx + dz * dz > r * r + 1) continue;
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(cx + dx, y, cz + dz);
+          mesh.castShadow = true;
+          engine.scene.add(mesh);
+          const key = engine.getBlockKey(cx + dx, y, cz + dz);
+          engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+        }
       }
     }
-    if (options.tidal) engine.tidalIslands.push(island);
-    return island;
   }
 
-  function createTreeTrunk(cx, cz, height) {
-    const trunkMat = new THREE.MeshLambertMaterial({ color: treeColor });
-    for (let y = 1; y <= height; y++) {
-      const mesh = new THREE.Mesh(geo, trunkMat);
-      mesh.position.set(cx, y, cz);
-      engine.scene.add(mesh);
-      const key = engine.getBlockKey(cx, y, cz);
-      engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
-    }
-  }
-
-  function createTreeCrown(cx, cy, cz, radius) {
-    const leafMat = new THREE.MeshLambertMaterial({ color: leafColor, transparent: true, opacity: 0.85 });
+  function createCanopy(cx, cy, cz, radius) {
+    const leafMat = new THREE.MeshLambertMaterial({ color: leafColor, transparent: true, opacity: 0.9 });
+    const plankMat = new THREE.MeshLambertMaterial({ color: plankColor });
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dz = -radius; dz <= radius; dz++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          if (dx * dx + dz * dz > radius * radius + 1) continue;
-          const mesh = new THREE.Mesh(geo, leafMat.clone());
+        for (let dy = -2; dy <= 2; dy++) {
+          const distSq = dx * dx + dz * dz + dy * dy * 2;
+          if (distSq > radius * radius + 3) continue;
+          const isPlank = Math.random() < 0.25;
+          const mat = isPlank ? plankMat : leafMat;
+          const mesh = new THREE.Mesh(geo, mat.clone());
           mesh.position.set(cx + dx, cy + dy, cz + dz);
           mesh.receiveShadow = true;
           engine.scene.add(mesh);
@@ -1584,79 +1588,65 @@ function generateTwilightForest(engine) {
     }
   }
 
-  function createFogZone(x, z, radius) {
-    const fogMat = new THREE.MeshBasicMaterial({ color: fogColor, transparent: true, opacity: 0.92 });
-    const fogGeo = new THREE.PlaneGeometry(radius * 2, radius * 2);
-    const fogMesh = new THREE.Mesh(fogGeo, fogMat);
-    fogMesh.rotation.x = -Math.PI / 2;
-    fogMesh.position.set(x, 0.05, z);
-    engine.scene.add(fogMesh);
-    engine.mapFeatures.fogZones.push({ mesh: fogMesh, x, z, radius });
+  function createBirchPlatform(cx, cy, cz, radius) {
+    const mat = new THREE.MeshLambertMaterial({ color: birchColor });
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        if (dx * dx + dz * dz > radius * radius + 1) continue;
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(cx + dx, cy, cz + dz);
+        mesh.receiveShadow = true;
+        engine.scene.add(mesh);
+        const key = engine.getBlockKey(cx + dx, cy, cz + dz);
+        engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+      }
+    }
   }
 
-  // Four giant trees at cardinal positions (bases in canopy)
+  // Four bases in cross layout
   const treePositions = [
-    { cx: -60, cz: -60, team: TEAMS.RED },
-    { cx:  60, cz: -60, team: TEAMS.BLUE },
-    { cx: -60, cz:  60, team: TEAMS.GREEN },
-    { cx:  60, cz:  60, team: TEAMS.YELLOW }
+    { cx: 0, cz: -50, team: TEAMS.RED },
+    { cx: 0, cz: 50, team: TEAMS.BLUE },
+    { cx: 50, cz: 0, team: TEAMS.GREEN },
+    { cx: -50, cz: 0, team: TEAMS.YELLOW }
   ];
-  const treeHeight = 20;
-  const crownY = treeHeight + 1;
-  const crownRadius = 7;
-  const platformRadius = 7;
 
   for (const tp of treePositions) {
-    // Tree trunk
-    createTreeTrunk(tp.cx, tp.cz, treeHeight);
-    // Crown leaves
-    createTreeCrown(tp.cx, crownY, crownRadius);
-    // Base platform in canopy
-    createIsland(tp.cx, tp.cz, platformRadius, platformColor);
-    // Move TEAMS spawn positions up to canopy
-    tp.team.spawn.set(tp.cx, crownY + 2, tp.cz);
+    // Trunk: diameter 5, height 25 (y=1..25)
+    createTrunk(tp.cx, tp.cz, 1, 25, 5);
+    // Canopy: diameter 18 (radius 9), centered at y=35
+    createCanopy(tp.cx, 35, tp.cz, 9);
+    // Birch platform at y=42, radius 4
+    createBirchPlatform(tp.cx, 42, tp.cz, 4);
+    // Spawn on platform
+    tp.team.spawn.set(tp.cx, 43, tp.cz);
+    engine.mapFeatures.canopyCenters.push(new THREE.Vector3(tp.cx, 35, tp.cz));
   }
 
-  // Center枯木广场 (dead tree plaza) - small dark island
-  createIsland(0, 0, 3, 0x1a1a1a);
-
-  // Ground fog covering entire map except tree bases and center
-  // Fog is everywhere below y=18 (ground level)
-  const fogRadius = 100;
-  createFogZone(0, 0, fogRadius);
-
-  // Silver on corner towers (4 high points)
-  const towerPositions = [
-    { x: -90, z: -90 }, { x: 90, z: -90 },
-    { x: -90, z: 90 }, { x: 90, z: 90 }
-  ];
-  for (const t of towerPositions) {
-    createIsland(t.x, t.z, 3, 0x3a3a3a);
-    // Tower pillar
-    const pillarMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
-    for (let y = 1; y <= 15; y++) {
-      const mesh = new THREE.Mesh(geo, pillarMat);
-      mesh.position.set(t.x, y, t.z);
+  // Ground fog layer blocks (y=5-12)
+  const fogMat = new THREE.MeshLambertMaterial({ color: fogColor, transparent: true, opacity: 0.82 });
+  for (let x = -64; x <= 64; x += 2) {
+    for (let z = -64; z <= 64; z += 2) {
+      let nearTrunk = false;
+      for (const tp of treePositions) {
+        const dx = x - tp.cx, dz = z - tp.cz;
+        if (dx * dx + dz * dz < 64) { nearTrunk = true; break; }
+      }
+      if (nearTrunk) continue;
+      const mesh = new THREE.Mesh(geo, fogMat.clone());
+      mesh.position.set(x, 8, z);
+      mesh.scale.set(2, 6, 2);
       engine.scene.add(mesh);
-      const key = engine.getBlockKey(t.x, y, t.z);
-      engine.blocks.set(key, { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
     }
-    // Platform at top
-    const topMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
-    const topMesh = new THREE.Mesh(geo, topMat);
-    topMesh.position.set(t.x, 16, t.z);
-    topMesh.scale.set(5, 1, 5);
-    engine.scene.add(topMesh);
   }
 
-  // Beds (in canopy bases)
+  // Beds on birch platforms
   const bedGeo = new THREE.BoxGeometry(2, 0.6, 1.2);
   for (const [key, team] of Object.entries(TEAMS)) {
     const bed = new THREE.Mesh(bedGeo, new THREE.MeshLambertMaterial({ color: team.color }));
     bed.position.copy(team.bedPos = team.spawn.clone().add(new THREE.Vector3(0, -0.5, 0)));
     bed.castShadow = true;
     engine.scene.add(bed);
-    // 床碰撞方块
     const bx = team.spawn.x, bz = team.spawn.z, by = Math.floor(team.spawn.y) - 1;
     for (let dx = 0; dx <= 1; dx++) {
       const bk = engine.getBlockKey(bx + dx, by, bz);
@@ -1669,53 +1659,69 @@ function generateTwilightForest(engine) {
   // Resource generators
   const genGeo = new THREE.CylinderGeometry(0.6, 0.8, 1.2, 8);
   const gens = [];
+  const slowSpawn = sec => sec * 1.15;
 
-  // Gold: in tree root caves (safe, at base of each tree)
+  // Root caves: under each tree at y=6, 4 silver + 1 gold, 15% slower
   for (const tp of treePositions) {
-    const mat = new THREE.MeshLambertMaterial({ color: RES.GOLD.color, emissive: RES.GOLD.color, emissiveIntensity: 0.2 });
-    const mesh = new THREE.Mesh(genGeo, mat);
-    mesh.position.set(tp.cx + 5, 1.1, tp.cz);
-    engine.scene.add(mesh);
-    gens.push({ mesh, type: 'GOLD', team: undefined, pos: mesh.position.clone(), timer: 0, spawnSec: RES.GOLD.spawnSec, ready: true });
-  }
-
-  // Jade: 3 random spawn points in center枯木广场 (rotating every 30s)
-  for (let i = 0; i < 3; i++) {
-    const angle = (Math.PI * 2 / 3) * i;
-    const r = 2;
-    const pos = new THREE.Vector3(Math.cos(angle) * r, 1.1, Math.sin(angle) * r);
-    const mat = new THREE.MeshLambertMaterial({ color: RES.JADE.color, emissive: RES.JADE.color, emissiveIntensity: 0.3 });
-    const mesh = new THREE.Mesh(genGeo, mat);
-    mesh.position.copy(pos);
-    engine.scene.add(mesh);
-    gens.push({ mesh, type: 'JADE', team: undefined, pos: pos.clone(), timer: 0, spawnSec: RES.JADE.spawnSec, ready: true, rotating: true });
-    engine.mapFeatures.jadeSpawnPoints.push({ mesh, basePos: pos.clone() });
-  }
-
-  // Silver: on corner tower tops
-  for (const t of towerPositions) {
-    const mat = new THREE.MeshLambertMaterial({ color: RES.SILVER.color, emissive: RES.SILVER.color, emissiveIntensity: 0.2 });
-    const mesh = new THREE.Mesh(genGeo, mat);
-    mesh.position.set(t.x, 17.1, t.z);
-    engine.scene.add(mesh);
-    gens.push({ mesh, type: 'SILVER', team: undefined, pos: mesh.position.clone(), timer: 0, spawnSec: RES.SILVER.spawnSec, ready: true });
-  }
-
-  // Dream tide for twilight forest (re-position jade points)
-  engine.triggerDreamTide = function(gensRef) {
-    // Move jade spawn points to new random positions near center
-    for (const jp of engine.mapFeatures.jadeSpawnPoints) {
-      const angle = Math.random() * Math.PI * 2;
-      const r = 1 + Math.random() * 3;
-      const nx = Math.cos(angle) * r;
-      const nz = Math.sin(angle) * r;
-      jp.mesh.position.set(nx, 1.1, nz);
-      jp.basePos.set(nx, 1.1, nz);
-      // Update corresponding gen position
-      const gen = gensRef.find(g => g.rotating && g.mesh === jp.mesh);
-      if (gen) gen.pos.set(nx, 1.1, nz);
+    const baseX = tp.cx + 5;
+    const baseZ = tp.cz;
+    const baseY = 6;
+    const sMat = new THREE.MeshLambertMaterial({ color: RES.SILVER.color, emissive: RES.SILVER.color, emissiveIntensity: 0.2 });
+    const gMat = new THREE.MeshLambertMaterial({ color: RES.GOLD.color, emissive: RES.GOLD.color, emissiveIntensity: 0.2 });
+    for (let i = 0; i < 4; i++) {
+      const mesh = new THREE.Mesh(genGeo, sMat.clone());
+      mesh.position.set(baseX + i * 0.6, baseY, baseZ);
+      engine.scene.add(mesh);
+      gens.push({ mesh, type: 'SILVER', pos: mesh.position.clone(), timer: 0, spawnSec: slowSpawn(RES.SILVER.spawnSec), ready: true });
     }
-  };
+    const gm = new THREE.Mesh(genGeo, gMat.clone());
+    gm.position.set(baseX + 1.5, baseY, baseZ + 0.8);
+    engine.scene.add(gm);
+    gens.push({ mesh: gm, type: 'GOLD', pos: gm.position.clone(), timer: 0, spawnSec: slowSpawn(RES.GOLD.spawnSec), ready: true });
+  }
+
+  // Diamond points (JADE): center (0,5,0), radius 8 circle, 3 points, 45s, 2 each
+  const jadeMat = new THREE.MeshLambertMaterial({ color: RES.JADE.color, emissive: RES.JADE.color, emissiveIntensity: 0.3 });
+  for (let i = 0; i < 3; i++) {
+    const angle = (Math.PI * 2 / 3) * i + Math.random() * 0.4;
+    const r = 8;
+    const px = Math.round(Math.cos(angle) * r);
+    const pz = Math.round(Math.sin(angle) * r);
+    for (let j = 0; j < 2; j++) {
+      const mesh = new THREE.Mesh(genGeo, jadeMat.clone());
+      mesh.position.set(px + j * 0.5, 5, pz);
+      engine.scene.add(mesh);
+      gens.push({ mesh, type: 'JADE', pos: mesh.position.clone(), timer: 0, spawnSec: 45, ready: true });
+    }
+  }
+
+  // Emerald points (JADE): four corners at +/-55,+/-55, y=45, on floating stone pillars
+  const corners = [{ x: 55, z: 55 }, { x: 55, z: -55 }, { x: -55, z: 55 }, { x: -55, z: -55 }];
+  for (const cp of corners) {
+    const pMat = new THREE.MeshLambertMaterial({ color: stoneColor });
+    for (let y = 5; y <= 44; y++) {
+      const mesh = new THREE.Mesh(geo, pMat);
+      mesh.position.set(cp.x, y, cp.z);
+      engine.scene.add(mesh);
+      engine.blocks.set(engine.getBlockKey(cp.x, y, cp.z), { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+    }
+    const tMat = new THREE.MeshLambertMaterial({ color: 0x777777 });
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const mesh = new THREE.Mesh(geo, tMat);
+        mesh.position.set(cp.x + dx, 45, cp.z + dz);
+        engine.scene.add(mesh);
+        engine.blocks.set(engine.getBlockKey(cp.x + dx, 45, cp.z + dz), { mesh, type: 'ground', hp: 9999, maxHp: 9999 });
+      }
+    }
+    const mesh = new THREE.Mesh(genGeo, jadeMat.clone());
+    mesh.position.set(cp.x, 46.1, cp.z);
+    engine.scene.add(mesh);
+    gens.push({ mesh, type: 'JADE', pos: mesh.position.clone(), timer: 0, spawnSec: RES.JADE.spawnSec, ready: true });
+  }
+
+  // Dream tide no-op for twilight forest
+  engine.triggerDreamTide = function(gensRef) {};
 
   return gens;
 }
@@ -2471,6 +2477,92 @@ class PlayerEntity {
       }
     }
 
+    // ============================================
+    // Twilight Forest: Fog Erosion System
+    // ============================================
+    if (this.engine.mapId === 'twilight_forest') {
+      // Ground fog Y<=12: force 5-block vision + screen darkness + fog damage
+      if (this.pos.y <= 12) {
+        this.fogDistance = 5;
+        this.screenDarkness = Math.min(0.65, (this.screenDarkness || 0) + dt * 0.35);
+        this.fogDamageTimer = (this.fogDamageTimer || 0) + dt;
+        if (this.fogDamageTimer >= 2) {
+          this.fogDamageTimer -= 2;
+          this.hp -= 0.5;
+          if (this.hp <= 0) {
+            this.die(null, false);
+            return;
+          }
+        }
+      } else {
+        this.fogDistance = null;
+        this.screenDarkness = Math.max(0, (this.screenDarkness || 0) - dt * 0.35);
+        this.fogDamageTimer = 0;
+      }
+
+      // Apply visual effects for local player
+      if (this.isLocal) {
+        if (this.fogDistance) {
+          this.engine.scene.fog.near = 3;
+          this.engine.scene.fog.far = 6;
+        } else {
+          this.engine.scene.fog.near = 50;
+          this.engine.scene.fog.far = 140;
+        }
+        const brightness = 1 - (this.screenDarkness || 0);
+        this.engine.renderer.domElement.style.filter = `brightness(${brightness.toFixed(2)})`;
+      }
+
+      // Canopy footsteps scale 2x (visual dust particles)
+      if (this.pos.y >= 30 && this.pos.y <= 40 && this.onGround) {
+        this.footstepScale = 2;
+        if (Math.abs(this.vel.x) > 0.2 || Math.abs(this.vel.z) > 0.2) {
+          this.footstepTimer = (this.footstepTimer || 0) + dt;
+          if (this.footstepTimer >= 0.25) {
+            this.footstepTimer -= 0.25;
+            this.engine.spawnParticles(this.pos.clone().add(new THREE.Vector3(0, -0.4, 0)), 0x8B4513, 4);
+          }
+        }
+      } else {
+        this.footstepScale = 1;
+        this.footstepTimer = 0;
+      }
+
+      // Grey claw marks when enemy is under canopy (within 20 blocks horizontally)
+      if (this.isLocal) {
+        let clawActive = false;
+        for (const ent of this.engine.entities) {
+          if (ent !== this && !ent.isDead && ent.team !== this.team) {
+            const canopyCenters = [[0, -50], [0, 50], [50, 0], [-50, 0]];
+            for (const [ccx, ccz] of canopyCenters) {
+              const ddx = ent.pos.x - ccx;
+              const ddz = ent.pos.z - ccz;
+              if (ddx * ddx + ddz * ddz <= 400) {
+                clawActive = true;
+                break;
+              }
+            }
+            if (clawActive) break;
+          }
+        }
+        if (clawActive) {
+          this.clawMarkTimer = (this.clawMarkTimer || 0) + dt;
+          if (this.clawMarkTimer >= 0.45) {
+            this.clawMarkTimer = 0;
+            for (let i = 0; i < 4; i++) {
+              const angle = Math.random() * Math.PI * 2;
+              const r = 2.5 + Math.random() * 2;
+              const ppos = this.pos.clone().add(new THREE.Vector3(Math.cos(angle) * r, 0.2 + Math.random() * 0.6, Math.sin(angle) * r));
+              this.engine.spawnParticles(ppos, 0x888888, 1);
+            }
+          }
+        } else {
+          this.clawMarkTimer = 0;
+        }
+      }
+    }
+    // ============================================
+
     // Physics
     this.vel.y -= 18 * dt;
     this.pos.addScaledVector(this.vel, dt);
@@ -2980,6 +3072,20 @@ class PlayerEntity {
         if (this.acBlocksPlaced > 15) {
           window.game?.reportCheat?.(this.playerId, 'rapid_build', { count: this.acBlocksPlaced }, 3);
         }
+        // 放置成功后在前方1格显示新的预览方块
+        const forward = this.getForwardDir();
+        forward.y = 0;
+        forward.normalize();
+        const nextPx = px + Math.round(forward.x);
+        const nextPz = pz + Math.round(forward.z);
+        if (!this.placePreviewMesh) {
+          const geo = new THREE.BoxGeometry(1, 1, 1);
+          const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, wireframe: true });
+          this.placePreviewMesh = new THREE.Mesh(geo, mat);
+          this.engine.scene.add(this.placePreviewMesh);
+        }
+        this.placePreviewMesh.position.set(nextPx + 0.5, py + 0.5, nextPz + 0.5);
+        this.placePreviewMesh.visible = true;
       }
     }
   }
@@ -3071,7 +3177,7 @@ class PlayerEntity {
     const dir = this.getForwardDir();
     dir.y = 0;
     dir.normalize();
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const right = new THREE.Vector3(-dir.z, 0, dir.x);
     this.glassBridgeBlocks = [];
     const startY = Math.floor(this.pos.y);
     for (let i = 1; i <= 15; i++) {

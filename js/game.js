@@ -662,9 +662,11 @@ class UIManager {
       ctx.fillRect(bx - 3, by - 2, 6, 4);
     }
 
-    // Players
+    // Players (只显示自己和队友)
+    const lpTeam = this.game.localPlayer?.team;
     for (const p of this.game.players) {
       if (p.isDead) continue;
+      if (p.team !== lpTeam) continue;
       const px = cx + (p.pos.x / 140) * w * 0.5;
       const py = cy + (p.pos.z / 140) * h * 0.5;
       ctx.fillStyle = p.teamInfo.hex;
@@ -723,13 +725,14 @@ class UIManager {
       ctx.strokeRect(bx - 8, by - 6, 16, 12);
     }
 
-    // Players
+    // Players (只显示自己和队友)
     const localTeam = this.game.localPlayer?.team;
     for (const p of this.game.players) {
       if (p.isDead) continue;
+      if (p.team !== localTeam) continue;
       const px = cx + (p.pos.x / 140) * w * 0.5;
       const py = cy + (p.pos.z / 140) * h * 0.5;
-      ctx.fillStyle = p.team === localTeam ? '#3b82f6' : '#ef4444';
+      ctx.fillStyle = '#3b82f6';
       ctx.beginPath();
       ctx.arc(px, py, p.isLocal ? 8 : 6, 0, Math.PI * 2);
       ctx.fill();
@@ -955,14 +958,59 @@ class Game {
     document.getElementById('buildUpgradeBtn')?.addEventListener('click', () => this.upgradeSelectedBlock());
     document.getElementById('buildDestroyBtn')?.addEventListener('click', () => this.destroySelectedBlock());
     document.getElementById('buildMoveBtn')?.addEventListener('click', () => this.prepareMoveSelectedBlock());
+    document.getElementById('buildCancelBtn')?.addEventListener('click', () => this.closeBuildPanel());
     document.querySelectorAll('.hotbar-slot').forEach((slot, idx) => {
+      let longPressTimer = null;
+      let longPressTriggered = false;
+
       const select = (e) => {
+        if (longPressTriggered) {
+          e.preventDefault();
+          e.stopPropagation();
+          longPressTriggered = false;
+          return;
+        }
         e.preventDefault();
         if (this.gameActive) this.selectHotbar(idx);
       };
+
+      const startLongPress = () => {
+        if (!this.gameActive) return;
+        longPressTriggered = false;
+        longPressTimer = setTimeout(() => {
+          longPressTriggered = true;
+          this.showSlotContextMenu(slot, idx);
+        }, 800);
+      };
+
+      const cancelLongPress = () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      };
+
       slot.addEventListener('click', select);
-      slot.addEventListener('touchstart', select, { passive: false });
+      slot.addEventListener('touchstart', (e) => {
+        startLongPress();
+      }, { passive: false });
+      slot.addEventListener('touchend', cancelLongPress);
+      slot.addEventListener('touchmove', cancelLongPress);
+      slot.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (this.gameActive) this.showSlotContextMenu(slot, idx);
+      });
     });
+
+    // Slot context menu actions
+    document.getElementById('ctxDrop')?.addEventListener('click', () => {
+      if (this.localPlayer) {
+        this.localPlayer.dropSelectedItem();
+        this.hideSlotContextMenu();
+      }
+    });
+    document.getElementById('ctxSplit')?.addEventListener('click', () => this.splitSelectedItem());
+    document.getElementById('ctxCancel')?.addEventListener('click', () => this.hideSlotContextMenu());
 
     // Hotbar keys & actions
     document.addEventListener('keydown', e => {
@@ -1839,5 +1887,85 @@ class Game {
       const p = this.players.find(x => x.playerId === data.player);
       if (p) p.aiTakeover = data.enable;
     }
+  }
+
+  showSlotContextMenu(slotEl, idx) {
+    this.selectHotbar(idx);
+    const menu = document.getElementById('slotContextMenu');
+    if (!menu) return;
+    const rect = slotEl.getBoundingClientRect();
+    menu.style.display = 'flex';
+    const menuRect = menu.getBoundingClientRect();
+    let left = rect.left + rect.width / 2 - menuRect.width / 2;
+    let top = rect.top - menuRect.height - 8;
+    left = Math.max(8, Math.min(left, window.innerWidth - menuRect.width - 8));
+    top = Math.max(8, top);
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    this._ctxSlotIdx = idx;
+  }
+
+  hideSlotContextMenu() {
+    const menu = document.getElementById('slotContextMenu');
+    if (menu) menu.style.display = 'none';
+    this._ctxSlotIdx = null;
+  }
+
+  splitSelectedItem() {
+    const lp = this.localPlayer;
+    if (!lp) return;
+    const idx = this._ctxSlotIdx !== undefined && this._ctxSlotIdx !== null ? this._ctxSlotIdx : lp.hotbarIndex;
+    const item = lp.hotbar[idx];
+    if (!item || item.count <= 1) {
+      this.showMessage('该物品无法拆分', '#ff5555');
+      this.hideSlotContextMenu();
+      return;
+    }
+    const defaultHalf = Math.floor(item.count / 2);
+    const amountStr = prompt(`拆分数量 (1-${item.count - 1}):`, String(defaultHalf));
+    if (amountStr === null) {
+      this.hideSlotContextMenu();
+      return;
+    }
+    const amount = parseInt(amountStr, 10);
+    if (!amount || amount < 1 || amount >= item.count) {
+      this.showMessage('无效拆分数量', '#ff5555');
+      this.hideSlotContextMenu();
+      return;
+    }
+
+    const stack = (ITEM_DB[item.key]?.stack || 1);
+    let hasSpace = false;
+    for (let i = 0; i < lp.hotbar.length; i++) {
+      const s = lp.hotbar[i];
+      if (!s || (s.key === item.key && s.count < stack)) {
+        hasSpace = true; break;
+      }
+    }
+    if (!hasSpace) {
+      for (let i = 0; i < lp.backpack.length; i++) {
+        const s = lp.backpack[i];
+        if (!s || (s.key === item.key && s.count < stack)) {
+          hasSpace = true; break;
+        }
+      }
+    }
+    if (!hasSpace) {
+      this.showMessage('道具栏已满，无法拆分', '#ff5555');
+      this.hideSlotContextMenu();
+      return;
+    }
+
+    item.count -= amount;
+    if (item.count <= 0) {
+      lp.hotbar[idx] = null;
+    }
+    lp.addToBackpack(item.key, amount);
+    this.hideSlotContextMenu();
+    this.ui.update();
+    if (document.getElementById('backpackPanel')?.style.display === 'flex') {
+      this.ui.updateBackpack();
+    }
+    this.showMessage('物品已拆分', '#8be9fd');
   }
 }

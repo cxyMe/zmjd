@@ -467,6 +467,35 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .hotbar-slot .slot-key { position: absolute; top: 1px; left: 3px; font-size: 9px; color: #aaa; }
 .hotbar-slot .slot-name { font-size: 10px; max-width: 36px; overflow: hidden; text-overflow: ellipsis; }
 
+#slotContextMenu {
+  position: absolute;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(20,20,30,0.95);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 6px;
+  z-index: 1000;
+  min-width: 80px;
+}
+#slotContextMenu button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: center;
+}
+#slotContextMenu button:hover {
+  background: rgba(255,255,255,0.18);
+}
+#slotContextMenu button:active {
+  background: rgba(0,212,255,0.25);
+}
+
 /* Action buttons */
 #actionBtns {
   position: absolute; bottom: 16px; right: 16px;
@@ -902,7 +931,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .reward-unlocked { border-color: rgba(139,233,253,0.45); background: rgba(139,233,253,0.1); }
 
 /* ========== Season Pass ========== */
-#seasonPassPanel, #passPayPanel {
+#seasonPassPanel, #passPayPanel, #skinShopPanel {
   position: fixed; inset: 0; z-index: 3700; background: rgba(0,0,0,0.84);
   display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);
 }
@@ -1205,6 +1234,41 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .shake-small { animation: screen-shake 0.3s ease-out; }
 .shake-medium { animation: screen-shake 0.5s ease-out; }
 .shake-large { animation: screen-shake 0.8s ease-out; }
+
+/* Mode selection */
+.mode-select { display: flex; gap: 10px; margin-top: 8px; justify-content: center; }
+.mode-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 120px; padding: 10px 8px; border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  background: rgba(30,30,50,0.6); color: #fff; font-size: 13px; font-weight: bold;
+}
+.mode-card:hover { border-color: rgba(255,255,255,0.4); transform: translateY(-2px); }
+.mode-card.selected { border-color: #6af; background: rgba(60,80,140,0.5); box-shadow: 0 0 12px rgba(100,150,255,0.3); }
+
+/* Room Panel */
+#roomPanel {
+  position: fixed; inset: 0; z-index: 3600; background: rgba(0,0,0,0.84);
+  display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px);
+}
+.room-panel-container {
+  width: min(720px, calc(100vw - 24px)); height: min(640px, calc(100vh - 24px));
+  background: linear-gradient(180deg, rgba(18,18,35,0.98), rgba(10,12,24,0.98));
+  border: 1px solid rgba(255,221,0,0.28); border-radius: 22px; overflow: hidden;
+  display: flex; flex-direction: column; color: #fff; box-shadow: 0 20px 80px rgba(0,0,0,0.55);
+}
+.room-panel-header { padding: 18px 22px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.room-panel-header h2 { color: #ffdd00; font-size: 22px; }
+.room-panel-header p { color: #aeb8df; font-size: 14px; margin-top: 4px; }
+.room-panel-body { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.room-panel-section h3 { color: #8be9fd; font-size: 16px; margin-bottom: 8px; }
+.room-panel-members { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+.room-member-line {
+  font-size: 13px; color: #ddd; display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; padding: 8px 10px; border-radius: 9px; background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.room-member-line .host-badge { color: #ffd700; font-weight: bold; margin-left: 6px; }
 
 /* Map selection */
 .map-select {
