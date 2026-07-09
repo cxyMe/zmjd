@@ -37,7 +37,7 @@ const ROLES = {
   STEEL_BONE: {
     name: '钢骨', hp: 105, skinClass: 'role-steel',
     passive: { name: '建筑加固', desc: '自己放置的建筑血量增加20%' },
-    active: { name: '虚空之桥', desc: '向指定方向生成宽2格长15格能量桥，无法被爆炸摧毁，持续15秒', cd: 28 },
+    active: { name: '玻璃桥', desc: '从玩家位置向前生成宽2格长15格玻璃桥，无法被爆炸摧毁，持续12秒', cd: 25 },
     starter: [{ key: 'wood_plank', count: 35 }]
   },
   WAIWAI: {
@@ -66,7 +66,7 @@ const ITEM_DB = {
   stone_plate:  { name: '石板',  type: 'block',  cost: { silver: 8 },        hp: 60,  desc: '中级建筑材料', stack: 64 },
   iron_plate:   { name: '铁板',  type: 'block',  cost: { gold: 4 },          hp: 120, desc: '高级建筑材料', stack: 64 },
   titanium:     { name: '钛板',  type: 'block',  cost: { jade: 2 },          hp: 300, desc: '顶级建筑材料', stack: 64 },
-  blast_glass:  { name: '防爆玻璃',type:'block', cost: { gold: 2 },          hp: 1,   desc: '阻挡一次爆炸，遇爆即碎，不可徒手拆毁', stack: 64, blastOnly: true, handImmune: true },
+  blast_glass:  { name: '防爆玻璃',type:'block', cost: { gold: 2 },          hp: 1,   desc: '阻挡一次爆炸，遇爆即碎', stack: 64, blastOnly: true, handImmune: false },
   wood_sword:   { name: '木质剑',type: 'weapon', cost: { copper: 4 },        dmg: 12, durability: 20, desc: '耐久20，伤害12', stack: 1 },
   stone_sword:  { name: '手工剑',type: 'weapon', cost: { silver: 3 },        dmg: 22, durability: 20, desc: '耐久20，伤害22', stack: 1 },
   iron_sword:   { name: '精致剑',type: 'weapon', cost: { gold: 4 },          dmg: 35, durability: 30, desc: '耐久30，伤害35', stack: 1 },
@@ -100,7 +100,8 @@ const ITEM_DB = {
   teleport_coin:{ name: '传送硬币',type:'special',cost: { gold: 7 },        desc: '投掷后按住越久传送越远，最大20格，命中虚空不传送', stack: 4 },
   cd_potion:    { name: '冷却药水',type:'special',cost: { gold: 3 },         desc: '立即减少5秒主动技能冷却', stack: 8 },
   speed_potion: { name: '极速药水',type:'special',cost: { gold: 3 },         desc: '移动速度增加25%，持续3秒', stack: 8 },
-  burst_potion: { name: '爆发药水',type:'special',cost: { gold: 4 },         desc: '造成伤害增加45%，持续3秒', stack: 8 }
+  burst_potion: { name: '爆发药水',type:'special',cost: { gold: 4 },         desc: '造成伤害增加45%，持续3秒', stack: 8 },
+  detector:     { name: '探测仪',type:'special',cost: { silver: 5 },         durability: 20, desc: '手持检测附近10格敌人数量，每秒消耗1耐久', stack: 1 }
 };
 
 // ============================================
@@ -296,7 +297,7 @@ class Engine {
       return true;
     }
     const info = ITEM_DB[blk.type];
-    if (info?.handImmune) {
+    if (info?.handImmune && blk.type !== 'blast_glass') {
       window.game?.showMessage?.(`${info.name} 不可徒手拆毁`, '#8be9fd');
       return false;
     }
@@ -843,8 +844,7 @@ class Engine {
           if (Math.sqrt(dx * dx + dy * dy + dz * dz) > radius) continue;
           const key = this.getBlockKey(rx + dx, ry + dy, rz + dz);
           const blk = this.blocks.get(key);
-          if (blk?.type === 'blast_glass') this.damageBlock(rx + dx, ry + dy, rz + dz, 999);
-          else this.damageBlock(rx + dx, ry + dy, rz + dz, dmg);
+          if (blk?.type !== 'blast_glass') this.damageBlock(rx + dx, ry + dy, rz + dz, dmg);
         }
       }
     }
@@ -950,7 +950,8 @@ class Engine {
               ent.matchStats.resourceContribution += d.count * (d.currency === 'jade' ? 18 : d.currency === 'gold' ? 8 : d.currency === 'silver' ? 3 : 1);
               window.game?.growth?.addXp?.(ent, GROWTH_CONFIG.xp.collectResource[d.currency] || 1, '收集资源');
             } else {
-              ent.addToBackpack(d.typeKey, d.count);
+              const added = ent.addToBackpack(d.typeKey, d.count);
+              if (!added) continue;
             }
             this.spawnParticles(d.mesh.position, d.isCurrency ? RES[d.currency.toUpperCase()]?.color : 0xffdd00, 4);
             this.removeDropItem(d);
@@ -1776,7 +1777,6 @@ class PlayerEntity {
     this.baseDmg = 2;
     this.matchLevel = 1;
     this.matchXp = 0;
-    this.awakenings = {};
     this.matchStats = { kills: 0, beds: 0, damage: 0, blocksPlaced: 0, resourceContribution: 0 };
     this.handBreakTimer = 0;
     this.handBreakKey = null;
@@ -1800,6 +1800,7 @@ class PlayerEntity {
     this.missileControl = null;
     this.hasRevivalToken = false;
     this.teleportCoinCharge = 0;
+    this.bowCharge = 0;
     this.speedPotionTimer = 0;
     this.burstPotionTimer = 0;
     this.voidBridgeBlocks = [];
@@ -1808,6 +1809,15 @@ class PlayerEntity {
     this.maxMiss = this.role === 'WAIWAI' ? 3 : 0;
     this.missRegenTimer = 30;
     this.missInvulnTimer = 0;
+    this.placePreviewMesh = null;
+    this.detectorEnemyCount = 0;
+    this.detectorDurabilityTimer = 0;
+    this.skillHoldTime = 0;
+    this.skillPreviewMesh = null;
+    this.glassBridgeBlocks = [];
+    this.glassBridgeTimer = 0;
+    this.glassBridgeLabel = null;
+    this.glassBridgeCdPending = false;
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -2053,6 +2063,26 @@ class PlayerEntity {
 
     const stack = info.stack || 1;
 
+    // 检查快捷栏和背包是否已满
+    let hasSpace = false;
+    for (let i = 0; i < this.hotbar.length; i++) {
+      const slot = this.hotbar[i];
+      if (!slot || (slot.key === key && slot.count < stack)) {
+        hasSpace = true;
+        break;
+      }
+    }
+    if (!hasSpace) {
+      for (let i = 0; i < this.backpack.length; i++) {
+        const slot = this.backpack[i];
+        if (!slot || (slot.key === key && slot.count < stack)) {
+          hasSpace = true;
+          break;
+        }
+      }
+    }
+    if (!hasSpace) return false;
+
     // 先尝试合并到快捷栏
     for (let i = 0; i < this.hotbar.length; i++) {
       const slot = this.hotbar[i];
@@ -2129,16 +2159,29 @@ class PlayerEntity {
         window.game?.showMessage?.(`已装备：${info.name}`, '#8be9fd');
       }
     } else if (info.type === 'armor') {
-      this.equipped.armor = item.key;
-      this.armorInfo = item.key;
-      this.armor = info.armor;
-      this.armorMax = info.armor;
-      this.armorProtectRate = info.protectRate || 0;
-      this.armorReflectChance = info.reflectChance || 0;
-      this.armorReflectRate = info.reflectRate || 0;
-      // 护甲使用后从快捷栏移除（或减1）
-      item.count--;
-      if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+      if (this.equipped.armor === item.key) {
+        // 卸下当前护甲
+        this.equipped.armor = null;
+        this.armorInfo = null;
+        this.armor = 0;
+        this.armorMax = 0;
+        this.armorProtectRate = 0;
+        this.armorReflectChance = 0;
+        this.armorReflectRate = 0;
+        window.game?.showMessage?.(`已卸下：${info.name}`, '#ffaa00');
+      } else {
+        // 装备新护甲
+        this.equipped.armor = item.key;
+        this.armorInfo = item.key;
+        this.armor = info.armor;
+        this.armorMax = info.armor;
+        this.armorProtectRate = info.protectRate || 0;
+        this.armorReflectChance = info.reflectChance || 0;
+        this.armorReflectRate = info.reflectRate || 0;
+        item.count--;
+        if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;
+        window.game?.showMessage?.(`已装备：${info.name}`, '#8be9fd');
+      }
     } else if (info.type === 'block') {
       // 放置方块由外部调用 placeBlock 处理
     } else if (info.explosive) {
@@ -2344,6 +2387,90 @@ class PlayerEntity {
       if (this.camouflageTimer <= 0) this.breakCamouflage(false);
     }
 
+    // Detector logic
+    const selectedItem = this.getSelectedItem();
+    const selectedInfo = selectedItem ? ITEM_DB[selectedItem.key] : null;
+    if (selectedItem?.key === 'detector') {
+      let enemyCount = 0;
+      for (const ent of this.engine.entities) {
+        if (ent !== this && !ent.isDead && ent.team !== this.team) {
+          if (ent.pos.distanceTo(this.pos) <= 10) enemyCount++;
+        }
+      }
+      this.detectorEnemyCount = enemyCount;
+      this.detectorDurabilityTimer += dt;
+      if (this.detectorDurabilityTimer >= 1) {
+        this.detectorDurabilityTimer -= 1;
+        selectedItem.durability = (selectedItem.durability ?? selectedInfo.durability) - 1;
+        if (selectedItem.durability <= 0) {
+          this.hotbar[this.hotbarIndex] = null;
+          window.game?.showMessage?.('探测仪耐久耗尽，已自动销毁', '#ff5555');
+          this.detectorEnemyCount = 0;
+        }
+      }
+    } else {
+      this.detectorEnemyCount = 0;
+      this.detectorDurabilityTimer = 0;
+    }
+
+    // Glass bridge timer
+    if (this.glassBridgeTimer > 0) {
+      this.glassBridgeTimer -= dt;
+      if (this.glassBridgeLabel) {
+        this.engine.updateTextSprite(this.glassBridgeLabel, `${Math.max(0, this.glassBridgeTimer).toFixed(1)}s`);
+      }
+      if (this.glassBridgeTimer <= 0) {
+        for (const block of this.glassBridgeBlocks) {
+          this.engine.removeBlock(block.x, block.y, block.z);
+        }
+        if (this.glassBridgeLabel) {
+          this.engine.scene.remove(this.glassBridgeLabel);
+          this.glassBridgeLabel = null;
+        }
+        this.glassBridgeBlocks = [];
+        if (this.glassBridgeCdPending) {
+          this.skillCd = Math.max(3, this.roleInfo.active.cd - (this.skillCdBonus || 0));
+          this.glassBridgeCdPending = false;
+        }
+      }
+    }
+
+    // Steel Bone skill hold preview
+    if (this.isLocal && this.role === 'STEEL_BONE' && this.skillCd <= 0 && this.glassBridgeTimer <= 0) {
+      const input = window.game?.input;
+      if (input && (input.buttons.skillHeld || input.keys['KeyQ'])) {
+        this.skillHoldTime += dt;
+        if (this.skillHoldTime > 0.2) {
+          if (!this.skillPreviewMesh) {
+            const geo = new THREE.BoxGeometry(2, 1, 15);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x9eefff, transparent: true, opacity: 0.25, wireframe: true });
+            this.skillPreviewMesh = new THREE.Mesh(geo, mat);
+            this.engine.scene.add(this.skillPreviewMesh);
+          }
+          const dir = this.getForwardDir();
+          dir.y = 0;
+          dir.normalize();
+          const previewPos = this.pos.clone().addScaledVector(dir, 7.5);
+          previewPos.y = Math.floor(this.pos.y);
+          this.skillPreviewMesh.position.copy(previewPos);
+          this.skillPreviewMesh.lookAt(previewPos.clone().add(dir));
+          this.skillPreviewMesh.visible = true;
+        }
+      } else {
+        this.skillHoldTime = 0;
+        if (this.skillPreviewMesh) {
+          this.engine.scene.remove(this.skillPreviewMesh);
+          this.skillPreviewMesh = null;
+        }
+      }
+    } else {
+      this.skillHoldTime = 0;
+      if (this.skillPreviewMesh) {
+        this.engine.scene.remove(this.skillPreviewMesh);
+        this.skillPreviewMesh = null;
+      }
+    }
+
     // Physics
     this.vel.y -= 18 * dt;
     this.pos.addScaledVector(this.vel, dt);
@@ -2408,7 +2535,7 @@ class PlayerEntity {
     if (this.smokeInvisibleTimer <= 0 && this.camouflageTimer <= 0) this.isInvisible = false;
     if (this.camouflageTimer > 0) {
       this.mesh.material.transparent = true;
-      this.mesh.material.opacity = 0.12;
+      this.mesh.material.opacity = 0.072;
       this.mesh.material.depthWrite = false;
       this.mesh.material.wireframe = true;
       this.mesh.material.color.setHex(0xf8fbff);
@@ -2468,6 +2595,42 @@ class PlayerEntity {
       this.mesh.material.emissiveIntensity = this.skinColor !== this.teamInfo.color ? 0.18 : 0;
       if (this.frostTimer > 0) this.mesh.material.color.setHex(0x8be9fd);
       else this.mesh.material.color.setHex(this.skinColor || this.teamInfo.color);
+    }
+
+    // 电脑端预放置轮廓
+    if (this.isLocal && !window.game?.input?.isMobile?.()) {
+      const blockType = this.getSelectedBlockType();
+      if (blockType) {
+        const rc = this.engine.raycastPlacement(window.innerWidth / 2, window.innerHeight / 2, 6);
+        if (rc.hit) {
+          const px = rc.x, py = rc.y, pz = rc.z;
+          const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
+          if (center.distanceTo(this.pos) <= 6.5 && !(Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8)) {
+            if (!this.placePreviewMesh) {
+              const geo = new THREE.BoxGeometry(1, 1, 1);
+              const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, wireframe: true });
+              this.placePreviewMesh = new THREE.Mesh(geo, mat);
+              this.engine.scene.add(this.placePreviewMesh);
+            }
+            this.placePreviewMesh.position.copy(center);
+            this.placePreviewMesh.visible = true;
+          } else {
+            if (this.placePreviewMesh) this.placePreviewMesh.visible = false;
+          }
+        } else {
+          if (this.placePreviewMesh) this.placePreviewMesh.visible = false;
+        }
+      } else {
+        if (this.placePreviewMesh) {
+          this.engine.scene.remove(this.placePreviewMesh);
+          this.placePreviewMesh = null;
+        }
+      }
+    } else {
+      if (this.placePreviewMesh) {
+        this.engine.scene.remove(this.placePreviewMesh);
+        this.placePreviewMesh = null;
+      }
     }
 
     // Camera follow
@@ -2606,39 +2769,29 @@ class PlayerEntity {
       });
       window.game?.showMessage?.(`${weaponInfo.name}已使用`, '#8be9fd');
     } else if (isRanged && this.arrowCount > 0) {
-      this.arrowCount--;
-      const dir = this.getForwardDir();
-      const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
-      const arrowGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6);
-      arrowGeo.rotateX(Math.PI / 2);
-      const arrowMat = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
-      const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
-      arrowMesh.position.copy(start);
-      arrowMesh.lookAt(start.clone().add(dir));
-      this.engine.scene.add(arrowMesh);
-      const speed = 25;
-      let finalDmg = dmg;
-      if (this.arrowDamageBoost) finalDmg *= (1 + this.arrowDamageBoost);
-      this.engine.projectiles.push({
-        mesh: arrowMesh, vel: dir.multiplyScalar(speed), life: 3,
-        damage: finalDmg, owner: this
-      });
+      if (this.isAI) {
+        this.fireArrow(0);
+      } else {
+        this.startBowCharge();
+      }
     } else if (!isRanged) {
       const dir = this.getForwardDir();
       const hitPos = this.pos.clone().add(new THREE.Vector3(0, 0.5, 0)).addScaledVector(dir, range * 0.5);
       this.engine.spawnParticles(hitPos, 0xffffff, 3);
 
+      let hitAny = false;
       for (const ent of this.engine.entities) {
         if (ent === this || ent.isDead) continue;
         if (ent.team === this.team) continue;
         const dist = ent.pos.distanceTo(this.pos);
-        if (dist < range) {
+        if (dist < 2) {
           let finalDmg = dmg;
           ent.takeDamage(finalDmg, this);
-          this.consumeWeaponDurability();
+          hitAny = true;
           if (this.role === 'DRIFTWOOD') this.extraShield = Math.min(60 + (this.shieldCapBonus || 0), (this.extraShield || 0) + 3);
         }
       }
+      if (hitAny) this.consumeWeaponDurability();
 
       const rc = this.engine.raycastBlocks(this.pos.clone().add(new THREE.Vector3(0, 0.6, 0)), dir, range + 0.8);
       if (rc.hit) {
@@ -2671,6 +2824,85 @@ class PlayerEntity {
         }
       }
     }
+  }
+
+  startBowCharge() {
+    if (this.bowCharge > 0) return;
+    this.bowCharge = 0.01;
+    if (!this.bowChargeLine) {
+      const points = [];
+      for (let i = 0; i <= 20; i++) points.push(new THREE.Vector3(0, 0, 0));
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineDashedMaterial({ color: 0xffdd00, dashSize: 0.3, gapSize: 0.15, opacity: 0.6, transparent: true });
+      this.bowChargeLine = new THREE.Line(geometry, material);
+      this.engine.scene.add(this.bowChargeLine);
+    }
+  }
+
+  updateBowCharge(dt) {
+    if (this.bowCharge <= 0) return;
+    this.bowCharge = Math.min(4, this.bowCharge + dt);
+    const distance = 4 + this.bowCharge * 3;
+    if (this.bowChargeLine) {
+      const dir = this.getForwardDir();
+      const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+      const positions = this.bowChargeLine.geometry.attributes.position.array;
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const point = start.clone().addScaledVector(dir, distance * t);
+        positions[i * 3] = point.x;
+        positions[i * 3 + 1] = point.y;
+        positions[i * 3 + 2] = point.z;
+      }
+      this.bowChargeLine.geometry.attributes.position.needsUpdate = true;
+      this.bowChargeLine.computeLineDistances();
+    }
+  }
+
+  releaseBowCharge() {
+    if (this.bowCharge <= 0) return;
+    this.fireArrow(this.bowCharge);
+    this.bowCharge = 0;
+    if (this.bowChargeLine) {
+      this.engine.scene.remove(this.bowChargeLine);
+      this.bowChargeLine = null;
+    }
+  }
+
+  fireArrow(chargeTime) {
+    if (this.arrowCount <= 0) return;
+    this.arrowCount--;
+    const dir = this.getForwardDir().clone();
+    const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+    const arrowGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6);
+    arrowGeo.rotateX(Math.PI / 2);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+    const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+    arrowMesh.position.copy(start);
+    arrowMesh.lookAt(start.clone().add(dir));
+    this.engine.scene.add(arrowMesh);
+
+    let dmg = this.baseDmg;
+    if (this.equipped.weapon) {
+      const w = ITEM_DB[this.equipped.weapon];
+      dmg = w.dmg;
+    }
+    if (this.role === 'FOX' && this.hp / this.maxHp < 0.2) dmg *= 1.2;
+    if (this.hurricaneDamageTimer > 0) dmg += 12;
+    if (this.burstPotionTimer > 0) dmg *= 1.45;
+    if (this.lowHpDamageBoost && this.hp / this.maxHp < 0.3) dmg *= (1 + this.lowHpDamageBoost);
+
+    let finalDmg = dmg;
+    if (this.arrowDamageBoost) finalDmg *= (1 + this.arrowDamageBoost);
+
+    const distance = 4 + Math.min(chargeTime, 4) * 3;
+    const speed = 15;
+    const life = distance / speed;
+
+    this.engine.projectiles.push({
+      mesh: arrowMesh, vel: dir.multiplyScalar(speed), life,
+      damage: finalDmg, owner: this
+    });
   }
 
   updateHandBreak(dt, pointer = null) {
@@ -2717,13 +2949,13 @@ class PlayerEntity {
     const item = this.getSelectedItem();
     if (!item || item.count <= 0) return;
 
-    const rc = this.engine.raycastPlacement(mobileMode && pointer ? pointer.x : (pointer?.x || window.innerWidth / 2), mobileMode && pointer ? pointer.y : (pointer?.y || window.innerHeight / 2), 6);
+    const rc = this.engine.raycastPlacement(mobileMode && pointer ? pointer.x : (pointer?.x || window.innerWidth / 2), mobileMode && pointer ? pointer.y : (pointer?.y || window.innerHeight / 2), mobileMode ? 5 : 6);
     if (rc.hit) {
       const px = rc.x;
       const py = rc.y;
       const pz = rc.z;
       const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
-      if (center.distanceTo(this.pos) > 6.5) return;
+      if (center.distanceTo(this.pos) > (mobileMode ? 5 : 6.5)) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
       const steelBonus = this.role === 'STEEL_BONE' ? 1.2 + (this.steelBuildBonus || 0) : 1;
       // 检查方块下方是否有支撑（不能悬空放置）
@@ -2759,22 +2991,23 @@ class PlayerEntity {
       return;
     }
     if (this.isDead || this.isFrozen || this.skillCd > 0) return;
+    if (this.role === 'STEEL_BONE' && this.glassBridgeTimer > 0) return;
     if (this.role !== 'FOX') this.breakCamouflage();
     const info = this.roleInfo;
-    this.skillCd = Math.max(3, info.active.cd - (this.skillCdBonus || 0));
+    if (this.role !== 'STEEL_BONE') {
+      this.skillCd = Math.max(3, info.active.cd - (this.skillCdBonus || 0));
+    }
     this.skillActive = 0;
 
     if (this.role === 'FOX') {
       this.isInvisible = true;
       this.camouflageTimer = 12;
-      window.game?.showMessage(`${this.name} 发动伪装！`, '#8be9fd');
     } else if (this.role === 'PORK_DOCTOR') {
       this.maxHp += 150;
       this.hp = Math.min(this.maxHp, this.hp + 150);
       this.fatTimer = 8;
       this.skillActive = 8;
       this.mesh.scale.set(1.2, 1.2, 1.2);
-      window.game?.showMessage(`${this.name} 发动五斤肥肉！`, '#ff8a00');
     } else if (this.role === 'HURRICANE') {
       const dir = this.getForwardDir();
       const target = this.pos.clone().addScaledVector(dir, 6);
@@ -2782,16 +3015,12 @@ class PlayerEntity {
       this.pos.copy(target);
       this.hurricaneDamageTimer = 5;
       this.engine.spawnParticles(this.pos, 0x8be9fd, 18);
-      window.game?.showMessage(`${this.name} 发动飓风之力！`, '#8be9fd');
     } else if (this.role === 'DRIFTWOOD') {
       this.launchMissile();
-      window.game?.showMessage(`${this.name} 发动天罚！`, '#ffdd00');
     } else if (this.role === 'STEEL_BONE') {
-      this.createVoidBridge();
-      window.game?.showMessage(`${this.name} 发动虚空之桥！`, '#8be9fd');
+      this.createGlassBridge();
     } else if (this.role === 'WAIWAI') {
       this.engine.createBoneZone(this);
-      window.game?.showMessage(`${this.name} 释放骨头阵！`, '#f5f0dc');
     }
   }
 
@@ -2807,6 +3036,7 @@ class PlayerEntity {
     if (this.camouflageTimer > 0) {
       this.camouflageTimer = 0;
       this.isInvisible = false;
+      this.skillCd = ROLES.FOX.active.cd;
       if (show) window.game?.showMessage?.(`${this.name} 退出伪装`, '#cccccc');
     }
   }
@@ -2837,32 +3067,36 @@ class PlayerEntity {
     this.engine.projectiles.push(missile);
   }
 
-  createVoidBridge() {
+  createGlassBridge() {
     const dir = this.getForwardDir();
     dir.y = 0;
     dir.normalize();
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    this.voidBridgeBlocks = [];
+    this.glassBridgeBlocks = [];
+    const startY = Math.floor(this.pos.y);
     for (let i = 1; i <= 15; i++) {
       const center = this.pos.clone().addScaledVector(dir, i);
       const positions = [
-        { x: Math.floor(center.x), y: Math.floor(center.y), z: Math.floor(center.z) },
-        { x: Math.floor(center.x + right.x), y: Math.floor(center.y + right.y), z: Math.floor(center.z + right.z) }
+        { x: Math.floor(center.x), y: startY, z: Math.floor(center.z) },
+        { x: Math.floor(center.x + right.x), y: startY, z: Math.floor(center.z + right.z) }
       ];
       for (const p of positions) {
         const key = this.engine.getBlockKey(p.x, p.y, p.z);
         if (!this.engine.blocks.has(key)) {
           this.engine.placeBlock(p.x, p.y, p.z, 'blast_glass', this.team, 1, this);
-          this.voidBridgeBlocks.push(p);
+          this.glassBridgeBlocks.push(p);
         }
       }
     }
-    setTimeout(() => {
-      for (const block of this.voidBridgeBlocks) {
-        this.engine.removeBlock(block.x, block.y, block.z);
-      }
-      this.voidBridgeBlocks = [];
-    }, 15000);
+    this.glassBridgeTimer = 12;
+    this.glassBridgeCdPending = true;
+    if (this.glassBridgeBlocks.length > 0) {
+      const mid = this.glassBridgeBlocks[Math.floor(this.glassBridgeBlocks.length / 2)];
+      this.glassBridgeLabel = this.engine.makeTextSprite('12.0s', '#9eefff');
+      this.glassBridgeLabel.position.set(mid.x + 0.5, mid.y + 1.5, mid.z + 0.5);
+      this.engine.scene.add(this.glassBridgeLabel);
+    }
+    window.game?.showMessage?.('玻璃桥已生成，持续12秒', '#9eefff');
   }
 
   throwTeleportCoin() {
@@ -2970,6 +3204,10 @@ class PlayerEntity {
     this.isDead = true;
     this.hp = 0;
     this.mesh.visible = false;
+    if (this.placePreviewMesh) {
+      this.engine.scene.remove(this.placePreviewMesh);
+      this.placePreviewMesh = null;
+    }
     if (this.fatTimer > 0 || this.skillActive > 0) this.deactivateSkill();
     this.fatTimer = 0;
     if (this.missileControl) {
@@ -2997,7 +3235,6 @@ class PlayerEntity {
       this.armorInfo = null;
       this.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
       this.updateWeaponMesh();
-      window.game?.showMessage(`${this.name} 坠入虚空，装备和物品全部清空！`, '#ff4444');
     } else {
       // 收集所有物品和货币
       const allItems = [];
@@ -3073,6 +3310,10 @@ class PlayerEntity {
     this.isDead = false;
     this.pendingElimination = false;
     this.hp = this.maxHp;
+    if (this.placePreviewMesh) {
+      this.engine.scene.remove(this.placePreviewMesh);
+      this.placePreviewMesh = null;
+    }
     if (this.role === 'WAIWAI') {
       this.maxMiss = 3;
       this.miss = 3;

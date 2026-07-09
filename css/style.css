@@ -674,6 +674,29 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   border-color: rgba(255,221,0,0.66);
 }
 
+/* Big Map */
+#bigMapPanel {
+  position: fixed; inset: 0; z-index: 210; display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+}
+#bigMapPanel.open { display: flex; }
+.big-map-container {
+  background: rgba(20,20,30,0.95); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px; padding: 16px; box-shadow: 0 0 40px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.big-map-header {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+}
+.big-map-header h2 { color: #fff; font-size: 18px; margin: 0; }
+.big-map-header button {
+  background: none; border: none; color: #fff; font-size: 24px; cursor: pointer;
+}
+#bigMapCanvas {
+  border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.5);
+}
+
 /* Crosshair */
 #crosshair {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -715,6 +738,18 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
   background: rgba(255,221,0,.2); border: 1px solid #ffdd00; border-radius: 12px;
   padding: 6px 20px; color: #ffdd00; font-size: 14px; font-weight: bold; z-index: 160;
+  text-align: center; font-family: 'Noto Sans CJK SC', 'PingFang SC', sans-serif;
+}
+#bowCharge {
+  position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,136,0,.2); border: 1px solid #ff8800; border-radius: 12px;
+  padding: 6px 20px; color: #ff8800; font-size: 14px; font-weight: bold; z-index: 161;
+  text-align: center; font-family: 'Noto Sans CJK SC', 'PingFang SC', sans-serif;
+}
+#detectorHud {
+  position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+  background: rgba(158,239,255,.2); border: 1px solid #9eefff; border-radius: 12px;
+  padding: 6px 20px; color: #9eefff; font-size: 14px; font-weight: bold; z-index: 162;
   text-align: center; font-family: 'Noto Sans CJK SC', 'PingFang SC', sans-serif;
 }
 #timedAction {
@@ -819,7 +854,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 }
 
 /* ========== Growth System ========== */
-#awakeningPanel, #growthPanel, #menuGrowthPanel {
+#growthPanel, #menuGrowthPanel {
   position: fixed; inset: 0; z-index: 3600; background: rgba(0,0,0,0.82);
   display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px);
 }
@@ -833,14 +868,6 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .growth-header h2 { color: #8be9fd; font-size: 22px; }
 .growth-close { width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fff; font-size: 24px; cursor: pointer; }
 .growth-tip { color: #aaa; padding: 14px 20px 0; font-size: 13px; }
-.awakening-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px; }
-.awake-choice {
-  min-height: 110px; padding: 16px; border-radius: 14px; border: 1px solid rgba(255,221,0,0.35);
-  background: rgba(255,221,0,0.08); color: #fff; cursor: pointer; text-align: left;
-}
-.awake-choice:hover { background: rgba(255,221,0,0.16); transform: translateY(-1px); }
-.awake-choice b { display: block; color: #ffdd00; margin-bottom: 8px; font-size: 16px; }
-.awake-choice span { color: #ddd; font-size: 13px; line-height: 1.5; }
 .growth-tabs { display: flex; gap: 8px; padding: 12px 16px; background: rgba(0,0,0,0.18); overflow-x: auto; }
 .growth-tab { padding: 9px 14px; border: none; border-radius: 18px; background: rgba(255,255,255,0.08); color: #ccc; cursor: pointer; white-space: nowrap; }
 .growth-tab.active { background: #8be9fd; color: #111; font-weight: bold; }

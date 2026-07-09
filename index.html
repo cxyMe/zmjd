@@ -198,6 +198,17 @@ updateOrientationGate();
   <!-- Minimap -->
   <div id="minimap"><canvas id="minimapCanvas" width="160" height="160"></canvas></div>
 
+  <!-- Big Map -->
+  <div id="bigMapPanel" style="display:none;">
+    <div class="big-map-container">
+      <div class="big-map-header">
+        <h2>战场地图</h2>
+        <button id="bigMapCloseBtn">&times;</button>
+      </div>
+      <canvas id="bigMapCanvas" width="600" height="600"></canvas>
+    </div>
+  </div>
+
   <!-- Player Status -->
   <div id="playerStatus">
     <div class="status-bar">
@@ -252,6 +263,12 @@ updateOrientationGate();
 
   <!-- Teleport Charge Indicator -->
   <div id="teleportCharge" style="display:none;"></div>
+
+  <!-- Bow Charge Indicator -->
+  <div id="bowCharge" style="display:none;"></div>
+
+  <!-- Detector HUD -->
+  <div id="detectorHud" style="display:none;"></div>
 
   <!-- Status Effects Bar -->
   <div id="statusEffects" style="display:none;"></div>
@@ -358,7 +375,7 @@ updateOrientationGate();
       <button class="growth-tab active" data-menu-growth-tab="season">赛季</button>
       <button class="growth-tab" data-menu-growth-tab="tasks">任务</button>
       <button class="growth-tab" data-menu-growth-tab="rewards">奖励</button>
-      <button class="growth-tab" data-menu-growth-tab="talents">筑梦基石</button>
+
     </div>
     <div id="menuGrowthBody" class="growth-body"></div>
   </div>
@@ -388,6 +405,14 @@ updateOrientationGate();
         <label>触控灵敏度：<span id="sensVal">1.8</span></label>
         <input type="range" id="sensSlider" min="0.5" max="4" step="0.1" value="1.8">
       </div>
+      <div class="sensitivity-row">
+        <label>摇杆大小：<span id="joystickSizeVal">100</span>%</label>
+        <input type="range" id="joystickSizeSlider" min="50" max="150" step="5" value="100">
+      </div>
+      <div class="sensitivity-row">
+        <label>按钮大小：<span id="btnSizeVal">100</span>%</label>
+        <input type="range" id="btnSizeSlider" min="50" max="150" step="5" value="100">
+      </div>
     </div>
   </div>
 </div>
@@ -408,17 +433,6 @@ updateOrientationGate();
   </div>
 </div>
 
-<!-- ========== Awakening Choice ========== -->
-<div id="awakeningPanel">
-  <div class="growth-container small">
-    <div class="growth-header">
-      <h2>天赋觉醒</h2>
-    </div>
-    <p class="growth-tip">本局达到关键等级，请选择一个分支强化。本次选择只在当前对局生效。</p>
-    <div id="awakeningChoices" class="awakening-choices"></div>
-  </div>
-</div>
-
 <!-- ========== Growth Center ========== -->
 <div id="growthPanel">
   <div class="growth-container">
@@ -427,10 +441,8 @@ updateOrientationGate();
       <button class="growth-close" onclick="window.game?.toggleGrowthPanel()">&times;</button>
     </div>
     <div class="growth-tabs">
-      <button class="growth-tab active" data-growth-tab="talents">筑梦基石</button>
-      <button class="growth-tab" data-growth-tab="mastery">勋章墙</button>
+      <button class="growth-tab active" data-growth-tab="mastery">勋章墙</button>
       <button class="growth-tab" data-growth-tab="season">赛季征程</button>
-      <button class="growth-tab" data-growth-tab="rank">排位成长</button>
     </div>
     <div id="growthBody" class="growth-body"></div>
   </div>
@@ -559,7 +571,7 @@ const roleDescriptions = {
   PORK_DOCTOR: '猪排博士 - 额外生命膨胀 | 周期回血',
   HURRICANE: '飓风 - 位移6格 | 远程透视标记',
   DRIFTWOOD: '浮木 - 操控导弹 | 命中回收护盾',
-  STEEL_BONE: '钢骨 - 虚空之桥 | 建筑加固',
+  STEEL_BONE: '钢骨 - 玻璃桥 | 建筑加固',
   WAIWAI: '歪歪 - 1血miss体质 | 骨头阵持续伤害'
 };
 

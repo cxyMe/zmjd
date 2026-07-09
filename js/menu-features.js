@@ -8,7 +8,6 @@ class MenuGrowthUI {
     this.body = document.getElementById('menuGrowthBody');
     this.title = document.getElementById('menuGrowthTitle');
     this.tab = 'season';
-    this.activeTalents = JSON.parse(localStorage.getItem('bedwars_active_talents') || '[]');
     this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
     this.bind();
   }
@@ -16,7 +15,6 @@ class MenuGrowthUI {
   bind() {
     document.getElementById('menuSeasonBtn')?.addEventListener('click', () => this.open('season'));
     document.getElementById('menuTasksBtn')?.addEventListener('click', () => this.open('tasks'));
-    document.getElementById('menuTalentsBtn')?.addEventListener('click', () => this.open('talents'));
     document.querySelectorAll('[data-menu-growth-tab]').forEach(btn => {
       btn.addEventListener('click', () => this.open(btn.dataset.menuGrowthTab));
     });
@@ -25,7 +23,6 @@ class MenuGrowthUI {
   open(tab = 'season') {
     this.tab = tab;
     this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
-    this.activeTalents = JSON.parse(localStorage.getItem('bedwars_active_talents') || '[]');
     document.querySelectorAll('[data-menu-growth-tab]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.menuGrowthTab === tab);
     });
@@ -42,7 +39,6 @@ class MenuGrowthUI {
     if (this.tab === 'season') return this.renderSeason();
     if (this.tab === 'tasks') return this.renderTasks();
     if (this.tab === 'rewards') return this.renderRewards();
-    if (this.tab === 'talents') return this.renderTalents();
   }
 
   renderSeason() {
@@ -115,36 +111,6 @@ class MenuGrowthUI {
     </div>`;
   }
 
-  renderTalents() {
-    this.title.textContent = '筑梦基石';
-    this.body.innerHTML = `
-      <div class="growth-summary">
-        <span class="growth-pill">筑梦星尘：${this.profile.stardust || 0}</span>
-        <span class="growth-pill">已携带：${this.activeTalents.length}/3</span>
-      </div>
-      <div class="growth-grid">
-        ${OUTGAME_TALENTS.map(t => `
-          <div class="talent-card ${t.color} ${this.activeTalents.includes(t.id) ? 'active' : ''}">
-            <h4>${t.name}</h4><p>${t.desc}</p>
-            <button data-menu-talent="${t.id}">${this.activeTalents.includes(t.id) ? '取消携带' : '携带进场'}</button>
-          </div>
-        `).join('')}
-      </div>`;
-    this.body.querySelectorAll('[data-menu-talent]').forEach(btn => {
-      btn.onclick = () => this.toggleTalent(btn.dataset.menuTalent);
-    });
-  }
-
-  toggleTalent(id) {
-    const idx = this.activeTalents.indexOf(id);
-    if (idx >= 0) this.activeTalents.splice(idx, 1);
-    else {
-      if (this.activeTalents.length >= 3) return alert('每局最多携带3个核心天赋');
-      this.activeTalents.push(id);
-    }
-    localStorage.setItem('bedwars_active_talents', JSON.stringify(this.activeTalents));
-    this.renderTalents();
-  }
 }
 
 class HUDLayoutManager {
@@ -173,6 +139,48 @@ class HUDLayoutManager {
   init() {
     this.captureDefault();
     this.apply(JSON.parse(localStorage.getItem(this.activeKey) || 'null'));
+    this.bindSizeSliders();
+    this.applySizeSettings();
+  }
+
+  bindSizeSliders() {
+    const joySlider = document.getElementById('joystickSizeSlider');
+    const joyVal = document.getElementById('joystickSizeVal');
+    const btnSlider = document.getElementById('btnSizeSlider');
+    const btnVal = document.getElementById('btnSizeVal');
+    if (joySlider) {
+      joySlider.value = parseFloat(localStorage.getItem('bedwars_joystick_size')) || 100;
+      if (joyVal) joyVal.textContent = joySlider.value;
+      joySlider.addEventListener('input', () => {
+        const v = parseFloat(joySlider.value);
+        if (joyVal) joyVal.textContent = v;
+        localStorage.setItem('bedwars_joystick_size', v);
+        this.applySizeSettings();
+      });
+    }
+    if (btnSlider) {
+      btnSlider.value = parseFloat(localStorage.getItem('bedwars_btn_size')) || 100;
+      if (btnVal) btnVal.textContent = btnSlider.value;
+      btnSlider.addEventListener('input', () => {
+        const v = parseFloat(btnSlider.value);
+        if (btnVal) btnVal.textContent = v;
+        localStorage.setItem('bedwars_btn_size', v);
+        this.applySizeSettings();
+      });
+    }
+  }
+
+  applySizeSettings() {
+    const joyScale = (parseFloat(localStorage.getItem('bedwars_joystick_size')) || 100) / 100;
+    const btnScale = (parseFloat(localStorage.getItem('bedwars_btn_size')) || 100) / 100;
+    const joyZone = document.getElementById('joystickZone');
+    const joyBase = document.getElementById('joystickBase');
+    const jumpBtn = document.getElementById('jumpBtnMobile');
+    const actionBtn = document.getElementById('actionBtnMobile');
+    if (joyZone) { joyZone.style.width = `${140 * joyScale}px`; joyZone.style.height = `${140 * joyScale}px`; }
+    if (joyBase) { joyBase.style.width = `${140 * joyScale}px`; joyBase.style.height = `${140 * joyScale}px`; }
+    if (jumpBtn) { jumpBtn.style.width = `${76 * btnScale}px`; jumpBtn.style.height = `${76 * btnScale}px`; }
+    if (actionBtn) { actionBtn.style.width = `${88 * btnScale}px`; actionBtn.style.height = `${88 * btnScale}px`; }
   }
 
   captureDefault() {

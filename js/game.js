@@ -9,7 +9,7 @@ class InputManager {
     this.buildPointer = null;
     this.touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
     this.joystick = { active: false, dx: 0, dy: 0 };
-    this.buttons = { jump: false, attack: false, attackHeld: false, build: false, skill: false, action: false, actionHeld: false };
+    this.buttons = { jump: false, attack: false, attackHeld: false, build: false, skill: false, skillHeld: false, action: false, actionHeld: false };
     this.lookSensitivity = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
     this.lastTouchAction = { x: 0, y: 0 };
 
@@ -18,7 +18,10 @@ class InputManager {
       this.keys[e.code] = true;
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','Tab'].includes(e.code)) e.preventDefault();
     });
-    document.addEventListener('keyup', e => this.keys[e.code] = false);
+    document.addEventListener('keyup', e => {
+      this.keys[e.code] = false;
+      if (e.code === 'KeyQ') this.buttons.skill = true;
+    });
 
     // Mouse
     document.addEventListener('mousemove', e => {
@@ -64,6 +67,26 @@ class InputManager {
       if (!window.game?.gameActive || !this.isMobile()) return;
       if (isGameUiTarget(e.target)) return;
       const t = e.changedTouches[0];
+      const lp = window.game.localPlayer;
+      const item = lp?.getSelectedItem();
+      const info = item ? ITEM_DB[item.key] : null;
+      if (info?.type === 'block') {
+        lp.placeBlock({ x: t.clientX, y: t.clientY }, true);
+      } else {
+        const rc = window.game.engine.raycastPlacement(t.clientX, t.clientY, 5);
+        if (rc.hit && rc.baseKey) {
+          const blk = window.game.engine.blocks.get(rc.baseKey);
+          if (blk && blk.type !== 'ground') {
+            window.game.selectedBlockKey = rc.baseKey;
+            const panel = document.getElementById('buildPanel');
+            const hpText = document.getElementById('buildHpText');
+            const blockInfo = ITEM_DB[blk.type];
+            if (hpText) hpText.textContent = `${blockInfo?.name || '建筑'} 血量：${Math.ceil(blk.hp)}/${blk.maxHp}`;
+            if (panel) panel.style.display = 'block';
+            if (document.pointerLockElement) document.exitPointerLock();
+          }
+        }
+      }
       this.touchLook.active = true;
       this.touchLook.id = t.identifier;
       this.touchLook.lastX = t.clientX;
@@ -145,7 +168,16 @@ class InputManager {
     };
     bindBtn('jumpBtnMobile', 'jump');
     bindBtn('actionBtnMobile', 'action');
-    bindBtn('skillBtn', 'skill');
+    // Skill button with hold support
+    const skillBtn = document.getElementById('skillBtn');
+    if (skillBtn) {
+      skillBtn.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; this.lastTouchAction.x = t.clientX; this.lastTouchAction.y = t.clientY; this.buttons.skillHeld = true; });
+      skillBtn.addEventListener('touchend', e => { e.preventDefault(); this.buttons.skillHeld = false; this.buttons.skill = true; });
+      skillBtn.addEventListener('touchcancel', e => { e.preventDefault(); this.buttons.skillHeld = false; });
+      skillBtn.addEventListener('mousedown', e => { e.preventDefault(); this.buttons.skillHeld = true; });
+      skillBtn.addEventListener('mouseup', e => { e.preventDefault(); this.buttons.skillHeld = false; this.buttons.skill = true; });
+      skillBtn.addEventListener('mouseleave', e => { if (this.buttons.skillHeld) { this.buttons.skillHeld = false; this.buttons.skill = true; } });
+    }
   }
 
   getMovement() {
@@ -182,7 +214,7 @@ class InputManager {
     return v ? (target || { x: window.innerWidth / 2, y: window.innerHeight / 2 }) : null;
   }
   consumeJump() { const v = this.buttons.jump || this.keys['Space']; this.buttons.jump = false; this.keys['Space'] = false; return v; }
-  consumeSkill() { const v = this.buttons.skill || this.keys['KeyQ']; this.buttons.skill = false; this.keys['KeyQ'] = false; return v; }
+  consumeSkill() { const v = this.buttons.skill; this.buttons.skill = false; return v; }
   consumeDrop() { const v = this.keys['KeyG']; this.keys['KeyG'] = false; return v; }
   consumeBackpack() { const v = this.keys['Tab']; this.keys['Tab'] = false; return v; }
   getHotbarScroll() {
@@ -405,6 +437,27 @@ class UIManager {
     this.game = game;
     this.shopOpen = false;
     this.shopTab = 'blocks';
+    this.bigMapOpen = false;
+    this._minimapClickBound = this._onMinimapClick.bind(this);
+    const minimap = document.getElementById('minimap');
+    if (minimap) minimap.addEventListener('click', this._minimapClickBound);
+    const bigMapClose = document.getElementById('bigMapCloseBtn');
+    if (bigMapClose) bigMapClose.addEventListener('click', () => this.toggleBigMap(false));
+  }
+
+  _onMinimapClick() {
+    this.toggleBigMap(true);
+  }
+
+  toggleBigMap(show) {
+    this.bigMapOpen = show;
+    const panel = document.getElementById('bigMapPanel');
+    if (panel) panel.style.display = show ? 'flex' : 'none';
+    if (show) this.drawBigMap();
+    if (show && document.pointerLockElement) document.exitPointerLock();
+    else if (!show && window.game?.gameActive && !window.game?.input?.isMobile?.()) {
+      window.game.engine.renderer.domElement.requestPointerLock();
+    }
   }
 
   update() {
@@ -496,6 +549,30 @@ class UIManager {
         teleportIndicator.style.display = 'block';
       } else {
         teleportIndicator.style.display = 'none';
+      }
+    }
+
+    // 弓蓄力显示
+    const bowIndicator = document.getElementById('bowCharge');
+    if (bowIndicator) {
+      if (lp.bowCharge > 0) {
+        const pct = Math.min(100, Math.round((lp.bowCharge / 4) * 100));
+        const dist = Math.round(4 + lp.bowCharge * 3);
+        bowIndicator.textContent = `蓄力 ${pct}% | 射程 ${dist}格`;
+        bowIndicator.style.display = 'block';
+      } else {
+        bowIndicator.style.display = 'none';
+      }
+    }
+
+    // 探测仪 HUD
+    const detectorHud = document.getElementById('detectorHud');
+    if (detectorHud) {
+      if (lp.detectorEnemyCount > 0) {
+        detectorHud.textContent = `探测仪: 附近 ${lp.detectorEnemyCount} 名敌人`;
+        detectorHud.style.display = 'block';
+      } else {
+        detectorHud.style.display = 'none';
       }
     }
 
@@ -612,6 +689,72 @@ class UIManager {
     }
   }
 
+  drawBigMap() {
+    const canvas = document.getElementById('bigMapCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2, cy = h / 2;
+    const scale = Math.min(w, h) / 300;
+
+    // Islands
+    ctx.fillStyle = 'rgba(100,150,100,0.6)';
+    const islandR = 16 * scale;
+    ctx.fillRect(cx - 120 * scale, cy - 120 * scale, islandR, islandR);
+    ctx.fillRect(cx + 108 * scale, cy - 120 * scale, islandR, islandR);
+    ctx.fillRect(cx - 120 * scale, cy + 108 * scale, islandR, islandR);
+    ctx.fillRect(cx + 108 * scale, cy + 108 * scale, islandR, islandR);
+    ctx.fillStyle = 'rgba(80,120,80,0.7)';
+    ctx.fillRect(cx - 26 * scale, cy - 26 * scale, 52 * scale, 52 * scale);
+
+    // Beds
+    for (const [key, t] of Object.entries(TEAMS)) {
+      if (!t.bedAlive) continue;
+      const bx = cx + (t.spawn.x / 140) * w * 0.5;
+      const by = cy + (t.spawn.z / 140) * h * 0.5;
+      ctx.fillStyle = t.hex;
+      ctx.fillRect(bx - 8, by - 6, 16, 12);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx - 8, by - 6, 16, 12);
+    }
+
+    // Players
+    const localTeam = this.game.localPlayer?.team;
+    for (const p of this.game.players) {
+      if (p.isDead) continue;
+      const px = cx + (p.pos.x / 140) * w * 0.5;
+      const py = cy + (p.pos.z / 140) * h * 0.5;
+      ctx.fillStyle = p.team === localTeam ? '#3b82f6' : '#ef4444';
+      ctx.beginPath();
+      ctx.arc(px, py, p.isLocal ? 8 : 6, 0, Math.PI * 2);
+      ctx.fill();
+      if (p.isLocal) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(p.name || '', px, py - 10);
+    }
+
+    // Shrink boundary
+    if (this.game.shrinkActive) {
+      const r = (this.game.shrinkRadius / 140) * w * 0.5;
+      ctx.strokeStyle = 'rgba(255,0,0,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   updateBackpack() {
     const lp = this.game.localPlayer;
     if (!lp) return;
@@ -658,42 +801,8 @@ class UIManager {
     const body = document.getElementById('growthBody');
     if (!body || !this.game.growth) return;
     const gm = this.game.growth;
-    if (this.game.growthTab === 'talents') return this.renderTalentPanel(body, gm);
     if (this.game.growthTab === 'mastery') return this.renderMasteryPanel(body, gm);
     if (this.game.growthTab === 'season') return this.renderSeasonPanel(body, gm);
-    if (this.game.growthTab === 'rank') return this.renderRankPanel(body, gm);
-  }
-
-  renderTalentPanel(body, gm) {
-    const active = gm.activeTalents || [];
-    body.innerHTML = `
-      <div class="growth-summary">
-        <span class="growth-pill">筑梦星尘：${gm.profile.stardust || 0}</span>
-        <span class="growth-pill">已激活：${active.length}/3</span>
-        <span class="growth-pill">满级可点亮30节点，入场仅携带3个</span>
-      </div>
-      <div class="growth-grid">
-        ${OUTGAME_TALENTS.map(t => `
-          <div class="talent-card ${t.color} ${active.includes(t.id) ? 'active' : ''}">
-            <h4>${t.name}</h4>
-            <p>${t.desc}</p>
-            <button data-talent="${t.id}">${active.includes(t.id) ? '取消携带' : '携带进场'}</button>
-          </div>
-        `).join('')}
-      </div>`;
-    body.querySelectorAll('[data-talent]').forEach(btn => {
-      btn.onclick = () => {
-        const id = btn.dataset.talent;
-        const idx = gm.activeTalents.indexOf(id);
-        if (idx >= 0) gm.activeTalents.splice(idx, 1);
-        else {
-          if (gm.activeTalents.length >= 3) return alert('每局最多携带3个核心天赋');
-          gm.activeTalents.push(id);
-        }
-        localStorage.setItem('bedwars_active_talents', JSON.stringify(gm.activeTalents));
-        this.renderGrowthCenter();
-      };
-    });
   }
 
   renderMasteryPanel(body, gm) {
@@ -725,21 +834,6 @@ class UIManager {
       </div>`;
   }
 
-  renderRankPanel(body, gm) {
-    const score = gm.profile.rankScore || 0;
-    body.innerHTML = `
-      <div class="growth-summary">
-        <span class="growth-pill">当前段位：${gm.rankName(score)}</span>
-        <span class="growth-pill">排位分：${score}</span>
-        <span class="growth-pill">仅联机对局计入正式排位</span>
-      </div>
-      <div class="growth-grid">
-        <div class="rank-card"><h4>评分维度</h4><p>关键拆床、团队资源贡献、存活时长、胜负结果共同决定加减分。</p></div>
-        <div class="rank-card"><h4>团队导向</h4><p>铺路搭桥、守床、资源输送同样会提高结算评分，不鼓励单纯抢人头。</p></div>
-        <div class="rank-card"><h4>最高荣誉</h4><p>筑梦传说：全区前20名玩家显示专属称号。</p></div>
-      </div>`;
-  }
-
   buildShop() {
     const body = document.getElementById('shopBody');
     if (!body) return;
@@ -750,7 +844,7 @@ class UIManager {
       blocks: ['wood_plank','stone_plate','iron_plate','titanium','blast_glass'],
       weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow','armor_hammer','boomerang','frost_staff','javelin','smoke_launcher'],
       armor: ['crude_armor','handmade_armor','std_armor','fine_armor','rd_armor'],
-      specials: ['tnt','handmade_tnt','military_c4','mini_nuke','repair_drone','bandage','medkit','surgery_station','trap_device','bear_trap','sensor_mine','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion']
+      specials: ['tnt','handmade_tnt','military_c4','mini_nuke','repair_drone','bandage','medkit','surgery_station','trap_device','bear_trap','sensor_mine','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion','detector']
     };
     const items = tabs[this.shopTab] || [];
 
@@ -812,13 +906,14 @@ class Game {
     this.growth = null;
     this.social = null;
     this.growthPanelOpen = false;
-    this.growthTab = 'talents';
+    this.growthTab = 'mastery';
     this.roleSelectionActive = false;
     this.roleSelectionTimer = 0;
     this.roleChosen = false;
     this.selectedBlockKey = null;
     this.movingBlockKey = null;
     this.selectedMap = 'classic';
+    this.genLabels = [];
   }
 
   init() {
@@ -856,9 +951,7 @@ class Game {
         this.ui.renderGrowthCenter();
       };
     });
-    document.getElementById('skillBtn').onclick = () => {
-      if (this.localPlayer) this.localPlayer.useSkill();
-    };
+    // Skill button onclick removed; useSkill triggered via consumeSkill in loop
     document.getElementById('buildUpgradeBtn')?.addEventListener('click', () => this.upgradeSelectedBlock());
     document.getElementById('buildDestroyBtn')?.addEventListener('click', () => this.destroySelectedBlock());
     document.getElementById('buildMoveBtn')?.addEventListener('click', () => this.prepareMoveSelectedBlock());
@@ -887,9 +980,7 @@ class Game {
       if (e.code === 'KeyV') this.social?.sendAid();
       if (e.code === 'KeyX') this.social?.openTeamChest();
       if (e.code === 'KeyZ') this.social?.castCombo('shield');
-      if (e.code === 'KeyQ') {
-        if (this.localPlayer) this.localPlayer.useSkill();
-      }
+      // KeyQ skill handled by InputManager keyup -> consumeSkill in loop
       if (e.code === 'KeyG') {
         if (this.localPlayer) this.localPlayer.dropSelectedItem();
       }
@@ -928,7 +1019,6 @@ class Game {
       ? this.network.auth.user.id
       : 'local-' + Math.random().toString(36).slice(2, 10);
     this.localPlayer = new PlayerEntity(this.engine, teamKey, roleKey, true, this.playerName, localId);
-    this.growth?.applyOutGameTalents(this.localPlayer);
     this.players.push(this.localPlayer);
 
     // Create AI bots (max 4, controlled by AIController)
@@ -1129,12 +1219,25 @@ class Game {
       if (this.input.consumeJump()) this.localPlayer.jump();
       if (this.input.consumeAction()) this.performMobileAction();
       if (this.input.consumeAttack()) {
-        if (!this.tryOpenFriendlyBlockPanel()) this.localPlayer.attack();
+        if (!this.tryOpenFriendlyBlockPanel()) {
+          const weaponInfo = this.localPlayer.equipped.weapon ? ITEM_DB[this.localPlayer.equipped.weapon] : null;
+          if (weaponInfo?.ranged && this.localPlayer.arrowCount > 0) {
+            this.localPlayer.startBowCharge();
+          } else {
+            this.localPlayer.attack();
+          }
+        }
       }
       const heldItem = this.localPlayer.getSelectedItem();
       const heldInfo = heldItem ? ITEM_DB[heldItem.key] : null;
       const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && heldInfo?.type !== 'special';
-      if (this.input.isAttackHeld() || canHandBreakByMobile) {
+      if (this.localPlayer.bowCharge > 0) {
+        if (this.input.isAttackHeld()) {
+          this.localPlayer.updateBowCharge(dt);
+        } else {
+          this.localPlayer.releaseBowCharge();
+        }
+      } else if (this.input.isAttackHeld() || canHandBreakByMobile) {
         this.localPlayer.updateHandBreak(dt, { x: window.innerWidth / 2, y: window.innerHeight / 2 });
       }
       const buildPointer = this.input.consumeBuild();
@@ -1178,7 +1281,27 @@ class Game {
     // Resource generators spawn drop items instead of direct collection
     for (const g of this.gens) {
       if (g.active === false) continue;
+      if (g.activated !== true) {
+        if (this.localPlayer) {
+          const dist = this.localPlayer.pos.distanceTo(g.pos);
+          if (dist < 15) {
+            g.activated = true;
+            if (!g.label) {
+              const label = this.engine.makeTextSprite(`${g.spawnSec.toFixed(1)}s`, '#ffffff');
+              label.position.copy(g.pos).add(new THREE.Vector3(0, 1.8, 0));
+              this.engine.scene.add(label);
+              g.label = label;
+              this.genLabels.push(label);
+            }
+          }
+        }
+        continue;
+      }
       g.timer += dt;
+      if (g.label) {
+        const remaining = Math.max(0, g.spawnSec - g.timer);
+        this.engine.updateTextSprite(g.label, `${remaining.toFixed(1)}s`);
+      }
       if (g.timer >= g.spawnSec) {
         g.timer = 0;
         g.ready = true;
@@ -1244,11 +1367,6 @@ class Game {
       lp.attack();
       return;
     }
-    if (info.type === 'block') {
-      const touchPt = this.input.lastTouchAction;
-      lp.placeBlock({ x: touchPt.x, y: touchPt.y }, true);
-      return;
-    }
     if (info.type === 'weapon') {
       lp.attack();
       return;
@@ -1269,7 +1387,6 @@ class Game {
     const lp = this.localPlayer;
     const rc = this.getLookedBlock(6);
     if (!lp || !rc.hit || !rc.block || rc.block.type === 'ground') return false;
-    if (rc.block.team !== lp.team) return false;
     this.selectedBlockKey = rc.key;
     const panel = document.getElementById('buildPanel');
     const hp = document.getElementById('buildHpText');
@@ -1399,7 +1516,7 @@ class Game {
 
     lp.addToBackpack(key, item.count || 1);
     this.network?.logEconomy?.(lp.playerId, 'buy_item', Object.keys(cost)[0], -Object.values(cost)[0], key, lp.pos, Math.floor(this.gameTime));
-    if (item.type === 'weapon' || item.type === 'armor') {
+    if (item.type === 'weapon') {
       lp.equip(key);
     }
     this.shopDirty = true;

@@ -24,111 +24,11 @@ const GROWTH_CONFIG = {
   ]
 };
 
-const AWAKENING_OPTIONS = {
-  FOX: {
-    3: [
-      { id: 'fox_camouflage_cd', name: '灵狐潜踪', desc: '伪装冷却减少3秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 3; } },
-      { id: 'fox_lowhp_boost', name: '狐影威慑', desc: '低血增伤额外提高10%', apply: p => { p.lowHpDamageBoost = 0.1; } }
-    ],
-    6: [
-      { id: 'fox_kill_reset', name: '狐火收割', desc: '击杀刷新主动技能冷却', apply: p => { p.killResetSkill = true; } },
-      { id: 'fox_kill_heal', name: '狡狐回生', desc: '击杀后恢复15点生命', apply: p => { p.killHeal = 15; } }
-    ]
-  },
-  PORK_DOCTOR: {
-    3: [
-      { id: 'pork_fat_cd', name: '热量储备', desc: '五斤肥肉冷却减少4秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 4; } },
-      { id: 'pork_heal_plus', name: '营养过剩', desc: '被动恢复额外+2生命', apply: p => { p.porkHealBonus = 2; } }
-    ],
-    6: [
-      { id: 'pork_tank', name: '厚切装甲', desc: '受到伤害降低8%', apply: p => { p.flatDamageReduce = 0.08; } },
-      { id: 'pork_kill_heal', name: '加餐时间', desc: '击杀后恢复25点生命', apply: p => { p.killHeal = 25; } }
-    ]
-  },
-  HURRICANE: {
-    3: [
-      { id: 'hurricane_dash_cd', name: '顺风而行', desc: '飓风之力冷却减少3秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 3; } },
-      { id: 'hurricane_arrow_slow', name: '风压箭', desc: '远程命中附带短暂减速', apply: p => { p.arrowSlow = true; } }
-    ],
-    6: [
-      { id: 'hurricane_arrow_boost', name: '穿风箭意', desc: '弓箭伤害+15%', apply: p => { p.arrowDamageBoost = 0.15; } },
-      { id: 'hurricane_refund', name: '回旋箭袋', desc: '弓箭击杀返还2支箭', apply: p => { p.killArrowRefund = 2; } }
-    ]
-  },
-  DRIFTWOOD: {
-    3: [
-      { id: 'driftwood_missile_cd', name: '冷却木芯', desc: '天罚冷却减少5秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 5; } },
-      { id: 'driftwood_shield_plus', name: '回收强化', desc: '命中获得护盾上限提高20', apply: p => { p.shieldCapBonus = 20; } }
-    ],
-    6: [
-      { id: 'driftwood_damage_reduce', name: '木纹缓冲', desc: '受到伤害降低6%', apply: p => { p.flatDamageReduce = 0.06; } },
-      { id: 'driftwood_block_xp', name: '漂流筑桥', desc: '放置方块经验+30%', apply: p => { p.blockXpBoost = 0.3; } }
-    ]
-  },
-  STEEL_BONE: {
-    3: [
-      { id: 'steel_bridge_cd', name: '桥芯冷却', desc: '虚空之桥冷却减少4秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 4; } },
-      { id: 'steel_build_more', name: '强固骨架', desc: '建筑加固额外提高10%', apply: p => { p.steelBuildBonus = 0.1; } }
-    ],
-    6: [
-      { id: 'steel_kill_bridge', name: '连桥推进', desc: '击杀后减少6秒主动技能冷却', apply: p => { p.killSkillCdReduce = 6; } },
-      { id: 'steel_tank', name: '钢化外壳', desc: '受到伤害降低6%', apply: p => { p.flatDamageReduce = 0.06; } }
-    ]
-  },
-  WAIWAI: {
-    3: [
-      { id: 'waiwai_bone_cd', name: '骨阵速写', desc: '骨头阵冷却减少5秒', apply: p => { p.skillCdBonus = (p.skillCdBonus || 0) + 5; } },
-      { id: 'waiwai_miss_regen', name: '错位恢复', desc: 'miss恢复间隔减少5秒', apply: p => { p.missRegenBonus = 5; } }
-    ],
-    6: [
-      { id: 'waiwai_invuln_plus', name: '短暂无相', desc: 'miss触发无敌时间增加0.4秒', apply: p => { p.missInvulnBonus = 0.4; } },
-      { id: 'waiwai_bone_power', name: '白骨锋刃', desc: '骨头阵单次伤害+1', apply: p => { p.boneZoneDamageBonus = 1; } }
-    ]
-  }
-};
-
-const OUTGAME_TALENTS = [
-  { id: 'red_tnt_start', color: 'red', name: '爆破先锋', desc: '开局自带1个TNT，但不能带出基地', max: 1 },
-  { id: 'red_first_bed_hit', color: 'red', name: '破床锋芒', desc: '对敌床首次伤害提高5%', max: 1 },
-  { id: 'red_chase', color: 'red', name: '追击步伐', desc: '击杀后3秒内移速微增', max: 1 },
-  { id: 'red_bow_focus', color: 'red', name: '战弓预热', desc: '弓箭首次命中额外获得经验', max: 1 },
-  { id: 'red_breach_xp', color: 'red', name: '破阵经验', desc: '拆床经验提高10%', max: 1 },
-  { id: 'red_forge_mark', color: 'red', name: '战痕标记', desc: '对床造成伤害会被记录到勋章墙', max: 1 },
-  { id: 'red_tnt_safe', color: 'red', name: '爆破直觉', desc: 'TNT误伤队友提示增强', max: 1 },
-  { id: 'red_duel', color: 'red', name: '决斗礼仪', desc: '单挑击杀展示专属击杀文字', max: 1 },
-  { id: 'red_pressure', color: 'red', name: '压迫路线', desc: '进入中枢梦域时小地图高亮资源点', max: 1 },
-  { id: 'red_banner', color: 'red', name: '破梦旌旗', desc: '拆床横幅外观可选红色主题', max: 1 },
-  { id: 'blue_pick_range', color: 'blue', name: '宽域拾取', desc: '基地资源拾取范围扩大30%', max: 1 },
-  { id: 'blue_wood_discount', color: 'blue', name: '木工议价', desc: '购买木板价格9折', max: 1 },
-  { id: 'blue_early_copper', color: 'blue', name: '铜流感知', desc: '前3分钟铜币经验+10%', max: 1 },
-  { id: 'blue_pack_order', color: 'blue', name: '背包整理', desc: '拾取物优先填入同类槽', max: 1 },
-  { id: 'blue_bridge_hint', color: 'blue', name: '路线测绘', desc: '搭桥时显示落点提示', max: 1 },
-  { id: 'blue_shop_memory', color: 'blue', name: '商店记忆', desc: '商店保留上次分页', max: 1 },
-  { id: 'blue_forge_watch', color: 'blue', name: '资源守望', desc: '资源刷新时有更明显提示', max: 1 },
-  { id: 'blue_trade_log', color: 'blue', name: '账本意识', desc: '结算页展示资源贡献评分', max: 1 },
-  { id: 'blue_route_badge', color: 'blue', name: '筑路徽记', desc: '搭桥贡献进入赛季任务统计', max: 1 },
-  { id: 'blue_supply', color: 'blue', name: '补给规划', desc: '补给包领取提示增强', max: 1 },
-  { id: 'green_void_grace', color: 'green', name: '虚空缓坠', desc: '掉入虚空0.5秒后才死亡', max: 1 },
-  { id: 'green_knock_reduce', color: 'green', name: '稳固脚步', desc: '被击退效果减弱10%', max: 1 },
-  { id: 'green_respawn_focus', color: 'green', name: '复生专注', desc: '复活后短暂显示资源路线', max: 1 },
-  { id: 'green_low_hp_warn', color: 'green', name: '危机警觉', desc: '低血量时UI提示更明显', max: 1 },
-  { id: 'green_bed_guard', color: 'green', name: '守床本能', desc: '床附近获得额外经验提示', max: 1 },
-  { id: 'green_fall_memory', color: 'green', name: '坠落记忆', desc: '死亡点在小地图短暂标记', max: 1 },
-  { id: 'green_team_ping', color: 'green', name: '团队信标', desc: '队友低血量时显示提示', max: 1 },
-  { id: 'green_sustain_log', color: 'green', name: '生存日志', desc: '结算页展示生存贡献', max: 1 },
-  { id: 'green_emote_calm', color: 'green', name: '沉着表情', desc: '解锁基础鞠躬表情', max: 1 },
-  { id: 'green_medal_frame', color: 'green', name: '守护边框', desc: '勋章墙可选绿色边框', max: 1 }
-];
-
 class GrowthManager {
   constructor(game) {
     this.game = game;
-    this.activeTalents = JSON.parse(localStorage.getItem('bedwars_active_talents') || '[]');
-    this.unlockedTalents = JSON.parse(localStorage.getItem('bedwars_unlocked_talents') || '[]');
     this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
   }
-
-  hasTalent(id) { return this.activeTalents.includes(id); }
 
   addXp(player, amount, reason = '成长') {
     if (!player || player.isDead || amount <= 0) return;
@@ -147,48 +47,8 @@ class GrowthManager {
         player.hp = Math.min(player.maxHp, player.hp + GROWTH_CONFIG.hpPerLevel + 4);
         this.game.showMessage(`${player.name} 升至 ${player.matchLevel} 级：生命上限 +2`, '#8be9fd');
       }
-      if (player.isLocal && (player.matchLevel === 3 || player.matchLevel === 6)) this.showAwakeningChoice(player, player.matchLevel);
-      if (!player.isLocal && (player.matchLevel === 3 || player.matchLevel === 6)) this.autoPickAwakening(player, player.matchLevel);
     }
     if (player.isLocal && oldLevel !== player.matchLevel) this.game.ui?.updateGrowthPanel?.();
-  }
-
-  showAwakeningChoice(player, level) {
-    const panel = document.getElementById('awakeningPanel');
-    const body = document.getElementById('awakeningChoices');
-    if (!panel || !body) return;
-    const options = AWAKENING_OPTIONS[player.role]?.[level] || [];
-    body.innerHTML = options.map(o => `<button class="awake-choice" data-id="${o.id}"><b>${o.name}</b><span>${o.desc}</span></button>`).join('');
-    body.querySelectorAll('.awake-choice').forEach(btn => {
-      btn.onclick = () => {
-        const choice = options.find(o => o.id === btn.dataset.id);
-        this.applyAwakening(player, level, choice);
-        panel.style.display = 'none';
-        if (!this.game.input.isMobile()) this.game.engine.renderer.domElement.requestPointerLock();
-      };
-    });
-    panel.style.display = 'flex';
-    if (document.pointerLockElement) document.exitPointerLock();
-  }
-
-  autoPickAwakening(player, level) {
-    const options = AWAKENING_OPTIONS[player.role]?.[level] || [];
-    this.applyAwakening(player, level, options[Math.floor(Math.random() * options.length)]);
-  }
-
-  applyAwakening(player, level, choice) {
-    if (!choice || player.awakenings[level]) return;
-    player.awakenings[level] = choice.id;
-    choice.apply?.(player);
-    this.game.showMessage(`${player.name} 觉醒：${choice.name}`, '#ffdd00');
-  }
-
-  applyOutGameTalents(player) {
-    if (!player?.isLocal) return;
-    if (this.hasTalent('red_tnt_start')) player.addToBackpack('tnt', 1);
-    if (this.hasTalent('blue_pick_range')) player.pickupRangeBonus = 0.3;
-    if (this.hasTalent('green_void_grace')) player.voidGrace = 0.5;
-    if (this.hasTalent('green_knock_reduce')) player.knockbackReduce = 0.1;
   }
 
   settlement(winnerName) {
@@ -269,6 +129,4 @@ class GrowthManager {
 }
 
 window.GROWTH_CONFIG = GROWTH_CONFIG;
-window.AWAKENING_OPTIONS = AWAKENING_OPTIONS;
-window.OUTGAME_TALENTS = OUTGAME_TALENTS;
 window.GrowthManager = GrowthManager;
