@@ -146,6 +146,14 @@ updateOrientationGate();
 
 <!-- ========== HUD ========== -->
 <div id="hud">
+  <!-- Secret Killer Mode HUD -->
+  <div id="secretKillerHud" style="display:none; position:absolute; top:10px; left:10px; z-index:100;">
+    <div id="skCountdown" style="font-size:48px; color:#ffdd00; text-align:center; width:100vw; position:absolute; top:30vh; left:0; text-shadow:0 0 20px rgba(255,221,0,0.5);"></div>
+    <div id="skRoleText" style="font-size:18px; font-weight:bold; color:#fff; background:rgba(0,0,0,0.6); padding:8px 12px; border-radius:6px; margin-bottom:8px;"></div>
+    <div style="font-size:14px; color:#ffdd00; background:rgba(0,0,0,0.6); padding:6px 10px; border-radius:6px;">
+      碎片: <span id="skFragmentCount">0/10</span> | 时间: <span id="skTimeDisplay">5:00</span>
+    </div>
+  </div>
   <!-- Resources -->
   <div id="resourceBar">
     <div class="res-item res-copper"><div class="res-icon"></div><span id="resCopper">0</span></div>
@@ -405,6 +413,7 @@ updateOrientationGate();
         <h3>模式选择</h3>
         <div class="mode-select" id="roomModeSelect">
           <div class="mode-card selected" data-mode="classic">经典模式</div>
+          <div class="mode-card" data-mode="secret_killer">密室杀手</div>
         </div>
       </div>
       <div class="room-panel-section">
@@ -938,7 +947,8 @@ document.getElementById('localModeBtn').addEventListener('click', () => {
     return;
   }
   localOnly = true;
-  window.lobbyAiSlots = Math.max(window.lobbyAiSlots || 0, 4);
+  const selectedMode = window._selectedMode || 'classic';
+  window.lobbyAiSlots = selectedMode === 'secret_killer' ? 9 : Math.max(window.lobbyAiSlots || 0, 4);
   setAuthStatus('已进入本地试玩模式，不连接 Supabase。');
   setRoomStatus('本地试玩模式：将与 AI 对战，直接点开始游戏。');
   closePanel('playOptionsPanel');
@@ -1058,8 +1068,13 @@ document.getElementById('roomStartBtn').addEventListener('click', () => {
   if (!window._selectedMap) window._selectedMap = 'classic';
   window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
   window.game.selectedMap = window._selectedMap || 'classic';
+  // Secret killer mode: auto-select map and override
+  const selectedMode = window._selectedMode || 'classic';
+  if (selectedMode === 'secret_killer') {
+    window.game.selectedMap = 'secret_killer';
+  }
   window.game.init();
-  window.game.start(selectedTeam, 'FOX');
+  window.game.start(selectedTeam, 'FOX', selectedMode);
   if (!localOnly && netMgr?.isHost) {
     netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
     netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);

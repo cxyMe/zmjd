@@ -101,7 +101,10 @@ const ITEM_DB = {
   cd_potion:    { name: '冷却药水',type:'special',cost: { gold: 3 },         desc: '立即减少5秒主动技能冷却', stack: 8 },
   speed_potion: { name: '极速药水',type:'special',cost: { gold: 3 },         desc: '移动速度增加25%，持续3秒', stack: 8 },
   burst_potion: { name: '爆发药水',type:'special',cost: { gold: 4 },         desc: '造成伤害增加45%，持续3秒', stack: 8 },
-  detector:     { name: '探测仪',type:'special',cost: { silver: 5 },         durability: 20, desc: '手持检测附近10格敌人数量，每秒消耗1耐久', stack: 1 }
+  detector:     { name: '探测仪',type:'special',cost: { silver: 5 },         durability: 20, desc: '手持检测附近10格敌人数量，每秒消耗1耐久', stack: 1 },
+  killer_knife:    { name: '杀手之刃',type:'weapon',cost: {},                   dmg: 40, durability: 999, desc: '杀手专属武器，近战/可投掷', stack: 1, throwable: true, throwDmg: 50 },
+  detective_bow:   { name: '侦探之弓',type:'weapon',cost: {},                   dmg: 30, durability: 999, desc: '侦探专属弓，无限箭矢，8秒CD', ranged: true, stack: 1, detectiveBow: true, bowCd: 8 },
+  fragment:        { name: '碎片',  type: 'special',cost: {},                    desc: '收集10碎片可获得一把弓', stack: 64, isFragment: true }
 };
 
 // ============================================
@@ -1256,6 +1259,8 @@ class Engine {
       for (const ent of this.entities) {
         if (ent === proj.owner) continue;
         if (ent.isDead) continue;
+        // 密室杀手：同阵营不伤害
+        if (window.game?.isSecretKiller && proj.owner?.skRole && ent.skRole === proj.owner.skRole) continue;
         const dist = proj.mesh.position.distanceTo(ent.mesh.position);
         if (dist < (ent.radius || 0.5) + 0.2) {
           const key = ent.playerId || ent.name;
@@ -1320,6 +1325,10 @@ const MAPS = {
   twilight_forest: {
     id: 'twilight_forest', name: '暮色森林', desc: '树冠基地、地面黑雾迷雾，视线封锁，幻影爪痕持续伤害',
     thumbnail: 'forest'
+  },
+  secret_killer: {
+    id: 'secret_killer', name: '密室杀手', desc: '10人局：1杀手、1侦探、8平民，收集碎片、找出杀手',
+    thumbnail: 'default'
   }
 };
 
@@ -1329,6 +1338,7 @@ const MAPS = {
 function generateWorld(engine, mapId = 'classic') {
   engine.mapId = mapId;
   if (mapId === 'twilight_forest') return generateTwilightForest(engine);
+  if (mapId === 'secret_killer') return generateSecretKillerMap(engine);
   const geo = new THREE.BoxGeometry(1, 1, 1);
   engine.tidalIslands = [];
   engine.temporaryGens = [];
@@ -1736,6 +1746,209 @@ function generateTwilightForest(engine) {
   return gens;
 }
 
+function generateSecretKillerMap(engine) {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  engine.tidalIslands = [];
+  engine.temporaryGens = [];
+
+  const wallColor = 0x666666;
+  const floorColor = 0x333333;
+  const cornerFloorColors = [0x884444, 0x444488, 0x448844, 0x888844];
+  const centerFloorColor = 0x555577;
+  const corridorColor = 0x444444;
+  const crateColor = 0x8B6914;
+  const pillarColor = 0x777777;
+  const tableColor = 0x6B4226;
+  const fragmentMarkerColor = 0x00ffff;
+
+  // Fragment spawn points
+  const fragmentPoints = [
+    { x: -20, y: 1, z: 0 },
+    { x: 20, y: 1, z: 0 },
+    { x: 0, y: 1, z: -20 },
+    { x: 0, y: 1, z: 20 },
+    { x: 0, y: 1, z: -8 }
+  ];
+
+  engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
+
+  // Override RED spawn to center
+  TEAMS.RED.spawn.set(0, 3, 0);
+
+  function placeBlock(x, y, z, color, type = 'ground') {
+    const mat = new THREE.MeshLambertMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    if (type === 'ground') mesh.receiveShadow = true;
+    else mesh.castShadow = true;
+    engine.scene.add(mesh);
+    const key = engine.getBlockKey(x, y, z);
+    engine.blocks.set(key, { mesh, type, hp: 9999, maxHp: 9999 });
+    return mesh;
+  }
+
+  // Floor: -29 to 29 on X and Z at y=0
+  for (let x = -29; x <= 29; x++) {
+    for (let z = -29; z <= 29; z++) {
+      placeBlock(x, 0, z, floorColor);
+    }
+  }
+
+  // Corner rooms: 10x10 colored floors
+  // Room at (-24,-24): covers -29 to -19
+  // Room at (-24,24): covers -29 to -19 on x, 19 to 29 on z
+  // Room at (24,-24): covers 19 to 29 on x, -29 to -19 on z
+  // Room at (24,24): covers 19 to 29 on both
+  const cornerRooms = [
+    { cx: -24, cz: -24, color: cornerFloorColors[0] },
+    { cx: -24, cz: 24, color: cornerFloorColors[1] },
+    { cx: 24, cz: -24, color: cornerFloorColors[2] },
+    { cx: 24, cz: 24, color: cornerFloorColors[3] }
+  ];
+
+  for (const room of cornerRooms) {
+    const xMin = room.cx - 5, xMax = room.cx + 5;
+    const zMin = room.cz - 5, zMax = room.cz + 5;
+    for (let x = xMin; x <= xMax; x++) {
+      for (let z = zMin; z <= zMax; z++) {
+        placeBlock(x, 0, z, room.color);
+      }
+    }
+  }
+
+  // Center room: 12x12 at (0,0)
+  for (let x = -6; x <= 6; x++) {
+    for (let z = -6; z <= 6; z++) {
+      placeBlock(x, 0, z, centerFloorColor);
+    }
+  }
+
+  // Corridors connecting rooms (4 wide)
+  // North corridor: center to (-24, -24) top edge, and center to (24, -24) top edge
+  // Corridor X-axis: z from -2 to 2, x from -29 to 29
+  for (let x = -29; x <= 29; x++) {
+    for (let z = -2; z <= 2; z++) {
+      if (x >= -6 && x <= 6 && z >= -6 && z <= 6) continue; // skip center room
+      placeBlock(x, 0, z, corridorColor);
+    }
+  }
+  // Corridor Z-axis: x from -2 to 2, z from -29 to 29
+  for (let z = -29; z <= 29; z++) {
+    for (let x = -2; x <= 2; x++) {
+      if (x >= -6 && x <= 6 && z >= -6 && z <= 6) continue; // skip center room
+      placeBlock(x, 0, z, corridorColor);
+    }
+  }
+
+  // Walls: perimeter -32 to 32, 3 blocks thick, y=0..7
+  for (let y = 0; y <= 7; y++) {
+    for (let i = -32; i <= 32; i++) {
+      // North wall (z = -30, -31, -32)
+      placeBlock(i, y, -30, wallColor);
+      placeBlock(i, y, -31, wallColor);
+      placeBlock(i, y, -32, wallColor);
+      // South wall (z = 30, 31, 32)
+      placeBlock(i, y, 30, wallColor);
+      placeBlock(i, y, 31, wallColor);
+      placeBlock(i, y, 32, wallColor);
+      // West wall (x = -30, -31, -32)
+      placeBlock(-30, y, i, wallColor);
+      placeBlock(-31, y, i, wallColor);
+      placeBlock(-32, y, i, wallColor);
+      // East wall (x = 30, 31, 32)
+      placeBlock(30, y, i, wallColor);
+      placeBlock(31, y, i, wallColor);
+      placeBlock(32, y, i, wallColor);
+    }
+  }
+
+  // Decorative obstacles: crates, pillars, tables in rooms
+  // Crates (2x2x2) in corner rooms
+  const cratePositions = [
+    { x: -27, z: -27 }, { x: -22, z: -21 },
+    { x: -27, z: 27 }, { x: -22, z: 21 },
+    { x: 27, z: -27 }, { x: 22, z: -21 },
+    { x: 27, z: 27 }, { x: 22, z: 21 }
+  ];
+  for (const cp of cratePositions) {
+    for (let dx = 0; dx < 2; dx++) {
+      for (let dz = 0; dz < 2; dz++) {
+        for (let dy = 0; dy < 2; dy++) {
+          placeBlock(cp.x + dx, 1 + dy, cp.z + dz, crateColor);
+        }
+      }
+    }
+  }
+
+  // Pillars (1x4x1) in corner rooms and center room
+  const pillarPositions = [
+    { x: -25, z: -22 }, { x: -22, z: -25 },
+    { x: -25, z: 22 }, { x: -22, z: 25 },
+    { x: 25, z: -22 }, { x: 22, z: -25 },
+    { x: 25, z: 22 }, { x: 22, z: 25 },
+    { x: -5, z: -5 }, { x: 5, z: -5 }, { x: -5, z: 5 }, { x: 5, z: 5 }
+  ];
+  for (const pp of pillarPositions) {
+    for (let dy = 0; dy < 4; dy++) {
+      placeBlock(pp.x, 1 + dy, pp.z, pillarColor);
+    }
+  }
+
+  // Tables (1x1x1 blocks at y=1) scattered around
+  const tablePositions = [
+    { x: -24, z: -20 }, { x: -20, z: -24 },
+    { x: -24, z: 20 }, { x: -20, z: 24 },
+    { x: 24, z: -20 }, { x: 20, z: -24 },
+    { x: 24, z: 20 }, { x: 20, z: 24 },
+    { x: 0, z: -3 }, { x: 3, z: 0 }, { x: 0, z: 3 }, { x: -3, z: 0 }
+  ];
+  for (const tp of tablePositions) {
+    placeBlock(tp.x, 1, tp.z, tableColor);
+  }
+
+  // Fragment spawn markers: glowing diamond shapes
+  const diamondGeo = new THREE.OctahedronGeometry(0.6, 0);
+  for (const fp of fragmentPoints) {
+    const mat = new THREE.MeshLambertMaterial({
+      color: fragmentMarkerColor,
+      emissive: fragmentMarkerColor,
+      emissiveIntensity: 0.8,
+      transparent: true,
+      opacity: 0.85
+    });
+    const marker = new THREE.Mesh(diamondGeo, mat);
+    marker.position.set(fp.x, fp.y + 1.5, fp.z);
+    marker.castShadow = true;
+    engine.scene.add(marker);
+    // Point light at each fragment point for glow
+    const light = new THREE.PointLight(0x00ffff, 1.2, 8);
+    light.position.set(fp.x, fp.y + 2, fp.z);
+    engine.scene.add(light);
+  }
+
+  // Lighting: ambient + 4 warm point lights in corner rooms
+  const ambientLight = new THREE.AmbientLight(0x404050, 0.6);
+  engine.scene.add(ambientLight);
+
+  const cornerLightPositions = [
+    { x: -24, z: -24, color: 0xff8844 },
+    { x: -24, z: 24, color: 0x4488ff },
+    { x: 24, z: -24, color: 0x44ff88 },
+    { x: 24, z: 24, color: 0xffff44 }
+  ];
+  for (const cl of cornerLightPositions) {
+    const light = new THREE.PointLight(cl.color, 1.5, 18);
+    light.position.set(cl.x, 5, cl.z);
+    engine.scene.add(light);
+  }
+
+  // Dream tide no-op
+  engine.triggerDreamTide = function(gensRef) {};
+
+  // NO resource generators, NO beds, NO teams (FFA)
+  return [];
+}
+
 // ============================================
 // Player Entity (带背包系统)
 // ============================================
@@ -1819,6 +2032,9 @@ class PlayerEntity {
     this.bowCharge = 0;
     this.speedPotionTimer = 0;
     this.burstPotionTimer = 0;
+    this.skFragments = 0;
+    this.skRole = null;
+    this.bowCdTimer = 0;
     this.voidBridgeBlocks = [];
     this.healAction = null;
     this.miss = this.role === 'WAIWAI' ? 3 : 0;
@@ -2388,6 +2604,7 @@ class PlayerEntity {
 
     // Skill timers
     if (this.attackCd > 0) this.attackCd -= dt;
+    if (this.bowCdTimer > 0) this.bowCdTimer -= dt;
     if (this.skillCd > 0) this.skillCd -= dt;
     if (this.skillActive > 0) {
       this.skillActive -= dt;
@@ -2870,6 +3087,11 @@ class PlayerEntity {
         life: type === 'smoke' ? 2.1 : type === 'boomerang' ? 2.8 : 3
       });
       window.game?.showMessage?.(`${weaponInfo.name}已使用`, '#8be9fd');
+    } else if (weaponInfo?.detectiveBow) {
+      // 侦探弓：无限箭矢，8秒冷却
+      if ((this.bowCdTimer || 0) > 0) return;
+      this.bowCdTimer = weaponInfo.bowCd || 8;
+      this.fireArrow(0);
     } else if (isRanged && this.arrowCount > 0) {
       if (this.isAI) {
         this.fireArrow(0);
@@ -2882,9 +3104,11 @@ class PlayerEntity {
       this.engine.spawnParticles(hitPos, 0xffffff, 3);
 
       let hitAny = false;
+      const isSK = window.game?.isSecretKiller;
       for (const ent of this.engine.entities) {
         if (ent === this || ent.isDead) continue;
-        if (ent.team === this.team) continue;
+        if (!isSK && ent.team === this.team) continue; // 密室杀手不检查队伍
+        if (isSK && ent.skRole === this.skRole) continue; // 同阵营不伤害
         const dist = ent.pos.distanceTo(this.pos);
         if (dist < 2) {
           let finalDmg = dmg;
@@ -3311,6 +3535,11 @@ class PlayerEntity {
         window.game?.showMessage?.(`${this.name} 的复活金牌抵挡了致命伤害！`, '#ffd700');
         return;
       }
+      // 密室杀手：侦探杀了好人则自己也会死
+      if (window.game?.isSecretKiller && attacker && attacker.skRole === 'detective' && this.skRole !== 'killer') {
+        window.game?.showMessage?.(`侦探误杀了好人，自己也倒下了！`, '#ff4444');
+        attacker.die(null);
+      }
       this.die(attacker);
     }
   }
@@ -3336,6 +3565,22 @@ class PlayerEntity {
     this.respawnTimer = Math.min(30, 3 + (this.deathCount - 1) * 2);
     this.pendingElimination = !this.teamInfo.bedAlive;
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
+
+    // 密室杀手：侦探死亡时掉落弓，杀手死亡不掉落刀
+    if (window.game?.isSecretKiller && this.skRole === 'detective') {
+      this.engine.spawnDropItem(this.pos.clone(), 'detective_bow', 1);
+      // 从掉落列表中移除弓（防止重复）
+      this.equipped.weapon = null;
+      for (let i = 0; i < this.hotbar.length; i++) {
+        if (this.hotbar[i]?.key === 'detective_bow') this.hotbar[i] = null;
+      }
+      window.game?.showMessage?.('侦探阵亡，弓掉落在地！', '#ff4444');
+    }
+    if (window.game?.isSecretKiller) {
+      this.pendingElimination = true; // 密室杀手没有重生
+      this.respawnTimer = 999999;
+      window.game?.checkSecretKillerWin?.();
+    }
 
     if (isVoidDeath) {
       // 虚空死亡：清空所有装备和物品

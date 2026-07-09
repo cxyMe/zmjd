@@ -916,6 +916,14 @@ class Game {
     this.selectedBlockKey = null;
     this.movingBlockKey = null;
     this.selectedMap = 'classic';
+    this.isSecretKiller = false;
+    this.skState = 'waiting'; // waiting, countdown, playing, ended
+    this.skCountdown = 0;
+    this.skRoles = {}; // playerId -> 'killer'/'detective'/'civilian'
+    this.skFragmentTimer = 0;
+    this.skFragmentPoints = [];
+    this.skTimeLimit = 300; // 5 minutes
+    this.skRoleRevealed = false;
     this.genLabels = [];
   }
 
@@ -971,7 +979,22 @@ class Game {
           return;
         }
         e.preventDefault();
-        if (this.gameActive) this.selectHotbar(idx);
+        if (this.gameActive) {
+          // 密室杀手：杀手点击道具栏的刀即掷出
+          if (this.isSecretKiller && this.localPlayer?.skRole === 'killer') {
+            const item = this.localPlayer.hotbar[idx];
+            if (item?.key === 'killer_knife') {
+              const dir = this.localPlayer.getForwardDir();
+              const start = this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+              this.engine.spawnWeaponProjectile(this.localPlayer, 'arrow', start, dir, {
+                damage: 50, speed: 20, life: 2.5
+              });
+              this.showMessage('刀已掷出！', '#ff4444');
+              return;
+            }
+          }
+          this.selectHotbar(idx);
+        }
       };
 
       const startLongPress = () => {
@@ -1045,7 +1068,7 @@ class Game {
     this.subscribeAdminCommands();
   }
 
-  start(teamKey, roleKey) {
+  start(teamKey, roleKey, mode = 'classic') {
     this.gameActive = true;
     this.gameTime = 0;
     this.shrinkTimer = this.shrinkStartTime;
@@ -1062,7 +1085,84 @@ class Game {
     this.killFeed = [];
     document.getElementById('killFeed').innerHTML = '';
 
-    // Create local player
+    // Secret killer mode branch
+    if (mode === 'secret_killer') {
+      this.isSecretKiller = true;
+      this.skState = 'countdown';
+      this.skCountdown = 5;
+      this.skFragmentTimer = 0;
+      this.skRoles = {};
+      this.skRoleRevealed = false;
+      // Disable shrink for this mode
+      this.shrinkActive = false;
+      this.shrinkTimer = 99999;
+
+      // Create all 10 players (1 local + 9 AI)
+      AIManager.MAX_AI_COUNT_SAVE = AIManager.MAX_AI_COUNT;
+      AIManager.MAX_AI_COUNT = 12;
+
+      // Local player at center
+      const localId = this.onlineMode && this.network?.auth?.user?.id
+        ? this.network.auth.user.id
+        : 'local-' + Math.random().toString(36).slice(2, 10);
+      this.localPlayer = new PlayerEntity(this.engine, 'RED', 'FOX', true, this.playerName, localId);
+      this.localPlayer.pos.set(0, 1, 0);
+      this.players.push(this.localPlayer);
+
+      // Create 9 AI
+      AIManager.removeAll();
+      const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India'];
+      let nameIdx = 0;
+      for (let i = 0; i < 9; i++) {
+        const spawnAngles = [0, Math.PI/2, Math.PI, Math.PI*1.5, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4, Math.PI/6];
+        const angle = spawnAngles[i] || Math.random() * Math.PI * 2;
+        const result = AIManager.createAI(this.engine, this, 'RED', botNames[nameIdx++] || 'Bot', 'FOX');
+        if (result) {
+          result.entity.pos.set(Math.cos(angle) * 8, 1, Math.sin(angle) * 8);
+          result.entity.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
+          result.entity.maxHp = 100;
+          result.entity.hp = 100;
+          result.entity.baseSpeed = 5.5;
+          result.entity.speed = 5.5;
+          result.entity.hotbar = Array(8).fill(null);
+          result.entity.backpack = Array(20).fill(null);
+          result.entity.equipped = { weapon: null, armor: null };
+          result.entity.arrowCount = 0;
+          this.players.push(result.entity);
+        }
+      }
+
+      // Hide UI elements not needed in secret killer
+      document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
+      ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel'].forEach(id => {
+        const panel = document.getElementById(id);
+        if (panel) panel.style.display = 'none';
+      });
+      document.getElementById('mainMenu').style.display = 'none';
+      document.getElementById('hud').style.display = 'block';
+      document.getElementById('gameOverScreen').style.display = 'none';
+      document.getElementById('shopPanel').style.display = 'none';
+      document.getElementById('shopBtn').style.display = 'none';
+      document.getElementById('socialBtn').style.display = 'none';
+      document.getElementById('skillBtn').style.display = 'none';
+      document.getElementById('resourceBar').style.display = 'none';
+      document.getElementById('teamInfo').style.display = 'none';
+      document.getElementById('crosshair').style.display = 'block';
+      window.hudLayoutManager?.init?.();
+
+      // Show secret killer HUD
+      const skHud = document.getElementById('secretKillerHud');
+      if (skHud) skHud.style.display = 'block';
+
+      // Lock pointer
+      if (!this.input.isMobile()) {
+        this.engine.renderer.domElement.requestPointerLock();
+      }
+
+      return; // Skip normal start logic
+    }
+
+    // Create local player (classic mode)
     const localId = this.onlineMode && this.network?.auth?.user?.id
       ? this.network.auth.user.id
       : 'local-' + Math.random().toString(36).slice(2, 10);
@@ -1212,8 +1312,52 @@ class Game {
     this.shrinkTimer -= dt;
     this.updateRoleSelection(dt);
 
+    // Secret Killer state machine
+    if (this.isSecretKiller) {
+      if (this.skState === 'countdown') {
+        this.skCountdown -= dt;
+        const cdEl = document.getElementById('skCountdown');
+        if (cdEl) cdEl.textContent = Math.ceil(this.skCountdown);
+        if (this.skCountdown <= 0) {
+          this.skState = 'playing';
+          this.assignSecretKillerRoles();
+          if (cdEl) cdEl.style.display = 'none';
+        }
+        // Still render during countdown
+        this.engine.render();
+        return;
+      }
+
+      if (this.skState === 'playing') {
+        // Fragment spawning
+        this.skFragmentTimer += dt;
+        if (this.skFragmentTimer >= 5) {
+          this.skFragmentTimer = 0;
+          this.spawnFragment();
+        }
+
+        // Time display
+        const timeEl = document.getElementById('skTimeDisplay');
+        if (timeEl) {
+          const remaining = Math.max(0, this.skTimeLimit - this.gameTime);
+          const mins = Math.floor(remaining / 60);
+          const secs = Math.floor(remaining % 60);
+          timeEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Time limit check
+        if (this.gameTime >= this.skTimeLimit) {
+          this.endSecretKiller('good'); // Time up = good wins
+          return;
+        }
+
+        // Win condition checked in checkSecretKillerWin()
+        this.checkSecretKillerWin();
+      }
+    }
+
     // 梦域潮汐：每 5 分钟重排部分资源浮岛并刷新临时资源点
-    if (this.gameTime >= this.nextDreamTide) {
+    if (!this.isSecretKiller && this.gameTime >= this.nextDreamTide) {
       this.nextDreamTide += 300;
       if (this.engine.triggerDreamTide) {
         this.engine.triggerDreamTide(this.gens);
@@ -1221,7 +1365,8 @@ class Game {
       }
     }
 
-    // Shrink
+    // Shrink (classic mode only)
+    if (!this.isSecretKiller) {
     if (this.shrinkTimer <= 0 && !this.shrinkActive) {
       this.shrinkActive = true;
       this.showMessage('警告：死亡边界开始收缩！', '#ff4444');
@@ -1252,6 +1397,7 @@ class Game {
         this.endGameByShrink();
       }
     }
+    } // end isSecretKiller check
 
     // Local input
     if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
@@ -1318,6 +1464,20 @@ class Game {
       }
       if (this.input.consumeSkill()) this.localPlayer.useSkill();
       if (this.input.consumeDrop()) this.localPlayer.dropSelectedItem();
+      // 密室杀手：右键投掷杀手刀
+      if (this.isSecretKiller && this.input.isBuildHeld()) {
+        this.input.buttons.build = false; // 消耗build按下
+        if (this.localPlayer.skRole === 'killer') {
+          const dir = this.localPlayer.getForwardDir();
+          const start = this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+          this.engine.spawnWeaponProjectile(this.localPlayer, 'arrow', start, dir, {
+            damage: 50,
+            speed: 20,
+            life: 2.5
+          });
+          this.showMessage('刀已掷出！', '#ff4444');
+        }
+      }
       if (this.input.consumeBackpack()) this.toggleBackpack();
       // 按F装填最近陷阱的箭矢
       if (this.input.isDown('KeyF') && this.localPlayer.arrowCount > 0) {
@@ -1326,7 +1486,54 @@ class Game {
       }
     }
 
-    // Resource generators spawn drop items instead of direct collection
+    // Secret Killer: fragment pickup & bow transfer
+    if (this.isSecretKiller && this.skState === 'playing' && this.localPlayer && !this.localPlayer.isDead) {
+      const lp = this.localPlayer;
+      for (let i = this.engine.dropItems.length - 1; i >= 0; i--) {
+        const drop = this.engine.dropItems[i];
+        if (drop.pos.distanceTo(lp.pos) < 2.5) {
+          if (drop.typeKey === 'fragment') {
+            lp.skFragments = (lp.skFragments || 0) + drop.count;
+            this.engine.removeDropItem(drop);
+            const fragEl = document.getElementById('skFragmentCount');
+            if (fragEl) fragEl.textContent = lp.skFragments + '/10';
+            // 10 fragments = bow
+            if (lp.skFragments >= 10) {
+              lp.skFragments -= 10;
+              if (fragEl) fragEl.textContent = lp.skFragments + '/10';
+              lp.hotbar[1] = { key: 'detective_bow', count: 1 };
+              lp.skRole = 'detective'; // Become detective
+              lp.arrowCount = 999;
+              lp.bowCdTimer = 0;
+              const roleEl = document.getElementById('skRoleText');
+              if (roleEl) {
+                roleEl.textContent = '🏹 侦探 - 找到并击杀杀手！';
+                roleEl.style.color = '#44ff44';
+              }
+              this.showMessage('你收集了10碎片，获得侦探之弓！', '#44ff44');
+            }
+          } else if (drop.typeKey === 'detective_bow') {
+            // Pick up dropped detective bow
+            lp.hotbar[1] = { key: 'detective_bow', count: 1 };
+            this.engine.removeDropItem(drop);
+            if (lp.skRole === 'civilian') {
+              lp.skRole = 'detective';
+              lp.arrowCount = 999;
+              lp.bowCdTimer = 0;
+              const roleEl = document.getElementById('skRoleText');
+              if (roleEl) {
+                roleEl.textContent = '🏹 侦探 - 捡起了侦探之弓，你现在是侦探！';
+                roleEl.style.color = '#44ff44';
+              }
+              this.showMessage('你捡起了侦探之弓，成为新侦探！', '#44ff44');
+            }
+          }
+        }
+      }
+    }
+
+    // Resource generators spawn drop items instead of direct collection (classic mode only)
+    if (!this.isSecretKiller) {
     for (const g of this.gens) {
       if (g.active === false) continue;
       if (g.activated !== true) {
@@ -1364,6 +1571,7 @@ class Game {
         this.engine.spawnCurrencyDrop(dropPos, resKey, 1);
       }
     }
+    } // end classic resource gen check
 
     // AI Controller update (三层架构：战略+战术+执行)
     AIManager.updateAll(dt, this.gameTime);
@@ -1624,6 +1832,7 @@ class Game {
   }
 
   checkWinCondition() {
+    if (this.isSecretKiller) return; // 密室杀手使用 checkSecretKillerWin
     const aliveTeams = [];
     for (const [tkey, tinfo] of Object.entries(TEAMS)) {
       const hasBed = tinfo.bedAlive;
@@ -1967,5 +2176,114 @@ class Game {
       this.ui.updateBackpack();
     }
     this.showMessage('物品已拆分', '#8be9fd');
+  }
+
+  // ========== Secret Killer Mode Methods ==========
+
+  assignSecretKillerRoles() {
+    const alive = this.players.filter(p => !p.isDead);
+    const shuffled = [...alive].sort(() => Math.random() - 0.5);
+
+    // Assign roles
+    shuffled[0].skRole = 'killer';
+    shuffled[1].skRole = 'detective';
+    for (let i = 2; i < shuffled.length; i++) {
+      shuffled[i].skRole = 'civilian';
+    }
+
+    // Give equipment
+    for (const p of shuffled) {
+      this.skRoles[p.playerId] = p.skRole;
+      if (p.skRole === 'killer') {
+        p.hotbar[0] = { key: 'killer_knife', count: 1 };
+        p.equipped.weapon = 'killer_knife';
+      } else if (p.skRole === 'detective') {
+        p.hotbar[0] = { key: 'detective_bow', count: 1 };
+        p.equipped.weapon = 'detective_bow';
+        p.arrowCount = 999;
+        p.bowCdTimer = 0;
+      }
+    }
+
+    // Show role to local player
+    this.skRoleRevealed = true;
+    const roleEl = document.getElementById('skRoleText');
+    const roleHud = document.getElementById('secretKillerHud');
+    if (roleEl && this.localPlayer.skRole) {
+      const roleNames = { killer: '🔪 杀手', detective: '🏹 侦探', civilian: '👤 平民' };
+      const roleDescs = {
+        killer: '消灭所有好人！右键掷刀',
+        detective: '找到并击杀杀手！弓有8秒CD',
+        civilian: '收集10碎片可获得弓'
+      };
+      roleEl.textContent = roleNames[this.localPlayer.skRole] + ' - ' + roleDescs[this.localPlayer.skRole];
+      roleEl.style.color = this.localPlayer.skRole === 'killer' ? '#ff4444' : this.localPlayer.skRole === 'detective' ? '#44ff44' : '#aaaaaa';
+    }
+    this.showMessage('身份已分配！查看左上角', '#ffdd00');
+  }
+
+  spawnFragment() {
+    const points = this.engine.mapFeatures?.fragmentPoints || [];
+    if (points.length === 0) return;
+    // Pick a random point
+    const pt = points[Math.floor(Math.random() * points.length)];
+    this.engine.spawnDropItem(pt, 'fragment', 1);
+  }
+
+  checkSecretKillerWin() {
+    const alive = this.players.filter(p => !p.isDead);
+    const killer = alive.find(p => p.skRole === 'killer');
+    const goodGuys = alive.filter(p => p.skRole !== 'killer');
+
+    if (!killer) {
+      this.endSecretKiller('good'); // Killer is dead
+      return;
+    }
+    if (goodGuys.length === 0) {
+      this.endSecretKiller('killer'); // All good guys dead
+      return;
+    }
+  }
+
+  endSecretKiller(winner) {
+    this.skState = 'ended';
+    this.gameActive = false;
+
+    const lp = this.localPlayer;
+    let playerWon = false;
+    if (winner === 'good') {
+      playerWon = lp.skRole !== 'killer';
+    } else {
+      playerWon = lp.skRole === 'killer';
+    }
+
+    const winnerText = winner === 'good' ? '好人阵营胜利！' : '杀手胜利！';
+    if (document.pointerLockElement) document.exitPointerLock();
+
+    const screen = document.getElementById('gameOverScreen');
+    screen.style.display = 'flex';
+    screen.querySelector('h1').textContent = '游戏结束！';
+    screen.querySelector('.winner').textContent = winnerText;
+
+    const stats = screen.querySelector('.stats');
+    stats.innerHTML = '';
+    const rows = [
+      ['你的身份', lp.skRole === 'killer' ? '杀手' : lp.skRole === 'detective' ? '侦探' : '平民'],
+      ['游戏结果', playerWon ? '胜利' : '失败'],
+      ['存活时间', `${Math.floor(this.gameTime / 60)}分${Math.floor(this.gameTime % 60)}秒`],
+      ['收集碎片', `${lp.skFragments || 0}`],
+      ['最终生命', `${Math.ceil(lp?.hp || 0)}`]
+    ];
+    for (const [label, val] of rows) {
+      const row = document.createElement('div');
+      row.className = 'stat-row';
+      row.innerHTML = `<span>${label}</span><span>${val}</span>`;
+      stats.appendChild(row);
+    }
+
+    // Hide secret killer HUD
+    const skHud = document.getElementById('secretKillerHud');
+    if (skHud) skHud.style.display = 'none';
+    document.getElementById('mvpSection').style.display = 'none';
   }
 }

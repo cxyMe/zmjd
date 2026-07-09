@@ -198,6 +198,58 @@ class AIController {
     this.selectTacticalAction();
   }
 
+  evaluateSecretKiller() {
+    const role = this.ent.skRole;
+    if (!role) return;
+    
+    if (role === 'killer') {
+      this.currentGoal = 'sk_hunt';
+      // Find nearest good guy
+      let nearest = null, nearDist = Infinity;
+      for (const e of this.engine.entities) {
+        if (e === this.ent || e.isDead || e.skRole === 'killer') continue;
+        const d = e.pos.distanceTo(this.ent.pos);
+        if (d < nearDist) { nearDist = d; nearest = e; }
+      }
+      this.tacticalTarget = nearest;
+      
+      // If detective is close, consider fleeing
+      const detective = this.engine.entities.find(e => !e.isDead && e.skRole === 'detective');
+      if (detective && detective.pos.distanceTo(this.ent.pos) < 8) {
+        this.currentGoal = 'sk_evade';
+        this.tacticalTarget = detective;
+      }
+    } else if (role === 'detective') {
+      this.currentGoal = 'sk_find_killer';
+      // Move toward center or patrol
+      if (!this.tacticalTarget || this.tacticalTarget.isDead || this.tacticalTarget.skRole !== 'killer') {
+        this.tacticalTarget = this.engine.entities.find(e => !e.isDead && e.skRole === 'killer');
+      }
+      if (!this.tacticalTarget) {
+        // Patrol - move to random points
+        this.currentGoal = 'sk_patrol';
+      }
+    } else {
+      this.currentGoal = 'sk_collect';
+      // Find nearest fragment drop
+      let nearestFrag = null, fragDist = Infinity;
+      for (const drop of this.engine.dropItems) {
+        if (drop.typeKey === 'fragment') {
+          const d = drop.pos.distanceTo(this.ent.pos);
+          if (d < fragDist) { fragDist = d; nearestFrag = drop; }
+        }
+      }
+      this.tacticalTarget = nearestFrag ? { pos: nearestFrag.pos } : null;
+      
+      // Also flee from killer if close
+      const killer = this.engine.entities.find(e => !e.isDead && e.skRole === 'killer');
+      if (killer && killer.pos.distanceTo(this.ent.pos) < 6) {
+        this.currentGoal = 'sk_evade';
+        this.tacticalTarget = killer;
+      }
+    }
+  }
+
   // ============================================
   // 战术层：行为树行动选择
   // ============================================
@@ -297,6 +349,13 @@ class AIController {
   // ============================================
   update(dt, gameTime) {
     if (this.ent.isDead) return;
+
+    // Secret Killer mode override
+    if (this.game?.isSecretKiller && this.ent.skRole) {
+      this.evaluateSecretKiller();
+      this.executeSecretKiller(dt);
+      return;
+    }
 
     // 战略评估
     this.evaluateStrategy(dt, gameTime);
@@ -596,6 +655,84 @@ class AIController {
       }
     }
   }
+
+  executeSecretKiller(dt) {
+    const role = this.ent.skRole;
+    const target = this.tacticalTarget;
+    
+    // Movement toward target
+    if (target) {
+      const targetPos = target.pos || target;
+      const dir = targetPos.clone().sub(this.ent.pos).normalize();
+      this.ent.moveInput(dir.x, dir.z, false);
+      
+      // Jump if blocked
+      if (this.ent.onGround && Math.random() < 0.02) {
+        this.ent.vel.y = this.ent.jumpPower;
+        this.ent.onGround = false;
+      }
+    }
+    
+    // Combat for killer
+    if (role === 'killer' && this.currentGoal === 'sk_hunt' && target && !target.isDead) {
+      const dist = target.pos.distanceTo(this.ent.pos);
+      if (dist < 2.5) {
+        this.ent.attack();
+        // Also throw knife sometimes
+        if (Math.random() < 0.01) {
+          this.throwKnife(target);
+        }
+      } else if (dist < 15 && Math.random() < 0.005) {
+        this.throwKnife(target);
+      }
+    }
+    
+    // Evade behavior
+    if (this.currentGoal === 'sk_evade' && target) {
+      const targetPos = target.pos || target;
+      const away = this.ent.pos.clone().sub(targetPos).normalize();
+      this.ent.moveInput(away.x, away.z, true);
+    }
+    
+    // Detective combat
+    if (role === 'detective' && this.currentGoal === 'sk_find_killer' && target && !target.isDead) {
+      const dist = target.pos.distanceTo(this.ent.pos);
+      if (dist < 15 && (this.ent.bowCdTimer || 0) <= 0) {
+        this.ent.attack(); // Will fire arrow
+      }
+    }
+    
+    // Civilian fragment pickup
+    if (role === 'civilian') {
+      this.tryPickupResources();
+    }
+    
+    // All roles: pick up dropped detective bow
+    if (role === 'civilian') {
+      for (const drop of this.engine.dropItems) {
+        if (drop.typeKey === 'detective_bow' && drop.pos.distanceTo(this.ent.pos) < 2.5) {
+          this.ent.hotbar[1] = { key: 'detective_bow', count: 1 };
+          this.ent.skRole = 'detective';
+          this.ent.arrowCount = 999;
+          this.ent.bowCdTimer = 0;
+          this.engine.removeDropItem(drop);
+          break;
+        }
+      }
+    }
+  }
+
+  throwKnife(target) {
+    const dir = target.pos.clone().sub(this.ent.pos).normalize();
+    const start = this.ent.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+    this.engine.spawnWeaponProjectile(this.ent, 'arrow', start, dir, {
+      damage: 50,
+      speed: 20,
+      life: 2
+    });
+    // Remove knife from hotbar temporarily (it's throwable)
+    // Actually keep it - killer always has the knife
+  }
 }
 
 // ============================================
@@ -606,7 +743,8 @@ const AIManager = {
   activeCount: 0,
 
   createAI(engine, game, team, name, role = 'FOX') {
-    if (this.activeCount >= AI_CONFIG.MAX_AI_COUNT) return null;
+    const maxCount = game?.isSecretKiller ? 12 : AI_CONFIG.MAX_AI_COUNT;
+    if (this.activeCount >= maxCount) return null;
     this.activeCount++;
 
     const entity = new PlayerEntity(engine, team, role, false, name, 'ai_' + name + '_' + Date.now());
