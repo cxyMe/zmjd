@@ -595,16 +595,17 @@ updateOrientationGate();
 <!-- ========== 3D Canvas ========== -->
 <div id="gameCanvas"></div>
 
-<script src="js/config.js"></script>
-<script src="js/network.js"></script>
-<script src="js/growth.js"></script>
-<script src="js/social.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/ai-controller.js"></script>
-<script src="js/game.js"></script>
-<script src="js/season-pass.js"></script>
-<script src="js/menu-features.js"></script>
+<script defer src="js/config.js"></script>
+<script defer src="js/network.js"></script>
+<script defer src="js/growth.js"></script>
+<script defer src="js/social.js"></script>
+<script defer src="js/engine.js"></script>
+<script defer src="js/ai-controller.js"></script>
+<script defer src="js/game.js"></script>
+<script defer src="js/season-pass.js"></script>
+<script defer src="js/menu-features.js"></script>
 <script>
+document.addEventListener('DOMContentLoaded', () => {
 // ============================================
 // Menu Logic
 // ============================================
@@ -1085,7 +1086,7 @@ document.getElementById('roomStartBtn').addEventListener('click', () => {
     ? '联机状态：<span class="online">本地试玩</span>'
     : `联机状态：<span class="online">在线</span>｜<span class="host">${netMgr?.isHost ? '主房主' : '副房主'}</span>`;
 });
+});
 </script>
-
 </body>
 </html>
