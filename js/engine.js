@@ -102,8 +102,8 @@ const ITEM_DB = {
   speed_potion: { name: '极速药水',type:'special',cost: { gold: 3 },         desc: '移动速度增加25%，持续3秒', stack: 8 },
   burst_potion: { name: '爆发药水',type:'special',cost: { gold: 4 },         desc: '造成伤害增加45%，持续3秒', stack: 8 },
   detector:     { name: '探测仪',type:'special',cost: { silver: 5 },         durability: 20, desc: '手持检测附近10格敌人数量，每秒消耗1耐久', stack: 1 },
-  killer_knife:    { name: '杀手之刃',type:'weapon',cost: {},                   dmg: 40, durability: 999, desc: '杀手专属武器，近战/可投掷', stack: 1, throwable: true, throwDmg: 50 },
-  detective_bow:   { name: '侦探之弓',type:'weapon',cost: {},                   dmg: 30, durability: 999, desc: '侦探专属弓，无限箭矢，8秒CD', ranged: true, stack: 1, detectiveBow: true, bowCd: 8 },
+  killer_knife:    { name: '杀手之刃',type:'weapon',cost: {},                   dmg: 1000, durability: 999, desc: '杀手专属武器，近战/可投掷，一击必杀', stack: 1, throwable: true, throwDmg: 1000 },
+  detective_bow:   { name: '侦探之弓',type:'weapon',cost: {},                   dmg: 1000, durability: 999, desc: '侦探专属弓，无限箭矢，8秒CD，一击必杀', ranged: true, stack: 1, detectiveBow: true, bowCd: 8 },
   fragment:        { name: '碎片',  type: 'special',cost: {},                    desc: '收集10碎片可获得一把弓', stack: 64, isFragment: true }
 };
 

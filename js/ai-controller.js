@@ -726,7 +726,7 @@ class AIController {
     const dir = target.pos.clone().sub(this.ent.pos).normalize();
     const start = this.ent.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
     this.engine.spawnWeaponProjectile(this.ent, 'arrow', start, dir, {
-      damage: 50,
+      damage: 1000,
       speed: 20,
       life: 2
     });

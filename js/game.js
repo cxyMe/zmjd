@@ -987,7 +987,7 @@ class Game {
               const dir = this.localPlayer.getForwardDir();
               const start = this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
               this.engine.spawnWeaponProjectile(this.localPlayer, 'arrow', start, dir, {
-                damage: 50, speed: 20, life: 2.5
+                damage: 1000, speed: 20, life: 2.5
               });
               this.showMessage('刀已掷出！', '#ff4444');
               return;
@@ -1471,7 +1471,7 @@ class Game {
           const dir = this.localPlayer.getForwardDir();
           const start = this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
           this.engine.spawnWeaponProjectile(this.localPlayer, 'arrow', start, dir, {
-            damage: 50,
+            damage: 1000,
             speed: 20,
             life: 2.5
           });
