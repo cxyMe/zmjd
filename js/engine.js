@@ -649,14 +649,23 @@ class Engine {
     if (type === 'boomerang') geo = new THREE.TorusGeometry(0.24, 0.04, 8, 18);
     else if (type === 'frost') geo = new THREE.SphereGeometry(0.14, 10, 10);
     else if (type === 'smoke') geo = new THREE.SphereGeometry(0.18, 10, 10);
-    else {
-      geo = new THREE.CylinderGeometry(0.04, 0.04, type === 'javelin' ? 0.9 : 0.6);
+    if (type === 'javelin') {
+      geo = new THREE.CylinderGeometry(0.03, 0.04, 0.9);
       geo.rotateX(Math.PI / 2);
+    } else {
+      // arrow
+      geo = new THREE.ConeGeometry(0.03, 0.6, 6);
     }
     const mat = new THREE.MeshBasicMaterial({ color: colors[type] || 0xffffff, transparent: true, opacity: type === 'smoke' ? 0.9 : 1 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(start);
-    mesh.lookAt(start.clone().add(dir));
+    if (type === 'arrow') {
+      const up = new THREE.Vector3(0, 1, 0);
+      const q = new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize());
+      mesh.setRotationFromQuaternion(q);
+    } else {
+      mesh.lookAt(start.clone().add(dir));
+    }
     this.scene.add(mesh);
     const speed = options.speed || (type === 'frost' ? 20 : type === 'smoke' ? 14 : type === 'boomerang' ? 18 : 24);
     const projectile = {
@@ -3195,40 +3204,39 @@ class PlayerEntity {
     }
   }
 
-  fireArrow(chargeTime) {
-    if (this.arrowCount <= 0) return;
-    this.arrowCount--;
-    const dir = this.getForwardDir().clone();
+  fireArrow(charge = 0) {
+    const weaponInfo = ITEM_DB[this.equipped.weapon];
+    const dmg = (weaponInfo?.dmg || 20) * (1 + charge * 0.25);
+    const speed = 45 + charge * 15;
+    const range = (weaponInfo?.range || 20) + charge * 10;
+
+    const dir = this.getForwardDir().clone().normalize();
     const start = this.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
-    const arrowGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.6);
-    arrowGeo.rotateX(Math.PI / 2);
+
+    // Use ConeGeometry for clear directional arrow
+    const arrowGeo = new THREE.ConeGeometry(0.03, 0.6, 6);
     const arrowMat = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
     const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
     arrowMesh.position.copy(start);
-    arrowMesh.lookAt(start.clone().add(dir));
+
+    // Point cone tip (Y+) towards dir using quaternion
+    const up = new THREE.Vector3(0, 1, 0);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
+    arrowMesh.setRotationFromQuaternion(quaternion);
+
     this.engine.scene.add(arrowMesh);
 
-    let dmg = this.baseDmg;
-    if (this.equipped.weapon) {
-      const w = ITEM_DB[this.equipped.weapon];
-      dmg = w.dmg;
-    }
-    if (this.role === 'FOX' && this.hp / this.maxHp < 0.2) dmg *= 1.2;
-    if (this.hurricaneDamageTimer > 0) dmg += 12;
-    if (this.burstPotionTimer > 0) dmg *= 1.45;
-    if (this.lowHpDamageBoost && this.hp / this.maxHp < 0.3) dmg *= (1 + this.lowHpDamageBoost);
-
-    let finalDmg = dmg;
-    if (this.arrowDamageBoost) finalDmg *= (1 + this.arrowDamageBoost);
-
-    const distance = 4 + Math.min(chargeTime, 4) * 3;
-    const speed = 15;
-    const life = distance / speed;
-
+    const life = range / speed;
+    const finalDmg = dmg * (1 + charge * 0.5);
     this.engine.projectiles.push({
-      mesh: arrowMesh, vel: dir.multiplyScalar(speed), life,
-      damage: finalDmg, owner: this
+      mesh: arrowMesh,
+      vel: dir.clone().multiplyScalar(speed),
+      life,
+      damage: finalDmg,
+      owner: this
     });
+    this.arrowCount--;
+    if (this.engine.ui) this.engine.ui.updateArrowCount();
   }
 
   updateHandBreak(dt, pointer = null) {

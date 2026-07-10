@@ -5,8 +5,6 @@ window.BEDWARS_CONFIG = {
   supabaseUrl: 'https://brmzwybbgikvhfddhawx.supabase.co',
   supabaseAnonKey:
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJybXp3eWJiZ2lrdmhmZGRoYXd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4OTE0MTksImV4cCI6MjA5ODQ2NzQxOX0.dzMcbZl-gwnALCfhJJQHegTNBO58gkGZen-VmFQzrBI',
-  yiquanAuthEndpoint:
-    'https://backend.appmiaoda.com/projects/supabase309372307678212096/functions/v1/external-auth',
   hostTimeoutMs: 15000,
   heartbeatIntervalMs: 5000,
   reconnectIntervalMs: 3000,

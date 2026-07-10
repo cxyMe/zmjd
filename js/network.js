@@ -1,5 +1,5 @@
 // ============================================
-// 联机与账号系统：易圈登录 + Supabase 房间
+// 联机与账号系统：本地用户名密码 + Supabase 房间
 // 表结构对应 supabase-schema.sql
 // ============================================
 
@@ -11,12 +11,26 @@ class AuthManager {
     this.loadSession();
   }
 
+  _makeToken() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let t = '';
+    for (let i = 0; i < 32; i++) t += chars[Math.floor(Math.random() * chars.length)];
+    return t;
+  }
+
+  _users() {
+    try { return JSON.parse(localStorage.getItem('bedwars_users') || '{}'); }
+    catch (_) { return {}; }
+  }
+
+  _saveUsers(users) {
+    localStorage.setItem('bedwars_users', JSON.stringify(users));
+  }
+
   loadSession() {
     try {
       const saved = JSON.parse(localStorage.getItem('bedwars_auth') || 'null');
       if (!saved?.session?.access_token) return;
-      // 检查 session 自身的过期时间
-      if (saved.session.expires_at && saved.session.expires_at * 1000 < Date.now()) return;
       // 检查14天有效期上限
       const savedTime = saved.savedAt || 0;
       if (savedTime && (Date.now() - savedTime > 14 * 24 * 60 * 60 * 1000)) return;
@@ -28,31 +42,47 @@ class AuthManager {
     }
   }
 
-  async login(phone, password) {
-    if (!/^1\d{10}$/.test(phone)) throw new Error('请输入 11 位手机号');
+  register(username, password) {
+    const uname = String(username || '').trim();
+    if (!uname) throw new Error('请输入用户名');
+    if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{2,16}$/.test(uname)) throw new Error('用户名为 2-16 位，支持中英文、数字、下划线');
     if (!password || password.length < 6) throw new Error('密码至少 6 位');
-    if (!this.config?.yiquanAuthEndpoint) {
-      throw new Error('登录接口未配置，请检查 js/config.js');
-    }
 
-    let res;
-    try {
-      res = await fetch(this.config.yiquanAuthEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password })
-      });
-    } catch (err) {
-      throw new Error('无法连接易圈登录服务，请检查网络或接口跨域配置');
-    }
+    const users = this._users();
+    const key = uname.toLowerCase();
+    if (users[key]) throw new Error('该用户名已被注册');
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) throw new Error(data.error || '手机号或密码错误');
+    const uid = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+    users[key] = {
+      id: uid,
+      username: uname,
+      password, // 本地存储，无服务器
+      createdAt: Date.now()
+    };
+    this._saveUsers(users);
 
-    this.user = data.user;
-    this.session = data.session;
+    // 自动登录
+    this.user = { id: uid, username: uname, nickname: uname };
+    this.session = { access_token: this._makeToken(), expires_at: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60 };
     localStorage.setItem('bedwars_auth', JSON.stringify({ user: this.user, session: this.session, savedAt: Date.now() }));
-    return data;
+    return { user: this.user, session: this.session };
+  }
+
+  login(username, password) {
+    const uname = String(username || '').trim();
+    if (!uname) throw new Error('请输入用户名');
+    if (!password) throw new Error('请输入密码');
+
+    const users = this._users();
+    const key = uname.toLowerCase();
+    const rec = users[key];
+    if (!rec) throw new Error('用户名不存在');
+    if (rec.password !== password) throw new Error('密码错误');
+
+    this.user = { id: rec.id, username: rec.username, nickname: rec.username };
+    this.session = { access_token: this._makeToken(), expires_at: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60 };
+    localStorage.setItem('bedwars_auth', JSON.stringify({ user: this.user, session: this.session, savedAt: Date.now() }));
+    return { user: this.user, session: this.session };
   }
 
   logout() {
@@ -74,6 +104,7 @@ class RoomNetwork {
     this.channel = null;
     this.heartbeatTimer = null;
     this.hostCheckTimer = null;
+    this.roomTimeoutTimer = null;
     this.onRoomUpdate = () => {};
     this.onEvent = () => {};
     this.onHostChanged = () => {};
@@ -142,6 +173,7 @@ class RoomNetwork {
     await this.subscribe();
     await this.refreshPlayers();
     this.startHeartbeat();
+    this.startRoomTimeoutCheck();
     localStorage.setItem('bedwars_last_room', JSON.stringify({ code, savedAt: Date.now() }));
     return room;
   }
@@ -164,6 +196,7 @@ class RoomNetwork {
     await this.refreshPlayers();
     if (!this.isMainHost) this.startHostCheck();
     else this.startHeartbeat();
+    this.startRoomTimeoutCheck();
     localStorage.setItem('bedwars_last_room', JSON.stringify({ code: room.code, savedAt: Date.now() }));
     return room;
   }
@@ -370,6 +403,34 @@ class RoomNetwork {
     }, this.config.heartbeatIntervalMs || 5000);
   }
 
+  startRoomTimeoutCheck() {
+    if (this.roomTimeoutTimer) clearInterval(this.roomTimeoutTimer);
+    this.roomTimeoutTimer = setInterval(async () => {
+      if (!this.room) return;
+      const client = this.initClient();
+      const { data: room } = await client.from('rooms')
+        .select('updated_at')
+        .eq('id', this.room.id)
+        .single();
+      if (!room) {
+        // Room already deleted
+        this.handleRoomKick('房间已解散');
+        return;
+      }
+      const lastUpdate = new Date(room.updated_at).getTime();
+      const now = Date.now();
+      const TEN_MINUTES = 10 * 60 * 1000;
+      if (now - lastUpdate > TEN_MINUTES) {
+        // Auto-dissolve due to inactivity
+        await this.sendEvent('room_dissolved', { reason: '房间超过10分钟未活跃，已自动解散' });
+        await client.from('room_players').delete().eq('room_id', this.room.id);
+        await client.from('game_events').delete().eq('room_id', this.room.id);
+        await client.from('rooms').delete().eq('id', this.room.id);
+        this.handleRoomKick('房间超过10分钟未活跃，已自动解散');
+      }
+    }, 30000);
+  }
+
   async electNewHost(room) {
     const client = this.initClient();
     const myId = this.auth.user.id;
@@ -447,6 +508,7 @@ class RoomNetwork {
   async leave() {
     if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
     if (this.hostCheckTimer) { clearInterval(this.hostCheckTimer); this.hostCheckTimer = null; }
+    if (this.roomTimeoutTimer) { clearInterval(this.roomTimeoutTimer); this.roomTimeoutTimer = null; }
     if (this.channel) { await this.channel.unsubscribe(); this.channel = null; }
 
     if (this.room && this.auth.user) {
@@ -463,6 +525,33 @@ class RoomNetwork {
       } catch (e) { /* ignore */ }
     }
 
+    this.room = null;
+    this.member = null;
+    this.members = [];
+    this.isMainHost = false;
+    localStorage.removeItem('bedwars_last_room');
+  }
+
+  async handleRoomKick(reason) {
+    await this.leave();
+  }
+
+  async dissolveRoom() {
+    if (!this.isMainHost || !this.room) return;
+    const client = this.initClient();
+    // Send dissolve event to all members
+    await this.sendEvent('room_dissolved', { reason: '房主解散了房间' });
+    // Delete room players
+    await client.from('room_players').delete().eq('room_id', this.room.id);
+    // Delete game events
+    await client.from('game_events').delete().eq('room_id', this.room.id);
+    // Delete room
+    await client.from('rooms').delete().eq('id', this.room.id);
+    // Clean up local state
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+    if (this.hostCheckTimer) { clearInterval(this.hostCheckTimer); this.hostCheckTimer = null; }
+    if (this.roomTimeoutTimer) { clearInterval(this.roomTimeoutTimer); this.roomTimeoutTimer = null; }
+    if (this.channel) { await this.channel.unsubscribe(); this.channel = null; }
     this.room = null;
     this.member = null;
     this.members = [];
@@ -522,6 +611,10 @@ class NetworkManager {
 
   async hostKickPlayer(playerId, reason) {
     return this.roomNet.hostKickPlayer(playerId, reason);
+  }
+
+  async dissolveRoom() {
+    return this.roomNet.dissolveRoom();
   }
 
   bindRoomEvents() {
