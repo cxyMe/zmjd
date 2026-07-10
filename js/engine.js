@@ -222,7 +222,7 @@ class Engine {
     const [x, y, z] = key.split(',').map(Number);
     const team = blk.team;
     const ownerId = blk.ownerId;
-    this.scene.remove(blk.mesh);
+    this._disposeMesh(blk.mesh);
     this.blocks.delete(key);
     const ok = this.placeBlock(x, y, z, typeKey, team, hpMult);
     const next = this.blocks.get(key);
@@ -245,7 +245,7 @@ class Engine {
     const key = this.getBlockKey(x, y, z);
     const blk = this.blocks.get(key);
     if (!blk) return false;
-    this.scene.remove(blk.mesh);
+    this._disposeMesh(blk.mesh);
     this.blocks.delete(key);
     this.spawnParticles(blk.mesh.position, 0xcccccc, 6);
     return true;
@@ -487,10 +487,22 @@ class Engine {
     return drop;
   }
 
+  _disposeMesh(mesh) {
+    if (!mesh) return;
+    this.scene.remove(mesh);
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) {
+      if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose ? m.dispose() : null);
+      else if (mesh.material.dispose) mesh.material.dispose();
+    }
+    if (mesh.children) mesh.children.forEach(c => this._disposeMesh(c));
+  }
+
   removeDropItem(drop) {
     const i = this.dropItems.indexOf(drop);
     if (i >= 0) {
-      this.scene.remove(drop.mesh);
+      this._disposeMesh(drop.mesh);
+      if (drop.label) this._disposeMesh(drop.label);
       this.dropItems.splice(i, 1);
     }
   }
@@ -551,7 +563,9 @@ class Engine {
   removeDeathBox(box) {
     const i = this.deathBoxes.indexOf(box);
     if (i >= 0) {
-      this.scene.remove(box.mesh);
+      this._disposeMesh(box.mesh);
+      this._disposeMesh(box.label);
+      this._disposeMesh(box.ring);
       this.deathBoxes.splice(i, 1);
     }
   }
@@ -630,7 +644,7 @@ class Engine {
   removeTrapDevice(trap) {
     const i = this.trapDevices.indexOf(trap);
     if (i >= 0) {
-      this.scene.remove(trap.mesh);
+      this._disposeMesh(trap.mesh);
       this.trapDevices.splice(i, 1);
     }
   }
@@ -652,8 +666,7 @@ class Engine {
     if (type === 'javelin') {
       geo = new THREE.CylinderGeometry(0.03, 0.04, 0.9);
       geo.rotateX(Math.PI / 2);
-    } else {
-      // arrow
+    } else if (type === 'arrow') {
       geo = new THREE.ConeGeometry(0.03, 0.6, 6);
     }
     const mat = new THREE.MeshBasicMaterial({ color: colors[type] || 0xffffff, transparent: true, opacity: type === 'smoke' ? 0.9 : 1 });
@@ -716,7 +729,7 @@ class Engine {
   removeGroundDevice(dev) {
     const i = this.groundDevices.indexOf(dev);
     if (i >= 0) {
-      this.scene.remove(dev.mesh);
+      this._disposeMesh(dev.mesh);
       this.groundDevices.splice(i, 1);
     }
   }
@@ -736,7 +749,7 @@ class Engine {
   removeSmokeZone(zone) {
     const i = this.smokeZones.indexOf(zone);
     if (i >= 0) {
-      this.scene.remove(zone.mesh);
+      this._disposeMesh(zone.mesh);
       this.smokeZones.splice(i, 1);
     }
   }
@@ -775,7 +788,7 @@ class Engine {
   removeBoneZone(zone) {
     const i = this.boneZones.indexOf(zone);
     if (i >= 0) {
-      this.scene.remove(zone.group);
+      this._disposeMesh(zone.group);
       this.boneZones.splice(i, 1);
     }
   }
@@ -953,7 +966,9 @@ class Engine {
         const dist = ent.pos.distanceTo(d.mesh.position);
         if (dist < pickupRange) {
           // 向玩家移动
-          const pull = ent.pos.clone().sub(d.mesh.position).normalize().multiplyScalar(6 * dt);
+          const pullDir = ent.pos.clone().sub(d.mesh.position);
+          if (pullDir.lengthSq() < 0.0001) continue;
+          const pull = pullDir.normalize().multiplyScalar(6 * dt);
           d.mesh.position.add(pull);
           d.pos.copy(d.mesh.position);
           if (dist < 0.6) {
@@ -996,7 +1011,9 @@ class Engine {
         const pickupRange = 2.0 * (1 + (ent.pickupRangeBonus || 0));
         const dist = ent.pos.distanceTo(box.mesh.position);
         if (dist < pickupRange) {
-          const pull = ent.pos.clone().sub(box.mesh.position).normalize().multiplyScalar(5 * dt);
+          const pullDir = ent.pos.clone().sub(box.mesh.position);
+          if (pullDir.lengthSq() < 0.0001) continue;
+          const pull = pullDir.normalize().multiplyScalar(5 * dt);
           box.mesh.position.add(pull);
           box.pos.copy(box.mesh.position);
           if (dist < 0.8) {
@@ -1216,10 +1233,12 @@ class Engine {
           const missile = this.projectiles[missileIndex];
           this.spawnParticles(missile.mesh.position, 0xffdd00, 18);
           if (missile.owner?.missileControl === missile) missile.owner.missileControl = null;
-          this.scene.remove(missile.mesh);
-          this.scene.remove(proj.mesh);
-          this.projectiles.splice(Math.max(i, missileIndex), 1);
-          this.projectiles.splice(Math.min(i, missileIndex), 1);
+          this._disposeMesh(missile.mesh);
+          this._disposeMesh(proj.mesh);
+          // 确保按索引从大到小移除，避免索引错乱
+          const [first, second] = i > missileIndex ? [i, missileIndex] : [missileIndex, i];
+          this.projectiles.splice(first, 1);
+          this.projectiles.splice(second, 1);
           continue;
         }
       }
@@ -1259,7 +1278,7 @@ class Engine {
           this.damageBlock(rc.pos.x, rc.pos.y, rc.pos.z, proj.damage);
         }
         this.spawnParticles(proj.mesh.position, 0xffaa00, 4);
-        this.scene.remove(proj.mesh);
+        this._disposeMesh(proj.mesh);
         this.projectiles.splice(i, 1);
         continue;
       }
@@ -1296,7 +1315,7 @@ class Engine {
           }
           this.spawnParticles(proj.mesh.position, 0xff0000, 5);
           if (proj.type !== 'boomerang') {
-            this.scene.remove(proj.mesh);
+            this._disposeMesh(proj.mesh);
             this.projectiles.splice(i, 1);
           } else if (!proj.returning) {
             proj.returning = true;
@@ -1314,7 +1333,7 @@ class Engine {
           this.explodeAt(proj.mesh.position.clone(), 4.5, 95, proj.owner);
           if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
         }
-        this.scene.remove(proj.mesh);
+        this._disposeMesh(proj.mesh);
         this.projectiles.splice(i, 1);
       }
     }
@@ -1781,8 +1800,8 @@ function generateSecretKillerMap(engine) {
 
   engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
 
-  // Override RED spawn to center
-  TEAMS.RED.spawn.set(0, 3, 0);
+  // 使用 engine 级别的 spawn 覆盖，不修改全局 TEAMS 常量
+  engine.skSpawn = new THREE.Vector3(0, 3, 0);
 
   function placeBlock(x, y, z, color, type = 'ground') {
     const mat = new THREE.MeshLambertMaterial({ color });
@@ -2050,6 +2069,7 @@ class PlayerEntity {
     this.maxMiss = this.role === 'WAIWAI' ? 3 : 0;
     this.missRegenTimer = 30;
     this.missInvulnTimer = 0;
+    this.invulnTimer = 0;
     this.placePreviewMesh = null;
     this.detectorEnemyCount = 0;
     this.detectorDurabilityTimer = 0;
@@ -2178,16 +2198,18 @@ class PlayerEntity {
     this.miss = roleKey === 'WAIWAI' ? 3 : 0;
     this.missRegenTimer = 30;
     this.missInvulnTimer = 0;
+    this.invulnTimer = 0;
     this.handBreakTimer = 0;
     this.handBreakKey = null;
     const oldTag = this.nameTag;
     const oldWeapon = this.weaponMesh;
     if (oldTag) this.mesh.remove(oldTag);
     if (oldWeapon) this.mesh.remove(oldWeapon);
-    this.mesh.geometry.dispose();
+    if (this.mesh.geometry) this.mesh.geometry.dispose();
+    if (this.mesh.material) this.mesh.material.dispose();
     this.mesh.geometry = this.createRoleGeometry(roleKey);
     this.skinColor = this.getEquippedSkinColor();
-    this.mesh.material.color.setHex(this.skinColor);
+    this.mesh.material = new THREE.MeshStandardMaterial({ color: this.skinColor });
     if (oldTag) this.mesh.add(oldTag);
     this.weaponMesh = null;
     this.updateWeaponMesh();
@@ -2554,7 +2576,7 @@ class PlayerEntity {
     const item = this.getSelectedItem();
     const info = item ? ITEM_DB[item.key] : null;
     if (!item || item.key !== this.equipped.weapon || !info?.durability) return;
-    item.durability = item.durability ?? info.durability;
+    item.durability = item.durability ?? info.durability ?? 1;
     item.durability--;
     if (item.durability <= 0) {
       window.game?.showMessage?.(`${info.name} 已损坏`, '#ff5555');
@@ -2578,6 +2600,9 @@ class PlayerEntity {
         this.hp = Math.min(this.maxHp, this.hp + 5 + (this.porkHealBonus || 0));
         this.porkHealTimer = 15;
       }
+    }
+    if (this.invulnTimer > 0) {
+      this.invulnTimer = Math.max(0, this.invulnTimer - dt);
     }
     if (this.role === 'WAIWAI') {
       if (this.missInvulnTimer > 0) this.missInvulnTimer = Math.max(0, this.missInvulnTimer - dt);
@@ -3199,6 +3224,8 @@ class PlayerEntity {
     this.fireArrow(this.bowCharge);
     this.bowCharge = 0;
     if (this.bowChargeLine) {
+      if (this.bowChargeLine.geometry) this.bowChargeLine.geometry.dispose();
+      if (this.bowChargeLine.material) this.bowChargeLine.material.dispose();
       this.engine.scene.remove(this.bowChargeLine);
       this.bowChargeLine = null;
     }
@@ -3227,7 +3254,7 @@ class PlayerEntity {
     this.engine.scene.add(arrowMesh);
 
     const life = range / speed;
-    const finalDmg = dmg * (1 + charge * 0.5);
+    const finalDmg = dmg; // 伤害已在上方计算时包含蓄力加成，不再重复乘算
     this.engine.projectiles.push({
       mesh: arrowMesh,
       vel: dir.clone().multiplyScalar(speed),
@@ -3478,6 +3505,7 @@ class PlayerEntity {
 
   takeDamage(amount, attacker) {
     if (this.isDead) return;
+    if (this.invulnTimer > 0) return; // 无敌帧期间不受伤害
     if (this.role === 'WAIWAI') {
       if (this.missInvulnTimer > 0) return;
       if (this.miss > 0) {
@@ -3491,9 +3519,9 @@ class PlayerEntity {
     }
     if (this.missileControl) {
       this.engine.explodeAt(this.missileControl.mesh.position.clone(), 4.5, 95, this);
-      this.engine.scene.remove(this.missileControl.mesh);
       const idx = this.engine.projectiles.indexOf(this.missileControl);
       if (idx >= 0) this.engine.projectiles.splice(idx, 1);
+      this.engine._disposeMesh(this.missileControl.mesh);
       this.missileControl = null;
     }
     const shieldReduce = this.socialShield > 0 ? 0.35 : 0;
@@ -3513,7 +3541,7 @@ class PlayerEntity {
         this.armorInfo = null;
         window.game?.showMessage?.(`${this.name} 的护甲已损坏`, '#ff5555');
       }
-      if (attacker && this.armorReflectChance > 0 && Math.random() < this.armorReflectChance) {
+      if (attacker && typeof attacker.takeDamage === 'function' && this.armorReflectChance > 0 && Math.random() < this.armorReflectChance) {
         attacker.takeDamage(amount * this.armorReflectRate, this);
         window.game?.showMessage?.('研发护甲触发反弹伤害！', '#b388ff');
       }
@@ -3539,12 +3567,13 @@ class PlayerEntity {
       if (this.hasRevivalToken) {
         this.hasRevivalToken = false;
         this.hp = Math.max(1, Math.floor(this.maxHp * 0.5));
+        this.invulnTimer = 2.0; // 复活金牌触发后2秒无敌
         this.engine.spawnParticles(this.pos, 0xffd700, 20);
         window.game?.showMessage?.(`${this.name} 的复活金牌抵挡了致命伤害！`, '#ffd700');
         return;
       }
-      // 密室杀手：侦探杀了好人则自己也会死
-      if (window.game?.isSecretKiller && attacker && attacker.skRole === 'detective' && this.skRole !== 'killer') {
+      // 密室杀手：侦探杀了好人（且不是同角色误杀）则自己也会死
+      if (window.game?.isSecretKiller && attacker && attacker.skRole === 'detective' && this.skRole !== 'killer' && this.skRole !== attacker.skRole) {
         window.game?.showMessage?.(`侦探误杀了好人，自己也倒下了！`, '#ff4444');
         attacker.die(null);
       }
@@ -3569,9 +3598,9 @@ class PlayerEntity {
       if (missileIdx >= 0) this.engine.projectiles.splice(missileIdx, 1);
       this.missileControl = null;
     }
-    this.deathCount++;
+    if (!isVoidDeath) this.deathCount++;
     this.respawnTimer = Math.min(30, 3 + (this.deathCount - 1) * 2);
-    this.pendingElimination = !this.teamInfo.bedAlive;
+    this.pendingElimination = !this.teamInfo?.bedAlive;
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
 
     // 密室杀手：侦探死亡时掉落弓，杀手死亡不掉落刀
@@ -3680,7 +3709,7 @@ class PlayerEntity {
     this.pendingElimination = false;
     this.hp = this.maxHp;
     if (this.placePreviewMesh) {
-      this.engine.scene.remove(this.placePreviewMesh);
+      this.engine._disposeMesh(this.placePreviewMesh);
       this.placePreviewMesh = null;
     }
     if (this.role === 'WAIWAI') {
@@ -3689,9 +3718,35 @@ class PlayerEntity {
       this.missRegenTimer = Math.max(5, 30 - (this.missRegenBonus || 0));
       this.missInvulnTimer = 0;
     }
+    // 重置所有临时状态
+    this.healAction = null;
+    this.camouflageTimer = 0;
+    this.missileControl = null;
+    this.skillActive = 0;
+    this.fatTimer = 0;
+    this.hurricaneDamageTimer = 0;
+    this.slowTimer = 0;
+    this.frostTimer = 0;
+    this.rootTimer = 0;
+    this.revealedTimer = 0;
+    this.smokeBlindTimer = 0;
+    this.smokeInvisibleTimer = 0;
+    this.extraShield = 0;
+    this.hasRevivalToken = false;
+    this.speedPotionTimer = 0;
+    this.burstPotionTimer = 0;
+    this.socialShield = 0;
+    this.detectorEnemyCount = 0;
+    this.invulnTimer = 1.5; // 复活后短暂无敌，防止连续死亡
+    this.mesh.visible = true;
+    if (this.mesh.material) {
+      this.mesh.material.transparent = false;
+      this.mesh.material.opacity = 1;
+      this.mesh.material.wireframe = false;
+      if (this.mesh.material.emissive) this.mesh.material.emissive.setHex(0x000000);
+    }
     this.pos.copy(this.findSafeRespawnPosition());
     this.vel.set(0, 0, 0);
-    this.mesh.visible = true;
     this.mesh.position.copy(this.pos);
   }
 
@@ -3745,7 +3800,12 @@ class PlayerEntity {
   }
 
   updateWeaponMesh() {
-    if (this.weaponMesh) { this.mesh.remove(this.weaponMesh); this.weaponMesh = null; }
+    if (this.weaponMesh) {
+      if (this.weaponMesh.geometry) this.weaponMesh.geometry.dispose();
+      if (this.weaponMesh.material) this.weaponMesh.material.dispose();
+      this.mesh.remove(this.weaponMesh);
+      this.weaponMesh = null;
+    }
     if (!this.equipped.weapon) return;
     const w = ITEM_DB[this.equipped.weapon];
     let geo, color;

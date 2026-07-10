@@ -682,6 +682,12 @@ function updateStartBtn() {
   btn.classList.toggle('ready', !!selectedTeam && hasRoom);
 }
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function setAuthStatus(text, isError = false) {
   const el = document.getElementById('authStatus');
   el.textContent = text;
@@ -702,12 +708,14 @@ function renderAuth() {
   const name = auth.user?.nickname || auth.user?.username || '游客玩家';
   document.getElementById('profileNameText').textContent = name;
   document.getElementById('profileDetailName').textContent = name;
-  const profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"rankScore":0,"seasonXp":0}');
+  let profile = { rankScore: 0, seasonXp: 0 };
+  try { profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"rankScore":0,"seasonXp":0}'); } catch (_) {}
   let rankName = '沉睡梦游者';
   if (typeof GROWTH_CONFIG !== 'undefined') {
     for (const r of GROWTH_CONFIG.ranks) if ((profile.rankScore || 0) >= r.min) rankName = r.name;
   }
-  const passState = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{"xp":0}');
+  let passState = { xp: 0 };
+  try { passState = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{"xp":0}'); } catch (_) {}
   const passLv = Math.min(100, Math.floor((passState.xp || 0) / 1000) + 1);
   document.getElementById('profileRankText').textContent = `${rankName} · 通行证Lv.${passLv}`;
   document.getElementById('profileDetailRank').textContent = rankName;
@@ -733,12 +741,12 @@ function renderRoom() {
   const roomPanelTitle = document.getElementById('roomPanelTitle');
   const roomStartBtn = document.getElementById('roomStartBtn');
   if (netMgr?.inRoom && roomPanel) {
-    roomPanel.style.display = 'flex';
+    // 房间面板显示由用户操作控制，不再在网络回调中强制打开
     if (roomPanelCode) roomPanelCode.textContent = room?.code || '----';
     if (roomPanelTitle) roomPanelTitle.textContent = isMainHost ? '我的房间' : '房间';
     if (roomStartBtn) {
-      roomStartBtn.style.display = isMainHost ? 'block' : 'none';
-      roomStartBtn.disabled = !isMainHost;
+      roomStartBtn.style.display = (localOnly || isMainHost) ? 'block' : 'none';
+      roomStartBtn.disabled = !(localOnly || isMainHost);
     }
     const dissolveRoomBtn = document.getElementById('dissolveRoomBtn');
     if (dissolveRoomBtn) {
@@ -773,8 +781,8 @@ function renderRoom() {
         div.className = 'room-member-line';
         const isHost = room?.host_id === m.player_id;
         const hostBadge = isHost ? '<span class="host-badge">房主</span>' : '';
-        const name = m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4));
-        const teamName = m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队';
+        const name = escapeHtml(m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4)));
+        const teamName = escapeHtml(m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队');
         div.innerHTML = `<span>${name} ${hostBadge}</span><span class="member-team-label">${teamName}</span>`;
         roomPanelMembers.appendChild(div);
       }
@@ -798,10 +806,10 @@ function renderRoom() {
     const isHost = room?.host_id === m.player_id;
     const hostBadge = isHost ? '<span class="host-badge">主房主</span>' : (m.role === 'host' ? '<span>副房主</span>' : '<span>玩家</span>');
     const state = m.is_online ? '<span>在线</span>' : '<span class="offline">离线</span>';
-    const name = m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4));
-    const teamName = m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队';
+    const name = escapeHtml(m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4)));
+    const teamName = escapeHtml(m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队');
     const teamSelect = `
-      <select class="member-team-select" data-player-id="${m.player_id}" ${isMainHost ? '' : 'disabled'}>
+      <select class="member-team-select" data-player-id="${escapeHtml(m.player_id)}" ${isMainHost ? '' : 'disabled'}>
         <option value="">未选队</option>
         <option value="RED" ${m.team === 'RED' ? 'selected' : ''}>红队</option>
         <option value="BLUE" ${m.team === 'BLUE' ? 'selected' : ''}>蓝队</option>
@@ -809,7 +817,7 @@ function renderRoom() {
         <option value="YELLOW" ${m.team === 'YELLOW' ? 'selected' : ''}>黄队</option>
       </select>`;
     const kickBtn = isMainHost && m.player_id !== myId
-      ? `<button class="member-kick-btn" data-player-id="${m.player_id}">踢出</button>`
+      ? `<button class="member-kick-btn" data-player-id="${escapeHtml(m.player_id)}">踢出</button>`
       : '';
     div.innerHTML = `
       <div class="member-main">
@@ -861,24 +869,30 @@ async function handleRoomKick(reason = '你已离开房间') {
 
 function bindNetEvents() {
   if (!netMgr) return;
-  netMgr.roomNet.onRoomUpdate = renderRoom;
-  netMgr.roomNet.onMembersChanged = renderRoom;
+  netMgr.roomNet.onRoomUpdate = (...args) => { try { renderRoom(...args); } catch (e) { console.error('onRoomUpdate error', e); } };
+  netMgr.roomNet.onMembersChanged = (...args) => { try { renderRoom(...args); } catch (e) { console.error('onMembersChanged error', e); } };
   netMgr.roomNet.onHostChanged = (hostId) => {
-    renderRoom();
-    const badge = document.getElementById('netBadge');
-    if (badge.style.display !== 'none') {
-      const isHost = hostId === auth.user?.id;
-      badge.innerHTML = `联机状态：<span class="online">在线</span>｜<span class="host">${isHost ? '主房主' : '副房主'}</span>`;
-    }
+    try {
+      renderRoom();
+      const badge = document.getElementById('netBadge');
+      if (badge && badge.style.display !== 'none') {
+        const isHost = hostId === auth.user?.id;
+        badge.innerHTML = `联机状态：<span class="online">在线</span>｜<span class="host">${isHost ? '主房主' : '副房主'}</span>`;
+      }
+    } catch (e) { console.error('onHostChanged error', e); }
   };
   netMgr.roomNet.onEvent = (evt) => {
-    if (evt.event_type === 'game_start' && !window.game?.gameActive) {
-      setRoomStatus('房主已开始游戏，请选择队伍后进入，角色将在开局后选择。');
-    } else if (evt.event_type === 'room_kick' && evt.event_data?.playerId === auth.user?.id) {
-      handleRoomKick(evt.event_data?.reason || '你已被房主移出房间');
-    } else if (evt.event_type === 'room_team_changed') {
-      renderRoom();
-    }
+    try {
+      if (evt.event_type === 'game_start' && !window.game?.gameActive) {
+        setRoomStatus('房主已开始游戏，请选择队伍后进入，角色将在开局后选择。');
+      } else if (evt.event_type === 'room_kick' && evt.event_data?.playerId === auth.user?.id) {
+        handleRoomKick(evt.event_data?.reason || '你已被房主移出房间');
+      } else if (evt.event_type === 'room_dissolved') {
+        handleRoomKick(evt.event_data?.reason || '房间已解散');
+      } else if (evt.event_type === 'room_team_changed') {
+        renderRoom();
+      }
+    } catch (e) { console.error('onEvent error', e); }
   };
 }
 
@@ -962,9 +976,10 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('logoutBtn').addEventListener('click', () => {
-  auth.logout();
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
   netMgr = null;
+  auth.logout();
   localOnly = false;
   renderAuth();
   setAuthStatus('已退出登录。');
@@ -973,11 +988,12 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
   updateStartBtn();
 });
 
-document.getElementById('localModeBtn').addEventListener('click', () => {
+function openLocalModePanel() {
   if (!auth.user) {
     setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
     return;
   }
+  if (netMgr?.inRoom) { netMgr.leaveRoom().catch(() => {}); netMgr = null; }
   localOnly = true;
   const selectedMode = window._selectedMode || 'classic';
   window.lobbyAiSlots = selectedMode === 'secret_killer' ? 9 : Math.max(window.lobbyAiSlots || 0, 4);
@@ -1001,137 +1017,95 @@ document.getElementById('localModeBtn').addEventListener('click', () => {
     }
     if (roomPanelMembers) roomPanelMembers.innerHTML = '<div class="room-member-line"><span>我（本地）</span></div>';
   }
-});
+}
+document.getElementById('localModeBtn').addEventListener('click', openLocalModePanel);
+document.getElementById('localModeBtn').addEventListener('touchstart', (e) => { e.preventDefault(); openLocalModePanel(); }, { passive: false });
 
-document.getElementById('localModeBtn').addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  if (!auth.user) {
-    setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
-    return;
-  }
-  localOnly = true;
-  const selectedMode = window._selectedMode || 'classic';
-  window.lobbyAiSlots = selectedMode === 'secret_killer' ? 9 : Math.max(window.lobbyAiSlots || 0, 4);
-  setAuthStatus('已进入本地试玩模式，不连接 Supabase。');
-  setRoomStatus('本地试玩模式：将与 AI 对战，直接点开始游戏。');
-  closePanel('playOptionsPanel');
-  updateAiButton();
-  updateStartBtn();
-  const roomPanel = document.getElementById('roomPanel');
-  const roomPanelTitle = document.getElementById('roomPanelTitle');
-  const roomPanelCode = document.getElementById('roomPanelCode');
-  const roomStartBtn = document.getElementById('roomStartBtn');
-  const roomPanelMembers = document.getElementById('roomPanelMembers');
-  if (roomPanel) {
-    roomPanel.style.display = 'flex';
-    if (roomPanelTitle) roomPanelTitle.textContent = '本地试玩';
-    if (roomPanelCode) roomPanelCode.textContent = '--';
-    if (roomStartBtn) {
-      roomStartBtn.style.display = 'block';
-      roomStartBtn.disabled = false;
-    }
-    if (roomPanelMembers) roomPanelMembers.innerHTML = '<div class="room-member-line"><span>我（本地）</span></div>';
-  }
-});
-
-document.getElementById('createRoomBtn').addEventListener('click', async () => {
+async function doCreateRoom() {
   if (!auth.user) {
     setAuthStatus('请先登录后再创建房间。', true);
     return;
   }
+  if (window._isConnecting) return;
+  window._isConnecting = true;
   try {
     localOnly = false;
+    if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
+    netMgr = null;
     netMgr = new NetworkManager(config);
     bindNetEvents();
     setRoomStatus('正在创建房间...');
     const room = await netMgr.createRoom();
     renderRoom();
+    document.getElementById('roomPanel').style.display = 'flex';
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '创建房间失败', true);
+  } finally {
+    window._isConnecting = false;
   }
-});
+}
+document.getElementById('createRoomBtn').addEventListener('click', doCreateRoom);
+document.getElementById('createRoomBtn').addEventListener('touchstart', (e) => { e.preventDefault(); doCreateRoom(); }, { passive: false });
 
-document.getElementById('createRoomBtn').addEventListener('touchstart', async (e) => {
-  e.preventDefault();
-  if (!auth.user) {
-    setAuthStatus('请先登录后再创建房间。', true);
-    return;
-  }
-  try {
-    localOnly = false;
-    netMgr = new NetworkManager(config);
-    bindNetEvents();
-    setRoomStatus('正在创建房间...');
-    const room = await netMgr.createRoom();
-    renderRoom();
-    closePanel('playOptionsPanel');
-  } catch (err) {
-    setRoomStatus(err.message || '创建房间失败', true);
-  }
-});
-
-document.getElementById('joinRoomBtn').addEventListener('click', async () => {
+async function doJoinRoom() {
   if (!auth.user) {
     setAuthStatus('请先登录后再加入房间。', true);
     return;
   }
+  if (window._isConnecting) return;
+  window._isConnecting = true;
   try {
     localOnly = false;
+    if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
+    netMgr = null;
     netMgr = new NetworkManager(config);
     bindNetEvents();
-    const code = document.getElementById('joinRoomCode').value;
+    const code = document.getElementById('joinRoomCode').value.trim();
     setRoomStatus('正在加入房间...');
     await netMgr.joinRoom(code);
     renderRoom();
+    document.getElementById('roomPanel').style.display = 'flex';
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '加入房间失败', true);
+  } finally {
+    window._isConnecting = false;
   }
-});
+}
+document.getElementById('joinRoomBtn').addEventListener('click', doJoinRoom);
+document.getElementById('joinRoomBtn').addEventListener('touchstart', (e) => { e.preventDefault(); doJoinRoom(); }, { passive: false });
 
-document.getElementById('joinRoomBtn').addEventListener('touchstart', async (e) => {
-  e.preventDefault();
-  if (!auth.user) {
-    setAuthStatus('请先登录后再加入房间。', true);
-    return;
-  }
-  try {
-    localOnly = false;
-    netMgr = new NetworkManager(config);
-    bindNetEvents();
-    const code = document.getElementById('joinRoomCode').value;
-    setRoomStatus('正在加入房间...');
-    await netMgr.joinRoom(code);
-    renderRoom();
-    closePanel('playOptionsPanel');
-  } catch (err) {
-    setRoomStatus(err.message || '加入房间失败', true);
-  }
-});
-
-document.getElementById('reconnectBtn').addEventListener('click', async () => {
+async function doReconnect() {
   if (!auth.user) {
     setAuthStatus('请先登录后再断线重连。', true);
     return;
   }
+  if (window._isConnecting) return;
+  window._isConnecting = true;
   try {
     localOnly = false;
+    if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
+    netMgr = null;
     netMgr = new NetworkManager(config);
     bindNetEvents();
     setRoomStatus('正在重连上次房间...');
     await netMgr.reconnect();
     renderRoom();
+    document.getElementById('roomPanel').style.display = 'flex';
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '断线重连失败', true);
+  } finally {
+    window._isConnecting = false;
   }
-});
+}
+document.getElementById('reconnectBtn').addEventListener('click', doReconnect);
 
 // Loading simulation
 let loadProgress = 0;
 const loadInterval = setInterval(() => {
-  loadProgress += 10;
+  loadProgress = Math.min(loadProgress + 10, 100);
   document.getElementById('loadBar').style.width = loadProgress + '%';
   if (loadProgress >= 30) document.getElementById('loadTip').textContent = '正在生成地图...';
   if (loadProgress >= 70) document.getElementById('loadTip').textContent = '正在初始化AI...';
