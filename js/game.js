@@ -617,6 +617,8 @@ class UIManager {
       if (lp.burstPotionTimer > 0) effects.push(`<span class="eff-burst">爆发 ${lp.burstPotionTimer.toFixed(1)}s</span>`);
       if (lp.hurricaneDamageTimer > 0) effects.push(`<span class="eff-hurricane">飓风 ${lp.hurricaneDamageTimer.toFixed(1)}s</span>`);
       if (lp.camouflageTimer > 0) effects.push(`<span class="eff-camo">隐身 ${lp.camouflageTimer.toFixed(1)}s</span>`);
+      if (lp.jetpackTimer > 0) effects.push(`<span class="eff-jetpack">喷气 ${lp.jetpackTimer.toFixed(1)}s</span>`);
+      if (lp.frostTimer > 0 || lp.rootTimer > 0) effects.push(`<span class="eff-frozen">冰冻 ${Math.max(lp.frostTimer||0, lp.rootTimer||0).toFixed(1)}s</span>`);
       const camoOverlay = document.getElementById('camoOverlay');
       if (camoOverlay) {
         if (lp.camouflageTimer > 0) {
@@ -624,6 +626,31 @@ class UIManager {
           document.getElementById('camoTime').textContent = lp.camouflageTimer.toFixed(1);
         } else {
           camoOverlay.style.display = 'none';
+        }
+      }
+      // 高能人悬浮时间HUD
+      const jetpackOverlay = document.getElementById('jetpackOverlay');
+      if (jetpackOverlay) {
+        if (lp.jetpackTimer > 0) {
+          jetpackOverlay.style.display = 'block';
+          document.getElementById('jetpackTime').textContent = lp.jetpackTimer.toFixed(1);
+        } else {
+          jetpackOverlay.style.display = 'none';
+        }
+      }
+      // 冰冻状态HUD
+      const frostOverlay = document.getElementById('frostOverlay');
+      if (frostOverlay) {
+        if (lp.frostTimer > 0 || lp.rootTimer > 0) {
+          frostOverlay.style.display = 'block';
+          document.getElementById('frostTime').textContent = Math.max(lp.frostTimer || 0, lp.rootTimer || 0).toFixed(1);
+          // 冰冻边框效果
+          const hud = document.getElementById('hud');
+          if (hud) hud.classList.add('frozen-state');
+        } else {
+          frostOverlay.style.display = 'none';
+          const hud = document.getElementById('hud');
+          if (hud) hud.classList.remove('frozen-state');
         }
       }
       if (lp.fatTimer > 0) effects.push(`<span class="eff-fat">肥肉 ${lp.fatTimer.toFixed(1)}s</span>`);

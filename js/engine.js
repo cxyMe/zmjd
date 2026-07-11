@@ -40,6 +40,18 @@ const ROLES = {
     active: { name: '玻璃桥', desc: '从玩家位置向前生成宽2格长15格玻璃桥，无法被爆炸摧毁，持续12秒', cd: 25 },
     starter: [{ key: 'wood_plank', count: 35 }]
   },
+  HIGH_ENERGY: {
+    name: '高能人', hp: 75, skinClass: 'role-highenergy',
+    passive: { name: '附魔箭矢', desc: '发射的箭落地后留下3x3火焰区域3秒，每秒15点伤害' },
+    active: { name: '超能喷气', desc: '悬浮22秒可自由移动/攻击，跳跃加速消耗30%悬浮时间，冷却30秒', cd: 30 },
+    starter: [{ currency: 'silver', count: 5 }]
+  },
+  FROST: {
+    name: '冰霜', hp: 90, skinClass: 'role-frost',
+    passive: { name: '霜降', desc: '受伤后在自身位置留下2x2冰霜区域，敌人移速-60%且3秒后冰冻' },
+    active: { name: '绝对零度', desc: '向准心发射3个冰锥，击中冰冻3秒，落地产生3x3冰霜2秒', cd: 27 },
+    starter: []
+  },
   WAIWAI: {
     name: '歪歪', hp: 1, skinClass: 'role-waiwai',
     passive: { name: 'miss体质', desc: '复活获得3点miss；每30秒恢复1点；每点miss抵挡一次任意伤害并无敌1.2秒' },
@@ -131,6 +143,7 @@ class Engine {
     this.boneZones = [];     // 歪歪骨头阵
     this.explosives = [];    // 定时爆炸物
     this.repairDrones = [];  // 自动修复无人机
+    this.frostZones = [];    // 冰霜/火焰区域
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -1082,6 +1095,52 @@ class Engine {
       if (zone.life <= 0) this.removeBoneZone(zone);
     }
 
+    // Frost/Fire Zones (冰霜和火焰区域)
+    if (!this.frostZones) this.frostZones = [];
+    for (let i = this.frostZones.length - 1; i >= 0; i--) {
+      const zone = this.frostZones[i];
+      zone.life -= dt;
+      if (zone.type === 'fire') {
+        zone.mesh.material.opacity = Math.max(0.1, (zone.life / zone.maxLife) * 0.6);
+      } else {
+        zone.mesh.material.opacity = Math.max(0.1, (zone.life / zone.maxLife) * 0.5);
+      }
+      // 对区域内敌人造成效果
+      for (const ent of this.entities) {
+        if (ent.isDead) continue;
+        if (ent.team === zone.team) continue;
+        const dx = ent.pos.x - (zone.cx + 0.5);
+        const dz = ent.pos.z - (zone.cz + 0.5);
+        const inX = Math.abs(dx) <= zone.radius + 0.5;
+        const inZ = Math.abs(dz) <= zone.radius + 0.5;
+        if (!inX || !inZ) continue;
+
+        if (zone.type === 'fire') {
+          // 火焰：每秒15伤害
+          ent.takeDamage(zone.damage * dt, zone.owner);
+        } else if (zone.type === 'frost') {
+          // 冰霜：减速60%
+          ent.slowTimer = Math.max(ent.slowTimer || 0, 0.5);
+          // 跟踪停留时间（用zone对象引用作为键，避免splice索引变化）
+          if (!ent._frostZoneTime) ent._frostZoneTime = new Map();
+          const elapsed = (ent._frostZoneTime.get(zone) || 0) + dt;
+          ent._frostZoneTime.set(zone, elapsed);
+          if (elapsed >= zone.freezeAfter) {
+            ent.frostTimer = Math.max(ent.frostTimer || 0, 3);
+            ent.rootTimer = Math.max(ent.rootTimer || 0, 3);
+            ent._frostZoneTime.delete(zone); // 重置计时避免重复
+            if (ent.isLocal) {
+              window.game?.showMessage?.('你被冰冻了！无法移动3秒', '#88ccff');
+            }
+          }
+        }
+      }
+      if (zone.life <= 0) {
+        this._disposeMesh(zone.mesh);
+        this.frostZones.splice(i, 1);
+      }
+    }
+
     // Timed explosives
     for (let i = this.explosives.length - 1; i >= 0; i--) {
       const ex = this.explosives[i];
@@ -1304,6 +1363,14 @@ class Engine {
             ent.frostTimer = Math.max(ent.frostTimer || 0, 2);
             ent.slowTimer = Math.max(ent.slowTimer || 0, 2);
           }
+          if (proj.type === 'ice_spike') {
+            ent.frostTimer = Math.max(ent.frostTimer || 0, 3);
+            ent.rootTimer = Math.max(ent.rootTimer || 0, 3);
+            ent.slowTimer = Math.max(ent.slowTimer || 0, 3);
+            if (ent.isLocal) {
+              window.game?.showMessage?.('你被冰锥击中！冰冻3秒', '#88ccff');
+            }
+          }
           if (proj.owner?.role === 'HURRICANE' && proj.owner.equipped.weapon === 'bow') {
             ent.revealedTimer = Math.max(ent.revealedTimer || 0, 3);
             ent.nameTag.visible = true;
@@ -1332,6 +1399,15 @@ class Engine {
         if (proj.type === 'missile' && proj.mesh.position.y > -20) {
           this.explodeAt(proj.mesh.position.clone(), 4.5, 95, proj.owner);
           if (proj.owner?.missileControl === proj) proj.owner.missileControl = null;
+        }
+        // 冰锥落地产生冰霜区域
+        if (proj.type === 'ice_spike' && proj.owner) {
+          proj.owner.createFrostZone(proj.mesh.position, 3, 2);
+        }
+        // 高能人附魔箭矢落地产生火焰区域
+        if (proj.type === 'arrow' && proj.owner?.role === 'HIGH_ENERGY') {
+          proj.owner.createFireZone(proj.mesh.position);
+          this.spawnParticles(proj.mesh.position, 0xff4400, 8);
         }
         this._disposeMesh(proj.mesh);
         this.projectiles.splice(i, 1);
@@ -2291,6 +2367,9 @@ class PlayerEntity {
     this.skFragments = 0;
     this.skRole = null;
     this.bowCdTimer = 0;
+    this.jetpackTimer = 0;       // 高能人悬浮剩余时间
+    this.jetpackMaxTime = 22;    // 高能人悬浮最大时间
+    this.frostZones = [];        // 冰霜角色创建的冰霜区域
     this.voidBridgeBlocks = [];
     this.healAction = null;
     this.miss = this.role === 'WAIWAI' ? 3 : 0;
@@ -2307,6 +2386,8 @@ class PlayerEntity {
     this.glassBridgeTimer = 0;
     this.glassBridgeLabel = null;
     this.glassBridgeCdPending = false;
+    this.jetpackTimer = 0;
+    this.frostZones = [];
 
     // Anti-cheat tracking
     this.acBlocksPlaced = 0;
@@ -2380,6 +2461,16 @@ class PlayerEntity {
     }
     if (roleKey === 'DRIFTWOOD') return new THREE.CapsuleGeometry(0.36, 0.92, 4, 8);
     if (roleKey === 'STEEL_BONE') return new THREE.BoxGeometry(0.55, 1.05, 0.55);
+    if (roleKey === 'HIGH_ENERGY') {
+      const geo = new THREE.OctahedronGeometry(0.5, 1);
+      geo.scale(0.7, 1.1, 0.7);
+      return geo;
+    }
+    if (roleKey === 'FROST') {
+      const geo = new THREE.IcosahedronGeometry(0.5, 0);
+      geo.scale(0.8, 1.05, 0.8);
+      return geo;
+    }
     if (roleKey === 'WAIWAI') {
       const geo = new THREE.ConeGeometry(0.42, 1.12, 5);
       geo.scale(0.82, 0.82, 0.82);
@@ -3085,6 +3176,17 @@ class PlayerEntity {
     if (this.slowTimer > 0) this.slowTimer -= dt;
     if (this.frostTimer > 0) this.frostTimer -= dt;
     if (this.rootTimer > 0) this.rootTimer -= dt;
+    // 高能人悬浮逻辑
+    if (this.jetpackTimer > 0) {
+      this.jetpackTimer = Math.max(0, this.jetpackTimer - dt);
+      this.vel.y = 0; // 悬浮不坠落
+      this.onGround = false;
+      if (this.jetpackTimer <= 0) {
+        // 悬浮结束，进入冷却
+        this.skillCd = Math.max(3, (ROLES.HIGH_ENERGY?.active?.cd || 30) - (this.skillCdBonus || 0));
+        window.game?.showMessage?.('超能喷气已结束，进入冷却', '#ff8800');
+      }
+    }
     if (this.revealedTimer > 0) this.revealedTimer -= dt;
     if (this.smokeBlindTimer > 0) this.smokeBlindTimer -= dt;
     if (this.smokeInvisibleTimer > 0) this.smokeInvisibleTimer -= dt;
@@ -3295,6 +3397,11 @@ class PlayerEntity {
     if (this.onGround && !this.isDead && !this.isFrozen && this.rootTimer <= 0) {
       this.vel.y = this.jumpPower * (this.frostTimer > 0 ? 0.5 : 1);
       this.onGround = false;
+      // 高能人悬浮时跳跃加速消耗
+      if (this.jetpackTimer > 0) {
+        this.jetpackTimer = Math.max(0, this.jetpackTimer - 0.7); // 额外消耗0.7秒（约30%）
+        this.vel.y = 8; // 快速上升
+      }
       this.acJumpCount++;
       if (this.acJumpCount > 3 && this.pos.y < -5) {
         window.game?.reportCheat?.(this.playerId, 'void_jump', { count: this.acJumpCount, y: this.pos.y }, 3);
@@ -3634,6 +3741,14 @@ class PlayerEntity {
       this.launchMissile();
     } else if (this.role === 'STEEL_BONE') {
       this.createGlassBridge();
+    } else if (this.role === 'HIGH_ENERGY') {
+      this.jetpackTimer = this.jetpackMaxTime;
+      this.vel.y = 4; // 初始弹起
+      this.onGround = false;
+      this.engine.spawnParticles(this.pos, 0xff8800, 20);
+      window.game?.showMessage?.('超能喷气启动！悬浮22秒', '#ff8800');
+    } else if (this.role === 'FROST') {
+      this.castAbsoluteZero();
     } else if (this.role === 'WAIWAI') {
       this.engine.createBoneZone(this);
     }
@@ -3714,6 +3829,82 @@ class PlayerEntity {
     window.game?.showMessage?.('玻璃桥已生成，持续12秒', '#9eefff');
   }
 
+  // ========== 高能人：附魔箭矢（被动） ==========
+  createFireZone(pos) {
+    // 创建3x3火焰区域
+    const bx = Math.floor(pos.x);
+    const bz = Math.floor(pos.z);
+    const by = Math.floor(pos.y);
+    const geo = new THREE.BoxGeometry(3, 0.2, 3);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.6 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(bx + 0.5, by + 0.1, bz + 0.5);
+    this.engine.scene.add(mesh);
+    const zone = {
+      mesh, owner: this, team: this.team,
+      cx: bx, cz: bz, radius: 1,
+      life: 3, maxLife: 3, damage: 15, // 每秒15伤害
+      type: 'fire'
+    };
+    this.engine.frostZones = this.engine.frostZones || [];
+    this.engine.frostZones.push(zone);
+    return zone;
+  }
+
+  // ========== 冰霜：绝对零度（主动） ==========
+  castAbsoluteZero() {
+    const dir = this.getForwardDir().normalize();
+    const start = this.pos.clone().add(new THREE.Vector3(0, 1, 0));
+    // 发射3个冰锥，间隔0.15秒（简化：同时发射3个，略微偏移角度）
+    for (let i = 0; i < 3; i++) {
+      const offset = (i - 1) * 0.08; // -0.08, 0, 0.08
+      const fireDir = dir.clone();
+      fireDir.x += offset * fireDir.z;
+      fireDir.z -= offset * fireDir.x;
+      fireDir.normalize();
+      const geo = new THREE.ConeGeometry(0.15, 0.8, 6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x88ccff });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(start).addScaledVector(fireDir, 1.5);
+      const up = new THREE.Vector3(0, 1, 0);
+      const quat = new THREE.Quaternion().setFromUnitVectors(up, fireDir);
+      mesh.setRotationFromQuaternion(quat);
+      this.engine.scene.add(mesh);
+      this.engine.projectiles.push({
+        mesh, vel: fireDir.multiplyScalar(35),
+        life: 2, damage: 10, // 冰锥伤害较低，主要效果是冰冻
+        owner: this, type: 'ice_spike',
+        gravity: 0, hitSet: new Set()
+      });
+    }
+    this.engine.spawnParticles(this.pos, 0x88ccff, 12);
+    window.game?.showMessage?.('绝对零度！', '#88ccff');
+  }
+
+  // ========== 冰霜：霜降（被动） ==========
+  createFrostZone(pos, size, life) {
+    const halfSize = Math.floor(size / 2);
+    const bx = Math.floor(pos.x);
+    const bz = Math.floor(pos.z);
+    const by = Math.max(0, Math.floor(pos.y));
+    const geo = new THREE.BoxGeometry(size, 0.15, size);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.5 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(bx + 0.5, by + 0.1, bz + 0.5);
+    this.engine.scene.add(mesh);
+    const zone = {
+      mesh, owner: this, team: this.team,
+      cx: bx, cz: bz, radius: halfSize,
+      life: life, maxLife: life,
+      slowAmount: 0.6, // 60%减速
+      freezeAfter: 3, // 停留3秒后冰冻
+      type: 'frost'
+    };
+    this.engine.frostZones = this.engine.frostZones || [];
+    this.engine.frostZones.push(zone);
+    return zone;
+  }
+
   throwTeleportCoin() {
     const charge = this.teleportCoinCharge || 0;
     const dist = Math.min(20, charge * 0.5);
@@ -3785,6 +3976,10 @@ class PlayerEntity {
         attacker.takeDamage(amount * this.armorReflectRate, this);
         window.game?.showMessage?.('研发护甲触发反弹伤害！', '#b388ff');
       }
+    }
+    // 冰霜被动（霜降）：受伤后在自身位置留下2x2冰霜区域
+    if (this.role === 'FROST' && !this.isDead) {
+      this.createFrostZone(this.pos, 2, 3);
     }
     let actual = Math.max(1, incoming);
     if (this.extraShield > 0) {
@@ -3977,6 +4172,8 @@ class PlayerEntity {
     this.burstPotionTimer = 0;
     this.socialShield = 0;
     this.detectorEnemyCount = 0;
+    this.jetpackTimer = 0;
+    this._frostZoneTime = null;
     this.invulnTimer = 1.5; // 复活后短暂无敌，防止连续死亡
     this.mesh.visible = true;
     if (this.mesh.material) {
