@@ -227,19 +227,7 @@ updateOrientationGate();
 
   <!-- Shop Button -->
   <div id="shopBtn">商店</div>
-  <div id="socialBtn">社交</div>
   <div id="layoutBtn">布局</div>
-
-  <!-- Team Combo -->
-  <div id="comboBar">
-    <div class="combo-title">三人连携</div>
-    <div class="combo-track"><div id="comboFill"></div></div>
-    <div id="comboText">连携 0%</div>
-    <div class="combo-actions">
-      <button id="comboShieldBtn">铁壁</button>
-      <button id="comboAssaultBtn">突袭</button>
-    </div>
-  </div>
 
   <button id="rescueBtn" style="display:none;">救援</button>
 
@@ -287,6 +275,9 @@ updateOrientationGate();
     </div>
     <div id="jumpBtnMobile">跳跃</div>
     <div id="actionBtnMobile">攻击</div>
+    <div id="zoomSlider" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); width:6px; height:100px; background:rgba(255,255,255,0.15); border-radius:3px;">
+      <div id="zoomThumb" style="position:absolute; width:20px; height:20px; background:rgba(255,255,255,0.5); border-radius:50%; left:50%; top:50%; transform:translate(-50%,-50%);"></div>
+    </div>
   </div>
 
   <div id="deathOverlay">
@@ -863,6 +854,7 @@ async function handleRoomKick(reason = '你已离开房间') {
   document.getElementById('roomMembers').innerHTML = '';
   const roomPanel = document.getElementById('roomPanel');
   if (roomPanel) roomPanel.style.display = 'none';
+  document.getElementById('mainMenu').style.display = 'flex';
   setRoomStatus(reason, true);
   updateStartBtn();
 }
@@ -935,7 +927,7 @@ document.getElementById('lobbySettingsBtn').addEventListener('click', () => wind
 document.getElementById('seasonPassBtn')?.addEventListener('click', () => window.seasonPass?.open?.('rewards'));
 document.getElementById('menuSkinShopBtn')?.addEventListener('click', () => window.seasonPass?.openSkinShop?.());
 document.getElementById('skinShopCloseBtn')?.addEventListener('click', () => document.getElementById('skinShopPanel').style.display = 'none');
-document.getElementById('roomPanelCloseBtn')?.addEventListener('click', () => document.getElementById('roomPanel').style.display = 'none');
+document.getElementById('roomPanelCloseBtn')?.addEventListener('click', () => handleRoomKick('已退出房间'));
 document.querySelectorAll('[data-close-panel]').forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1009,6 +1001,8 @@ function openLocalModePanel() {
   const roomPanelMembers = document.getElementById('roomPanelMembers');
   if (roomPanel) {
     roomPanel.style.display = 'flex';
+    document.getElementById('mainMenu').style.display = 'none';
+    closeAllLobbyPanels();
     if (roomPanelTitle) roomPanelTitle.textContent = '本地试玩';
     if (roomPanelCode) roomPanelCode.textContent = '--';
     if (roomStartBtn) {
@@ -1038,6 +1032,8 @@ async function doCreateRoom() {
     const room = await netMgr.createRoom();
     renderRoom();
     document.getElementById('roomPanel').style.display = 'flex';
+    document.getElementById('mainMenu').style.display = 'none';
+    closeAllLobbyPanels();
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '创建房间失败', true);
@@ -1066,6 +1062,8 @@ async function doJoinRoom() {
     await netMgr.joinRoom(code);
     renderRoom();
     document.getElementById('roomPanel').style.display = 'flex';
+    document.getElementById('mainMenu').style.display = 'none';
+    closeAllLobbyPanels();
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '加入房间失败', true);
@@ -1093,6 +1091,8 @@ async function doReconnect() {
     await netMgr.reconnect();
     renderRoom();
     document.getElementById('roomPanel').style.display = 'flex';
+    document.getElementById('mainMenu').style.display = 'none';
+    closeAllLobbyPanels();
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '断线重连失败', true);

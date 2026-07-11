@@ -500,30 +500,18 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   cursor: pointer;
 }
 #shopBtn:active { transform: scale(0.95); }
-#socialBtn {
-  position: absolute; bottom: 82px; left: 16px; width: 56px; height: 42px;
-  border-radius: 14px; background: rgba(179,136,255,0.18); border: 2px solid #b388ff;
-  color: #d9c2ff; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-}
+/* Social button removed */
+/* #socialBtn removed */
 #layoutBtn {
   position: absolute; bottom: 132px; left: 16px; width: 56px; height: 42px;
   border-radius: 14px; background: rgba(139,233,253,0.18); border: 2px solid #8be9fd;
   color: #8be9fd; font-size: 13px; font-weight: bold; display: none; align-items: center; justify-content: center;
   cursor: pointer;
 }
-#socialBtn:active, #layoutBtn:active { transform: scale(0.95); }
-#comboBar {
-  position: absolute; top: 96px; left: 16px; width: 190px; padding: 10px;
-  border-radius: 12px; background: rgba(0,0,0,0.48); border: 1px solid rgba(139,233,253,0.35);
-  color: #fff; font-size: 12px;
-}
-.combo-title { color: #8be9fd; font-weight: bold; margin-bottom: 5px; }
-.combo-track { height: 9px; background: rgba(255,255,255,0.12); border-radius: 8px; overflow: hidden; }
-#comboFill { height: 100%; width: 0%; background: linear-gradient(90deg, #8be9fd, #b388ff); transition: width .2s; }
-#comboText { margin: 5px 0; color: #ddd; }
-.combo-actions { display: flex; gap: 6px; }
-.combo-actions button { flex: 1; border: none; border-radius: 7px; padding: 5px; background: rgba(139,233,253,0.18); color: #8be9fd; cursor: pointer; }
+/* #socialBtn:active removed */
+#layoutBtn:active { transform: scale(0.95); }
+/* Combo bar removed */
+/* #comboBar removed */
 #rescueBtn {
   position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%);
   padding: 12px 24px; border: none; border-radius: 22px; background: linear-gradient(90deg,#8be9fd,#b388ff);
@@ -562,6 +550,11 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .shop-item .cost-jade { color: #00a86b; }
 .shop-item .item-count { color: #8be9fd; margin-left: 6px; }
 .shop-item.disabled { opacity: 0.4; cursor: not-allowed; }
+.shop-buy-controls { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+.shop-buy-1, .shop-buy-max { padding: 4px 10px; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; background: rgba(0,212,255,0.15); color: #00d4ff; font-size: 11px; cursor: pointer; }
+.shop-buy-1:active, .shop-buy-max:active { background: rgba(0,212,255,0.35); }
+.shop-buy-max { background: rgba(255,221,0,0.15); color: #ffdd00; border-color: rgba(255,221,0,0.25); }
+.shop-buy-max:active { background: rgba(255,221,0,0.35); }
 
 /* ========== Backpack Panel ========== */
 #backpackPanel {
@@ -621,7 +614,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 }
 
 /* Mobile Controls */
-#mobileControls { display: none; }
+#mobileControls { display: none; position: relative; }
 #deathOverlay {
   position: fixed; inset: 0; z-index: 220; display: none; align-items: center; justify-content: center;
   pointer-events: none; border: 10px solid rgba(255, 88, 88, 0.42);
@@ -634,9 +627,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 #hud.dead-state #playerStatus,
 #hud.dead-state #hotbar,
 #hud.dead-state #shopBtn,
-#hud.dead-state #socialBtn,
 #hud.dead-state #layoutBtn,
-#hud.dead-state #comboBar,
 #hud.dead-state #rescueBtn,
 #hud.dead-state #skillBtn,
 #hud.dead-state #crosshair,
@@ -677,6 +668,8 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   color: #fff; font-size: 14px; font-weight: bold; z-index: 150; display: flex; align-items: center; justify-content: center;
   text-align: center; box-shadow: 0 0 18px rgba(255,100,100,0.26); touch-action: none;
 }
+#zoomSlider { position:absolute; right:12px; top:50%; transform:translateY(-50%); width:6px; height:100px; background:rgba(255,255,255,0.15); border-radius:3px; z-index:10; }
+#zoomThumb { position:absolute; width:22px; height:22px; background:rgba(255,255,255,0.45); border-radius:50%; left:50%; top:50%; transform:translate(-50%,-50%); cursor:pointer; }
 #actionBtnMobile[data-mode="block"] {
   background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18), rgba(100,255,100,0.22));
   border-color: rgba(100,255,100,0.62);
@@ -1159,7 +1152,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   #hotbar { bottom: 8px; gap: 4px; padding: 5px; max-width: calc(100vw - 130px); overflow-x: auto; }
   .hotbar-slot { width: 42px; height: 42px; font-size: 10px; flex: 0 0 auto; }
   #shopBtn { bottom: 8px; left: 8px; width: 50px; height: 50px; font-size: 12px; }
-  #socialBtn { bottom: 64px; left: 8px; width: 50px; height: 38px; font-size: 12px; }
+  /* #socialBtn removed */
   #layoutBtn { bottom: 108px; left: 8px; width: 50px; height: 38px; font-size: 12px; }
   #joystickZone { bottom: 86px; left: 18px; width: 126px; height: 126px; }
   #joystickBase { width: 126px; height: 126px; }

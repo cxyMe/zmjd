@@ -2954,11 +2954,11 @@ class PlayerEntity {
     if (this.isLocal && !window.game?.input?.isMobile?.()) {
       const blockType = this.getSelectedBlockType();
       if (blockType) {
-        const rc = this.engine.raycastPlacement(window.innerWidth / 2, window.innerHeight / 2, 6);
+        const rc = this.engine.raycastPlacement(window.innerWidth / 2, window.innerHeight / 2, 12);
         if (rc.hit) {
           const px = rc.x, py = rc.y, pz = rc.z;
           const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
-          if (center.distanceTo(this.pos) <= 6.5 && !(Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8)) {
+          if (center.distanceTo(this.pos) <= 10 && !(Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8)) {
             if (!this.placePreviewMesh) {
               const geo = new THREE.BoxGeometry(1, 1, 1);
               const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, wireframe: true });
@@ -3310,19 +3310,31 @@ class PlayerEntity {
     const item = this.getSelectedItem();
     if (!item || item.count <= 0) return;
 
-    const rc = this.engine.raycastPlacement(mobileMode && pointer ? pointer.x : (pointer?.x || window.innerWidth / 2), mobileMode && pointer ? pointer.y : (pointer?.y || window.innerHeight / 2), mobileMode ? 5 : 6);
+    const rc = this.engine.raycastPlacement(mobileMode && pointer ? pointer.x : (pointer?.x || window.innerWidth / 2), mobileMode && pointer ? pointer.y : (pointer?.y || window.innerHeight / 2), mobileMode ? 10 : 12);
     if (rc.hit) {
       const px = rc.x;
       const py = rc.y;
       const pz = rc.z;
       const center = new THREE.Vector3(px + 0.5, py + 0.5, pz + 0.5);
-      if (center.distanceTo(this.pos) > (mobileMode ? 5 : 6.5)) return;
+      if (center.distanceTo(this.pos) > (mobileMode ? 8 : 10)) return;
       if (Math.abs(px - this.pos.x) < 0.8 && Math.abs(py - this.pos.y) < 1.5 && Math.abs(pz - this.pos.z) < 0.8) return;
       const steelBonus = this.role === 'STEEL_BONE' ? 1.2 + (this.steelBuildBonus || 0) : 1;
-      // 检查方块下方是否有支撑（不能悬空放置）
-      const belowKey = this.engine.getBlockKey(px, py - 1, pz);
-      const belowBlock = this.engine.blocks.get(belowKey);
-      if (!belowBlock) return;
+      // 检查放置位置是否有支撑（6面相邻至少一个已有方块，或地面）
+      const hasSupport = (() => {
+        const neighbors = [
+          [px, py - 1, pz], [px, py + 1, pz],
+          [px - 1, py, pz], [px + 1, py, pz],
+          [px, py, pz - 1], [px, py, pz + 1]
+        ];
+        for (const [nx, ny, nz] of neighbors) {
+          const nk = this.engine.getBlockKey(nx, ny, nz);
+          if (this.engine.blocks.has(nk)) return true;
+        }
+        // 检查是否在地面高度（y=0 或有 ground 类型方块）
+        if (py <= 0) return true;
+        return false;
+      })();
+      if (!hasSupport) return;
       if (this.engine.placeBlock(px, py, pz, blockType, this.team, steelBonus, this)) {
         item.count--;
         if (item.count <= 0) this.hotbar[this.hotbarIndex] = null;

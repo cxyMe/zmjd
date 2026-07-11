@@ -93,11 +93,7 @@ class SocialManager {
   }
 
   updateComboUI() {
-    const fill = document.getElementById('comboFill');
-    const text = document.getElementById('comboText');
-    if (!fill || !text) return;
-    fill.style.width = `${Math.min(100, this.comboEnergy)}%`;
-    text.textContent = this.comboCd > 0 ? `冷却 ${Math.ceil(this.comboCd / 60)}分` : this.comboReady ? '连携就绪' : `连携 ${Math.floor(this.comboEnergy)}%`;
+    return; // 三人连携功能已移除
   }
 
   checkChestPlunder(dt) {
@@ -256,7 +252,7 @@ class SocialManager {
   }
 
   castCombo(type = 'shield') {
-    if (!this.comboReady || this.comboCd > 0) return this.game.showMessage('连携能量未就绪', '#ffaa00');
+    return; // 三人连携功能已移除
     const team = this.game.players.filter(p => p.team === this.game.localPlayer.team && !p.isDead);
     if (team.length < 3) return this.game.showMessage('三人齐整才可释放连携技', '#ffaa00');
     if (type === 'assault') {

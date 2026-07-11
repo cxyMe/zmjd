@@ -119,7 +119,7 @@ class HUDLayoutManager {
     this.status = document.getElementById('layoutStatus');
     this.editing = false;
     this.drag = null;
-    this.items = ['resourceBar','gameTimer','teamInfo','minimap','playerStatus','hotbar','shopBtn','socialBtn','layoutBtn','comboBar','skillBtn','rescueBtn','mobileControls'];
+    this.items = ['resourceBar','gameTimer','teamInfo','minimap','playerStatus','hotbar','shopBtn','layoutBtn','skillBtn','rescueBtn','mobileControls'];
     this.defaultKey = 'bedwars_hud_layout_default';
     this.activeKey = 'bedwars_hud_layout_active';
     this.bind();

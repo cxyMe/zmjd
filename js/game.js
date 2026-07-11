@@ -31,7 +31,7 @@ class InputManager {
       }
     });
     document.addEventListener('mousedown', e => {
-      if (e.target.closest?.('#mobileControls, #shopBtn, #socialBtn, #layoutBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel, #buildPanel, #timedAction')) return;
+      if (e.target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel, #buildPanel, #timedAction')) return;
       if (e.button === 0) { this.buttons.attack = true; this.buttons.attackHeld = true; }
       if (e.button === 2) {
         this.buttons.build = true;
@@ -62,7 +62,7 @@ class InputManager {
       this.mouse.locked = !!document.pointerLockElement;
     });
 
-    const isGameUiTarget = (target) => target.closest?.('#mobileControls, #shopBtn, #socialBtn, #layoutBtn, #skillBtn, #comboBar, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel');
+    const isGameUiTarget = (target) => target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel');
     document.addEventListener('touchstart', e => {
       if (!window.game?.gameActive || !this.isMobile()) return;
       if (isGameUiTarget(e.target)) return;
@@ -138,7 +138,7 @@ class InputManager {
       e.preventDefault();
       if (!this.joystick.active) return;
       const t = e.touches[0];
-      const maxR = 36;
+      const maxR = 50;
       let dx = t.clientX - this.joystick.originX;
       let dy = t.clientY - this.joystick.originY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -178,11 +178,43 @@ class InputManager {
       skillBtn.addEventListener('mouseup', e => { e.preventDefault(); this.buttons.skillHeld = false; this.buttons.skill = true; });
       skillBtn.addEventListener('mouseleave', e => { if (this.buttons.skillHeld) { this.buttons.skillHeld = false; this.buttons.skill = true; } });
     }
+
+    // 移动端视角缩放
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomThumb = document.getElementById('zoomThumb');
+    if (zoomSlider && zoomThumb) {
+      let zoomTouch = { active: false, id: null, startY: 0, startFov: 70 };
+      zoomSlider.addEventListener('touchstart', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const t = e.changedTouches[0];
+        zoomTouch.active = true;
+        zoomTouch.id = t.identifier;
+        zoomTouch.startY = t.clientY;
+        zoomTouch.startFov = window.game?.engine?.camera?.fov || 70;
+      }, { passive: false });
+      zoomSlider.addEventListener('touchmove', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (!zoomTouch.active) return;
+        const t = Array.from(e.changedTouches).find(x => x.identifier === zoomTouch.id);
+        if (!t) return;
+        const dy = t.clientY - zoomTouch.startY;
+        // 向上滑=放大(fov减小)，向下滑=缩小(fov增大)
+        const fov = Math.max(40, Math.min(90, zoomTouch.startFov - dy * 0.3));
+        const cam = window.game?.engine?.camera;
+        if (cam) { cam.fov = fov; cam.updateProjectionMatrix(); }
+        const pct = ((90 - fov) / 50) * 100;
+        zoomThumb.style.top = `${50 - pct * 0.5}%`;
+      }, { passive: false });
+      const endZoom = (e) => { zoomTouch.active = false; };
+      zoomSlider.addEventListener('touchend', endZoom);
+      zoomSlider.addEventListener('touchcancel', endZoom);
+    }
   }
 
   getMovement() {
     if (this.isMobile() && this.joystick.active) {
-      return { x: this.joystick.dx, z: -this.joystick.dy };
+      const joyMult = 1.3; // 移动端摇杆灵敏度加成
+      return { x: this.joystick.dx * joyMult, z: -this.joystick.dy * joyMult };
     }
     let x = 0, z = 0;
     if (this.keys['KeyW'] || this.keys['ArrowUp']) z += 1;
@@ -869,7 +901,29 @@ class UIManager {
       const countStr = item.count && item.count > 1 ? `<span class="item-count">获得 x${item.count}</span>` : '';
       div.innerHTML = `<div class="item-name">${item.name}</div><div class="item-desc">${item.desc}</div><div class="item-cost">${costStr}${countStr}</div>`;
       if (!canAfford) div.classList.add('disabled');
-      div.onclick = () => { if (canAfford) this.game.buyItem(key); };
+      if (canAfford) {
+        const buyBtn = document.createElement('div');
+        buyBtn.className = 'shop-buy-controls';
+        buyBtn.innerHTML = `<button class="shop-buy-1" data-key="${key}">x1</button><button class="shop-buy-max" data-key="${key}">最多</button>`;
+        div.appendChild(buyBtn);
+        div.onclick = (e) => {
+          const btn = e.target.closest('[data-key]');
+          if (!btn) return;
+          const k = btn.dataset.key;
+          if (btn.classList.contains('shop-buy-max')) {
+            // 计算最大可购买数量
+            const it = ITEM_DB[k];
+            let maxCount = Infinity;
+            if (it.cost.copper) maxCount = Math.min(maxCount, Math.floor((lp.inv.copper || 0) / it.cost.copper));
+            if (it.cost.silver) maxCount = Math.min(maxCount, Math.floor((lp.inv.silver || 0) / it.cost.silver));
+            if (it.cost.gold) maxCount = Math.min(maxCount, Math.floor((lp.inv.gold || 0) / it.cost.gold));
+            if (it.cost.jade) maxCount = Math.min(maxCount, Math.floor((lp.inv.jade || 0) / it.cost.jade));
+            if (maxCount > 0 && isFinite(maxCount)) this.game.buyItem(k, maxCount);
+          } else {
+            this.game.buyItem(k, 1);
+          }
+        };
+      }
       body.appendChild(div);
     }
   }
@@ -950,9 +1004,6 @@ class Game {
     document.querySelector('.shop-close').onclick = () => this.toggleShop();
     document.getElementById('shopBtn').onclick = () => this.toggleShop();
     document.getElementById('layoutBtn').onclick = () => window.hudLayoutManager?.open();
-    document.getElementById('socialBtn').onclick = () => this.social?.openSocialPanel();
-    document.getElementById('comboShieldBtn').onclick = () => this.social?.castCombo('shield');
-    document.getElementById('comboAssaultBtn').onclick = () => this.social?.castCombo('assault');
     document.getElementById('rescueBtn').onclick = () => this.social?.rescueVoidMate();
     document.querySelectorAll('.growth-tab').forEach(tab => {
       tab.onclick = () => {
@@ -1143,7 +1194,6 @@ class Game {
       document.getElementById('gameOverScreen').style.display = 'none';
       document.getElementById('shopPanel').style.display = 'none';
       document.getElementById('shopBtn').style.display = 'none';
-      document.getElementById('socialBtn').style.display = 'none';
       document.getElementById('skillBtn').style.display = 'none';
       document.getElementById('resourceBar').style.display = 'none';
       document.getElementById('teamInfo').style.display = 'none';
@@ -1750,28 +1800,27 @@ class Game {
     }
   }
 
-  buyItem(key) {
+  buyItem(key, count = 1) {
     const lp = this.localPlayer;
     if (!lp) return;
     const item = ITEM_DB[key];
     if (!item) return;
 
-    // Check cost
-    const cost = {};
-    if (item.cost.copper) cost.copper = item.cost.copper;
-    if (item.cost.silver) cost.silver = item.cost.silver;
-    if (item.cost.gold) cost.gold = item.cost.gold;
-    if (item.cost.jade) cost.jade = item.cost.jade;
+    const totalCost = {};
+    if (item.cost.copper) totalCost.copper = item.cost.copper * count;
+    if (item.cost.silver) totalCost.silver = item.cost.silver * count;
+    if (item.cost.gold) totalCost.gold = item.cost.gold * count;
+    if (item.cost.jade) totalCost.jade = item.cost.jade * count;
 
-    for (const [rk, rv] of Object.entries(cost)) {
+    for (const [rk, rv] of Object.entries(totalCost)) {
       if ((lp.inv[rk] || 0) < rv) return;
     }
-    for (const [rk, rv] of Object.entries(cost)) {
+    for (const [rk, rv] of Object.entries(totalCost)) {
       lp.inv[rk] -= rv;
     }
 
-    lp.addToBackpack(key, item.count || 1);
-    this.network?.logEconomy?.(lp.playerId, 'buy_item', Object.keys(cost)[0], -Object.values(cost)[0], key, lp.pos, Math.floor(this.gameTime));
+    lp.addToBackpack(key, (item.count || 1) * count);
+    this.network?.logEconomy?.(lp.playerId, 'buy_item', Object.keys(totalCost)[0], -Object.values(totalCost)[0], key, lp.pos, Math.floor(this.gameTime));
     if (item.type === 'weapon') {
       lp.equip(key);
     }
