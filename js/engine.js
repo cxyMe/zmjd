@@ -1774,206 +1774,434 @@ function generateTwilightForest(engine) {
   return gens;
 }
 
-function generateSecretKillerMap(engine) {
+// ============================================
+// 密室杀手地图系统：3个地图 + 随机选择
+// ============================================
+
+const SECRET_KILLER_MAPS = [
+  {
+    id: 'sk_abandoned_mansion',
+    name: '废弃庄园',
+    generate: generateSKMap_AbandonedMansion
+  },
+  {
+    id: 'sk_underground_lab',
+    name: '地下实验室',
+    generate: generateSKMap_UndergroundLab
+  },
+  {
+    id: 'sk_cursed_temple',
+    name: '诅咒神殿',
+    generate: generateSKMap_CursedTemple
+  }
+];
+
+function generateSecretKillerMap(engine, mapIndex) {
+  // mapIndex 可选，不传则随机选择
+  let idx = mapIndex;
+  if (idx === undefined || idx === null) {
+    idx = Math.floor(Math.random() * SECRET_KILLER_MAPS.length);
+  }
+  const mapDef = SECRET_KILLER_MAPS[idx];
+  engine.skMapIndex = idx;
+  engine.skMapId = mapDef.id;
+  engine.skMapName = mapDef.name;
+  return mapDef.generate(engine);
+}
+
+// ============================================
+// 地图1：废弃庄园（64x64，双层建筑，多个房间）
+// ============================================
+function generateSKMap_AbandonedMansion(engine) {
   const geo = new THREE.BoxGeometry(1, 1, 1);
   engine.tidalIslands = [];
   engine.temporaryGens = [];
 
-  const wallColor = 0x666666;
-  const floorColor = 0x333333;
-  const cornerFloorColors = [0x884444, 0x444488, 0x448844, 0x888844];
-  const centerFloorColor = 0x555577;
-  const corridorColor = 0x444444;
+  const wallColor = 0x5c4033;
+  const floorColor1 = 0x8B7355;
+  const floorColor2 = 0x6B5B45;
+  const carpetColor = 0x8B0000;
+  const stairsColor = 0x654321;
   const crateColor = 0x8B6914;
-  const pillarColor = 0x777777;
-  const tableColor = 0x6B4226;
-  const fragmentMarkerColor = 0x00ffff;
+  const pillarColor = 0x4a3728;
 
-  // Fragment spawn points
   const fragmentPoints = [
-    { x: -20, y: 1, z: 0 },
-    { x: 20, y: 1, z: 0 },
-    { x: 0, y: 1, z: -20 },
-    { x: 0, y: 1, z: 20 },
-    { x: 0, y: 1, z: -8 }
+    { x: -25, y: 1, z: -25 }, { x: 25, y: 1, z: -25 },
+    { x: -25, y: 1, z: 25 },  { x: 25, y: 1, z: 25 },
+    { x: 0, y: 1, z: 0 },
+    { x: -20, y: 5, z: 0 },  { x: 20, y: 5, z: 0 }
   ];
 
   engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
-
-  // 使用 engine 级别的 spawn 覆盖，不修改全局 TEAMS 常量
   engine.skSpawn = new THREE.Vector3(0, 3, 0);
 
-  function placeBlock(x, y, z, color, type = 'ground') {
+  function pb(x, y, z, color, type = 'ground') {
     const mat = new THREE.MeshLambertMaterial({ color });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, z);
     if (type === 'ground') mesh.receiveShadow = true;
     else mesh.castShadow = true;
     engine.scene.add(mesh);
-    const key = engine.getBlockKey(x, y, z);
-    engine.blocks.set(key, { mesh, type, hp: 9999, maxHp: 9999 });
-    return mesh;
+    engine.blocks.set(engine.getBlockKey(x, y, z), { mesh, type, hp: 9999, maxHp: 9999 });
   }
 
-  // Floor: -29 to 29 on X and Z at y=0
-  for (let x = -29; x <= 29; x++) {
-    for (let z = -29; z <= 29; z++) {
-      placeBlock(x, 0, z, floorColor);
+  // 一楼地面：-30到30
+  for (let x = -30; x <= 30; x++) {
+    for (let z = -30; z <= 30; z++) {
+      pb(x, 0, z, (Math.abs(x + z) % 2 === 0) ? floorColor1 : floorColor2);
     }
   }
 
-  // Corner rooms: 10x10 colored floors
-  // Room at (-24,-24): covers -29 to -19
-  // Room at (-24,24): covers -29 to -19 on x, 19 to 29 on z
-  // Room at (24,-24): covers 19 to 29 on x, -29 to -19 on z
-  // Room at (24,24): covers 19 to 29 on both
-  const cornerRooms = [
-    { cx: -24, cz: -24, color: cornerFloorColors[0] },
-    { cx: -24, cz: 24, color: cornerFloorColors[1] },
-    { cx: 24, cz: -24, color: cornerFloorColors[2] },
-    { cx: 24, cz: 24, color: cornerFloorColors[3] }
+  // 外墙
+  for (let y = 0; y <= 8; y++) {
+    for (let i = -30; i <= 30; i++) {
+      pb(i, y, -30, wallColor); pb(i, y, 30, wallColor);
+      pb(-30, y, i, wallColor); pb(30, y, i, wallColor);
+    }
+  }
+
+  // 内墙分割房间 - 十字走廊（留4格宽通道）
+  // X方向内墙：z=-10和z=10（留走廊x=-4到4）
+  for (let y = 1; y <= 6; y++) {
+    for (let x = -30; x <= 30; x++) {
+      if (x >= -4 && x <= 4) continue; // 走廊
+      // 门洞：每隔8格留2格
+      if ((Math.abs(x) % 10 < 2)) continue;
+      pb(x, y, -10, wallColor); pb(x, y, 10, wallColor);
+    }
+  }
+  // Z方向内墙：x=-10和x=10（留走廊z=-4到4）
+  for (let y = 1; y <= 6; y++) {
+    for (let z = -30; z <= 30; z++) {
+      if (z >= -4 && z <= 4) continue;
+      if ((Math.abs(z) % 10 < 2)) continue;
+      pb(-10, y, z, wallColor); pb(10, y, z, wallColor);
+    }
+  }
+
+  // 二楼平台（中央区域 x=-15..15, z=-15..15）
+  for (let x = -15; x <= 15; x++) {
+    for (let z = -15; z <= 15; z++) {
+      pb(x, 4, z, floorColor2);
+    }
+  }
+
+  // 二楼外墙
+  for (let y = 5; y <= 8; y++) {
+    for (let i = -15; i <= 15; i++) {
+      pb(i, y, -15, wallColor); pb(i, y, 15, wallColor);
+      pb(-15, y, i, wallColor); pb(15, y, i, wallColor);
+    }
+  }
+  // 二楼门洞
+  for (let x = -2; x <= 2; x++) { pb(x, 5, -15, 0); pb(x, 6, -15, 0); pb(x, 7, -15, 0); pb(x, 8, -15, 0); }
+  for (let x = -2; x <= 2; x++) { pb(x, 5, 15, 0); pb(x, 6, 15, 0); pb(x, 7, 15, 0); pb(x, 8, 15, 0); }
+  for (let z = -2; z <= 2; z++) { pb(-15, 5, z, 0); pb(-15, 6, z, 0); pb(-15, 7, z, 0); pb(-15, 8, z, 0); }
+  for (let z = -2; z <= 2; z++) { pb(15, 5, z, 0); pb(15, 6, z, 0); pb(15, 7, z, 0); pb(15, 8, z, 0); }
+
+  // 楼梯（四角各一个）
+  const stairPositions = [{ x: -14, z: -14 }, { x: 14, z: -14 }, { x: -14, z: 14 }, { x: 14, z: 14 }];
+  for (const sp of stairPositions) {
+    for (let i = 0; i < 4; i++) {
+      pb(sp.x, 1 + i, sp.z, stairsColor);
+    }
+  }
+
+  // 装饰：箱子
+  const crates = [
+    { x: -25, z: -25 }, { x: -22, z: -20 }, { x: 22, z: -25 }, { x: 25, z: -20 },
+    { x: -25, z: 22 }, { x: -20, z: 25 }, { x: 25, z: 22 }, { x: 20, z: 25 },
+    { x: -8, z: -8 }, { x: 8, z: -8 }, { x: -8, z: 8 }, { x: 8, z: 8 }
   ];
-
-  for (const room of cornerRooms) {
-    const xMin = room.cx - 5, xMax = room.cx + 5;
-    const zMin = room.cz - 5, zMax = room.cz + 5;
-    for (let x = xMin; x <= xMax; x++) {
-      for (let z = zMin; z <= zMax; z++) {
-        placeBlock(x, 0, z, room.color);
-      }
+  for (const c of crates) {
+    for (let dx = 0; dx < 2; dx++) for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) {
+      pb(c.x + dx, 1 + dy, c.z + dz, crateColor);
     }
   }
 
-  // Center room: 12x12 at (0,0)
-  for (let x = -6; x <= 6; x++) {
-    for (let z = -6; z <= 6; z++) {
-      placeBlock(x, 0, z, centerFloorColor);
-    }
-  }
+  // 地毯（中央大厅）
+  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) pb(x, 0.01, z, carpetColor);
 
-  // Corridors connecting rooms (4 wide)
-  // North corridor: center to (-24, -24) top edge, and center to (24, -24) top edge
-  // Corridor X-axis: z from -2 to 2, x from -29 to 29
-  for (let x = -29; x <= 29; x++) {
-    for (let z = -2; z <= 2; z++) {
-      if (x >= -6 && x <= 6 && z >= -6 && z <= 6) continue; // skip center room
-      placeBlock(x, 0, z, corridorColor);
-    }
-  }
-  // Corridor Z-axis: x from -2 to 2, z from -29 to 29
-  for (let z = -29; z <= 29; z++) {
-    for (let x = -2; x <= 2; x++) {
-      if (x >= -6 && x <= 6 && z >= -6 && z <= 6) continue; // skip center room
-      placeBlock(x, 0, z, corridorColor);
-    }
-  }
-
-  // Walls: perimeter -32 to 32, 3 blocks thick, y=0..7
-  for (let y = 0; y <= 7; y++) {
-    for (let i = -32; i <= 32; i++) {
-      // North wall (z = -30, -31, -32)
-      placeBlock(i, y, -30, wallColor);
-      placeBlock(i, y, -31, wallColor);
-      placeBlock(i, y, -32, wallColor);
-      // South wall (z = 30, 31, 32)
-      placeBlock(i, y, 30, wallColor);
-      placeBlock(i, y, 31, wallColor);
-      placeBlock(i, y, 32, wallColor);
-      // West wall (x = -30, -31, -32)
-      placeBlock(-30, y, i, wallColor);
-      placeBlock(-31, y, i, wallColor);
-      placeBlock(-32, y, i, wallColor);
-      // East wall (x = 30, 31, 32)
-      placeBlock(30, y, i, wallColor);
-      placeBlock(31, y, i, wallColor);
-      placeBlock(32, y, i, wallColor);
-    }
-  }
-
-  // Decorative obstacles: crates, pillars, tables in rooms
-  // Crates (2x2x2) in corner rooms
-  const cratePositions = [
-    { x: -27, z: -27 }, { x: -22, z: -21 },
-    { x: -27, z: 27 }, { x: -22, z: 21 },
-    { x: 27, z: -27 }, { x: 22, z: -21 },
-    { x: 27, z: 27 }, { x: 22, z: 21 }
-  ];
-  for (const cp of cratePositions) {
-    for (let dx = 0; dx < 2; dx++) {
-      for (let dz = 0; dz < 2; dz++) {
-        for (let dy = 0; dy < 2; dy++) {
-          placeBlock(cp.x + dx, 1 + dy, cp.z + dz, crateColor);
-        }
-      }
-    }
-  }
-
-  // Pillars (1x4x1) in corner rooms and center room
-  const pillarPositions = [
-    { x: -25, z: -22 }, { x: -22, z: -25 },
-    { x: -25, z: 22 }, { x: -22, z: 25 },
-    { x: 25, z: -22 }, { x: 22, z: -25 },
-    { x: 25, z: 22 }, { x: 22, z: 25 },
-    { x: -5, z: -5 }, { x: 5, z: -5 }, { x: -5, z: 5 }, { x: 5, z: 5 }
-  ];
-  for (const pp of pillarPositions) {
-    for (let dy = 0; dy < 4; dy++) {
-      placeBlock(pp.x, 1 + dy, pp.z, pillarColor);
-    }
-  }
-
-  // Tables (1x1x1 blocks at y=1) scattered around
-  const tablePositions = [
-    { x: -24, z: -20 }, { x: -20, z: -24 },
-    { x: -24, z: 20 }, { x: -20, z: 24 },
-    { x: 24, z: -20 }, { x: 20, z: -24 },
-    { x: 24, z: 20 }, { x: 20, z: 24 },
-    { x: 0, z: -3 }, { x: 3, z: 0 }, { x: 0, z: 3 }, { x: -3, z: 0 }
-  ];
-  for (const tp of tablePositions) {
-    placeBlock(tp.x, 1, tp.z, tableColor);
-  }
-
-  // Fragment spawn markers: glowing diamond shapes
+  // 碎片标记
   const diamondGeo = new THREE.OctahedronGeometry(0.6, 0);
   for (const fp of fragmentPoints) {
-    const mat = new THREE.MeshLambertMaterial({
-      color: fragmentMarkerColor,
-      emissive: fragmentMarkerColor,
-      emissiveIntensity: 0.8,
-      transparent: true,
-      opacity: 0.85
-    });
+    const mat = new THREE.MeshLambertMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 });
     const marker = new THREE.Mesh(diamondGeo, mat);
     marker.position.set(fp.x, fp.y + 1.5, fp.z);
-    marker.castShadow = true;
     engine.scene.add(marker);
-    // Point light at each fragment point for glow
-    const light = new THREE.PointLight(0x00ffff, 1.2, 8);
+    const light = new THREE.PointLight(0x00ffff, 1.2, 10);
     light.position.set(fp.x, fp.y + 2, fp.z);
     engine.scene.add(light);
   }
 
-  // Lighting: ambient + 4 warm point lights in corner rooms
-  const ambientLight = new THREE.AmbientLight(0x404050, 0.6);
-  engine.scene.add(ambientLight);
-
-  const cornerLightPositions = [
-    { x: -24, z: -24, color: 0xff8844 },
-    { x: -24, z: 24, color: 0x4488ff },
-    { x: 24, z: -24, color: 0x44ff88 },
-    { x: 24, z: 24, color: 0xffff44 }
+  // 灯光
+  const amb = new THREE.AmbientLight(0x302518, 0.8);
+  engine.scene.add(amb);
+  const lights = [
+    { x: -20, z: -20, c: 0xff6633 }, { x: 20, z: -20, c: 0x3366ff },
+    { x: -20, z: 20, c: 0x33ff66 }, { x: 20, z: 20, c: 0xffcc33 },
+    { x: 0, z: 0, c: 0xff9944 }, { x: -12, z: 0, c: 0xcc66ff }, { x: 12, z: 0, c: 0x66ccff }
   ];
-  for (const cl of cornerLightPositions) {
-    const light = new THREE.PointLight(cl.color, 1.5, 18);
-    light.position.set(cl.x, 5, cl.z);
+  for (const l of lights) {
+    const pl = new THREE.PointLight(l.c, 1.8, 22);
+    pl.position.set(l.x, 5, l.z);
+    engine.scene.add(pl);
+  }
+
+  engine.triggerDreamTide = function(gensRef) {};
+  return [];
+}
+
+// ============================================
+// 地图2：地下实验室（48x48，走廊+实验舱）
+// ============================================
+function generateSKMap_UndergroundLab(engine) {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  engine.tidalIslands = [];
+  engine.temporaryGens = [];
+
+  const wallColor = 0x3a3a4a;
+  const floorColor = 0x2a2a35;
+  const tileColor = 0x3a4a5a;
+  const labColor = 0x2a4a3a;
+  const pipeColor = 0x555566;
+  const glassColor = 0x4488aa;
+
+  const fragmentPoints = [
+    { x: -18, y: 1, z: -18 }, { x: 18, y: 1, z: -18 },
+    { x: -18, y: 1, z: 18 },  { x: 18, y: 1, z: 18 },
+    { x: 0, y: 1, z: 0 },
+    { x: -12, y: 1, z: 0 },  { x: 12, y: 1, z: 0 }
+  ];
+
+  engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
+  engine.skSpawn = new THREE.Vector3(0, 3, 0);
+
+  function pb(x, y, z, color, type = 'ground') {
+    const mat = new THREE.MeshLambertMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    if (type === 'ground') mesh.receiveShadow = true;
+    else mesh.castShadow = true;
+    engine.scene.add(mesh);
+    engine.blocks.set(engine.getBlockKey(x, y, z), { mesh, type, hp: 9999, maxHp: 9999 });
+  }
+
+  // 地面
+  for (let x = -22; x <= 22; x++) {
+    for (let z = -22; z <= 22; z++) {
+      pb(x, 0, z, (x + z) % 3 === 0 ? tileColor : floorColor);
+    }
+  }
+
+  // 外墙
+  for (let y = 0; y <= 7; y++) {
+    for (let i = -22; i <= 22; i++) {
+      pb(i, y, -22, wallColor); pb(i, y, 22, wallColor);
+      pb(-22, y, i, wallColor); pb(22, y, i, wallColor);
+    }
+  }
+
+  // H型走廊结构
+  // 主走廊：x方向 z=-2..2
+  for (let z = -2; z <= 2; z++) for (let x = -22; x <= 22; x++) pb(x, 0, z, tileColor);
+  // 主走廊：z方向 x=-2..2
+  for (let x = -2; x <= 2; x++) for (let z = -22; z <= 22; z++) pb(x, 0, z, tileColor);
+
+  // 实验舱（6个）: 8x8房间
+  const rooms = [
+    { cx: -14, cz: -14 }, { cx: 14, cz: -14 },
+    { cx: -14, cz: 14 },  { cx: 14, cz: 14 },
+    { cx: -14, cz: 0 },   { cx: 14, cz: 0 }
+  ];
+  for (const r of rooms) {
+    // 房间地板
+    for (let x = r.cx - 4; x <= r.cx + 4; x++) {
+      for (let z = r.cz - 4; z <= r.cz + 4; z++) {
+        pb(x, 0, z, labColor);
+      }
+    }
+    // 房间墙壁（留门洞朝走廊）
+    for (let y = 1; y <= 5; y++) {
+      for (let d = -4; d <= 4; d++) {
+        if (Math.abs(d) <= 1) continue; // 门洞
+        if (r.cx < 0) { pb(r.cx + 4, y, r.cz + d, wallColor); } // 右墙
+        else { pb(r.cx - 4, y, r.cz + d, wallColor); } // 左墙
+        // 上下墙
+        if (r.cz < 0) { pb(r.cx + d, y, r.cz + 4, wallColor); }
+        else if (r.cz > 0) { pb(r.cx + d, y, r.cz - 4, wallColor); }
+      }
+    }
+  }
+
+  // 管道装饰（天花板上）
+  for (let i = -20; i <= 20; i += 5) {
+    pb(i, 6, -3, pipeColor); pb(i, 6, 3, pipeColor);
+    pb(-3, 6, i, pipeColor); pb(3, 6, i, pipeColor);
+  }
+
+  // 碎片标记
+  const diamondGeo = new THREE.OctahedronGeometry(0.6, 0);
+  for (const fp of fragmentPoints) {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 });
+    const marker = new THREE.Mesh(diamondGeo, mat);
+    marker.position.set(fp.x, fp.y + 1.5, fp.z);
+    engine.scene.add(marker);
+    const light = new THREE.PointLight(0x00ff88, 1.2, 10);
+    light.position.set(fp.x, fp.y + 2, fp.z);
     engine.scene.add(light);
   }
 
-  // Dream tide no-op
-  engine.triggerDreamTide = function(gensRef) {};
+  // 冷色灯光
+  engine.scene.add(new THREE.AmbientLight(0x1a1a2e, 0.7));
+  const labLights = [
+    { x: -14, z: -14, c: 0x00ffcc }, { x: 14, z: -14, c: 0x00ccff },
+    { x: -14, z: 14, c: 0xcc00ff }, { x: 14, z: 14, c: 0xffcc00 },
+    { x: 0, z: 0, c: 0x4488ff }, { x: -14, z: 0, c: 0x00ff88 }, { x: 14, z: 0, c: 0xff4488 }
+  ];
+  for (const l of labLights) {
+    const pl = new THREE.PointLight(l.c, 1.5, 18);
+    pl.position.set(l.x, 4, l.z);
+    engine.scene.add(pl);
+  }
 
-  // NO resource generators, NO beds, NO teams (FFA)
+  engine.triggerDreamTide = function(gensRef) {};
+  return [];
+}
+
+// ============================================
+// 地图3：诅咒神殿（80x80，露天+神殿内部）
+// ============================================
+function generateSKMap_CursedTemple(engine) {
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  engine.tidalIslands = [];
+  engine.temporaryGens = [];
+
+  const stoneColor = 0x555555;
+  const stoneDark = 0x3a3a3a;
+  const sandColor = 0xc2b280;
+  const grassColor = 0x4a6b3a;
+  const waterColor = 0x2244aa;
+  const goldColor = 0xdaa520;
+  const pillarColor = 0x666666;
+
+  const fragmentPoints = [
+    { x: -30, y: 1, z: -30 }, { x: 30, y: 1, z: -30 },
+    { x: -30, y: 1, z: 30 },  { x: 30, y: 1, z: 30 },
+    { x: 0, y: 1, z: 0 },
+    { x: -20, y: 1, z: 0 },  { x: 20, y: 1, z: 0 },
+    { x: 0, y: 1, z: -20 }, { x: 0, y: 1, z: 20 }
+  ];
+
+  engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
+  engine.skSpawn = new THREE.Vector3(0, 3, 0);
+
+  function pb(x, y, z, color, type = 'ground') {
+    const mat = new THREE.MeshLambertMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    if (type === 'ground') mesh.receiveShadow = true;
+    else mesh.castShadow = true;
+    engine.scene.add(mesh);
+    engine.blocks.set(engine.getBlockKey(x, y, z), { mesh, type, hp: 9999, maxHp: 9999 });
+  }
+
+  // 地面：80x80 草地+沙地
+  for (let x = -38; x <= 38; x++) {
+    for (let z = -38; z <= 38; z++) {
+      const dist = Math.sqrt(x * x + z * z);
+      if (dist > 38) continue; // 圆形边界
+      const color = dist < 15 ? sandColor : (dist < 25 ? grassColor : (Math.random() > 0.5 ? grassColor : sandColor));
+      pb(x, 0, z, color);
+    }
+  }
+
+  // 护城河（环形水）
+  for (let x = -38; x <= 38; x++) {
+    for (let z = -38; z <= 38; z++) {
+      const dist = Math.sqrt(x * x + z * z);
+      if (dist >= 14 && dist <= 16) {
+        pb(x, -1, z, waterColor);
+      }
+    }
+  }
+
+  // 中央神殿 (12x12)
+  for (let x = -10; x <= 10; x++) {
+    for (let z = -10; z <= 10; z++) {
+      pb(x, 1, z, stoneColor); // 神殿地面抬高
+    }
+  }
+
+  // 神殿柱子（12根圆柱，4格高）
+  const templePillars = [
+    { x: -9, z: -9 }, { x: -3, z: -9 }, { x: 3, z: -9 }, { x: 9, z: -9 },
+    { x: -9, z: 9 },  { x: -3, z: 9 },  { x: 3, z: 9 },  { x: 9, z: 9 },
+    { x: -9, z: 0 },  { x: 9, z: 0 }
+  ];
+  for (const pp of templePillars) {
+    for (let y = 2; y <= 6; y++) {
+      pb(pp.x, y, pp.z, pillarColor);
+    }
+  }
+
+  // 神殿内部圣坛
+  for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) pb(x, 2, z, goldColor);
+
+  // 外围废墟墙（断壁残垣）
+  const ruins = [
+    { x: -25, z: -25, w: 8, h: 4 }, { x: 20, z: -20, w: 6, h: 3 },
+    { x: -22, z: 20, w: 10, h: 5 }, { x: 25, z: 25, w: 7, h: 3 },
+    { x: -30, z: 0, w: 5, h: 3 }, { x: 30, z: 0, w: 5, h: 4 }
+  ];
+  for (const r of ruins) {
+    for (let y = 1; y <= r.h; y++) {
+      for (let d = 0; d < r.w; d++) {
+        if (Math.random() > 0.7) continue; // 随机缺口
+        pb(r.x + d, y, r.z, stoneDark);
+      }
+    }
+  }
+
+  // 外围边界墙
+  for (let y = 0; y <= 6; y++) {
+    for (let a = 0; a < 360; a += 1) {
+      const rad = a * Math.PI / 180;
+      const px = Math.round(Math.cos(rad) * 38);
+      const pz = Math.round(Math.sin(rad) * 38);
+      if (y === 0 || Math.random() > 0.3) { // 顶部稀疏
+        pb(px, y, pz, stoneDark);
+      }
+    }
+  }
+
+  // 碎片标记
+  const diamondGeo = new THREE.OctahedronGeometry(0.7, 0);
+  for (const fp of fragmentPoints) {
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 0.9, transparent: true, opacity: 0.85 });
+    const marker = new THREE.Mesh(diamondGeo, mat);
+    marker.position.set(fp.x, fp.y + 2, fp.z);
+    engine.scene.add(marker);
+    const light = new THREE.PointLight(0xffaa00, 1.5, 12);
+    light.position.set(fp.x, fp.y + 3, fp.z);
+    engine.scene.add(light);
+  }
+
+  // 灯光：月光效果
+  engine.scene.add(new THREE.AmbientLight(0x1a1a30, 0.6));
+  engine.scene.add(new THREE.DirectionalLight(0x8888ff, 0.5).translateY(50));
+  const templeLights = [
+    { x: 0, z: 0, c: 0xffcc44 }, { x: -25, z: -25, c: 0xff6644 },
+    { x: 25, z: -25, c: 0x44aaff }, { x: -25, z: 25, c: 0x44ff88 },
+    { x: 25, z: 25, c: 0xff88cc }
+  ];
+  for (const l of templeLights) {
+    const pl = new THREE.PointLight(l.c, 1.5, 25);
+    pl.position.set(l.x, 6, l.z);
+    engine.scene.add(pl);
+  }
+
+  engine.triggerDreamTide = function(gensRef) {};
   return [];
 }
 
