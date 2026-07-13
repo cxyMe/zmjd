@@ -922,6 +922,11 @@ document.getElementById('workshopBtn').addEventListener('click', () => {
 });
 document.getElementById('workshopClose').addEventListener('click', () => {
   document.getElementById('workshopPanel').style.display = 'none';
+  if (window.game?.engine?.mapEditor?.active) {
+    window.game.engine.mapEditor.deactivate();
+    const mt = document.getElementById('mapEditorTools');
+    if (mt) mt.style.display = 'none';
+  }
 });
 
 // 创作工坊标签切换
@@ -991,10 +996,81 @@ document.getElementById('ruleTestBtn').addEventListener('click', () => {
   document.getElementById('playOptionsPanel').style.display = 'flex';
 });
 
+// 角色配置
+function renderRoleConfig() {
+  const list = document.getElementById('roleConfigList');
+  if (!list || typeof ROLES === 'undefined') return;
+  const overrides = {};
+  try { Object.assign(overrides, JSON.parse(localStorage.getItem('bedwars_role_overrides') || '{}')); } catch (_) {}
+  
+  list.innerHTML = '';
+  for (const [key, role] of Object.entries(ROLES)) {
+    const ov = overrides[key] || {};
+    const div = document.createElement('div');
+    div.className = 'role-config-item';
+    div.innerHTML = `
+      <div class="role-config-header">
+        <span class="role-config-name">${escapeHtml(role.name)}</span>
+        <span class="role-config-info">${escapeHtml(role.passive?.name || '')} / ${escapeHtml(role.active?.name || '')}</span>
+      </div>
+      <div class="role-config-fields">
+        <div class="rule-row">
+          <label>生命上限</label>
+          <input type="number" data-role="${key}" data-field="hp" value="${ov.hp !== undefined ? ov.hp : role.hp}" min="20" max="200">
+        </div>
+        <div class="rule-row">
+          <label>技能冷却（秒）</label>
+          <input type="number" data-role="${key}" data-field="skillCd" value="${ov.skillCd !== undefined ? ov.skillCd : (role.active?.cd || 30)}" min="1" max="120">
+        </div>
+        <div class="rule-row">
+          <label>启用</label>
+          <input type="checkbox" data-role="${key}" data-field="enabled" ${ov.enabled !== false ? 'checked' : ''}>
+        </div>
+      </div>
+    `;
+    list.appendChild(div);
+  }
+}
+
+document.getElementById('roleConfigSaveBtn')?.addEventListener('click', () => {
+  const overrides = {};
+  document.querySelectorAll('#roleConfigList input').forEach(input => {
+    const rk = input.dataset.role;
+    const field = input.dataset.field;
+    if (!rk || !field) return;
+    if (!overrides[rk]) overrides[rk] = {};
+    if (field === 'enabled') {
+      overrides[rk][field] = input.checked;
+    } else {
+      overrides[rk][field] = parseFloat(input.value);
+    }
+  });
+  if (typeof saveRoleOverrides === 'function') {
+    saveRoleOverrides(overrides);
+  } else {
+    localStorage.setItem('bedwars_role_overrides', JSON.stringify(overrides));
+  }
+  setAuthStatus('角色配置已保存！');
+});
+
+document.getElementById('roleConfigResetBtn')?.addEventListener('click', () => {
+  localStorage.removeItem('bedwars_role_overrides');
+  GAME_RULES.roleOverrides = {};
+  renderRoleConfig();
+  setAuthStatus('角色配置已恢复默认');
+});
+
+// 标签页切换时渲染角色配置
+document.querySelectorAll('.workshop-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.tab === 'roles') renderRoleConfig();
+  });
+});
+
 // 加载规则UI
 function loadRuleUI() {
-  let rules = {};
-  try { rules = JSON.parse(localStorage.getItem('bedwars_custom_rules') || '{}'); } catch (_) {}
+  let rules = (typeof GAME_RULES !== 'undefined') ? { ...GAME_RULES } : {};
+  try { Object.assign(rules, JSON.parse(localStorage.getItem('bedwars_custom_rules') || '{}')); } catch (_) {}
   document.getElementById('ruleWinCondition').value = rules.winCondition || 'last_team_standing';
   document.getElementById('ruleScoreTarget').value = rules.scoreTarget || 50;
   document.getElementById('ruleGameDuration').value = Math.floor((rules.gameDuration || 1800) / 60);
@@ -1039,7 +1115,7 @@ function loadRuleUI() {
       : maps.map((m, i) => `<div class="map-list-item" data-idx="${i}"><span>${escapeHtml(m.name || '未命名')}</span><button class="map-del-btn" data-idx="${i}">删除</button></div>`).join('');
     list.querySelectorAll('.map-list-item').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.classList.contains('map-del-btn')) return;
+        if (e.target.closest?.('.map-del-btn')) return;
         const idx = parseInt(el.dataset.idx);
         const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
         if (raw[idx]) {
@@ -1080,12 +1156,20 @@ function loadRuleUI() {
     mapEditorSaveBtn.addEventListener('click', () => {
       if (!window.game?.engine?.mapEditor) return;
       const data = window.game.engine.mapEditor.exportMap();
-      data.name = prompt('地图名称：', data.name) || data.name;
+      data.name = (prompt('地图名称：', data.name) || data.name).slice(0, 50);
       const maps = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
       maps.push(data);
-      localStorage.setItem('bedwars_custom_maps', JSON.stringify(maps));
-      refreshMapList();
-      setAuthStatus('地图已保存！');
+      try {
+        localStorage.setItem('bedwars_custom_maps', JSON.stringify(maps));
+        refreshMapList();
+        setAuthStatus('地图已保存！');
+      } catch (e) {
+        if (e.name === 'QuotaExceededError' || e.code === 22) {
+          setAuthStatus('存储空间不足，请删除部分地图后重试', true);
+        } else {
+          setAuthStatus('保存失败：' + e.message, true);
+        }
+      }
     });
   }
   if (mapEditorLoadBtn) {
@@ -1528,7 +1612,6 @@ document.getElementById('dissolveRoomBtn').addEventListener('click', async () =>
                 <option value="iron_plate">铁板</option>
                 <option value="titanium">钛板</option>
                 <option value="blast_glass">防爆玻璃</option>
-                <option value="ground">地面</option>
               </select>
             </div>
             <div class="editor-tool-row">
@@ -1546,9 +1629,14 @@ document.getElementById('dissolveRoomBtn').addEventListener('click', async () =>
       
       <!-- 角色配置占位 -->
       <div class="workshop-section" id="workshopRoles" style="display:none;">
-        <div class="role-workshop-intro">
+        <div class="role-config-intro">
           <h3>角色配置</h3>
-          <p>自定义角色功能开发中，敬请期待...</p>
+          <p>调整角色的生命值和技能冷却时间。</p>
+          <div id="roleConfigList" class="role-config-list"></div>
+          <div class="workshop-actions">
+            <button class="small-btn" id="roleConfigSaveBtn">保存配置</button>
+            <button class="small-btn secondary" id="roleConfigResetBtn">恢复默认</button>
+          </div>
         </div>
       </div>
     </div>

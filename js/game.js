@@ -23,6 +23,8 @@ class InputManager {
           window.game.engine.mapEditor.deactivate();
           document.getElementById('workshopPanel').style.display = 'flex';
           document.getElementById('hud').style.display = 'none';
+          const mapEditorTools = document.getElementById('mapEditorTools');
+          if (mapEditorTools) mapEditorTools.style.display = 'none';
           e.preventDefault();
         }
         if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) {

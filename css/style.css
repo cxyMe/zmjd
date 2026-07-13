@@ -1354,3 +1354,9 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .editor-tool-row select, .editor-tool-row input[type="range"] { width: 140px; }
 .editor-hint { margin-top: 10px; padding: 8px; background: rgba(0,212,255,0.05); border-radius: 6px; }
 .editor-hint p { color: #88aabb; font-size: 11px; margin: 2px 0; }
+.role-config-list { max-height: 400px; overflow-y: auto; }
+.role-config-item { margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+.role-config-header { margin-bottom: 8px; }
+.role-config-name { color: #00d4ff; font-size: 14px; font-weight: bold; }
+.role-config-info { color: #888; font-size: 11px; margin-left: 8px; }
+.role-config-fields { padding-left: 8px; }

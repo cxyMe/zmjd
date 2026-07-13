@@ -122,6 +122,9 @@ const DEFAULT_GAME_RULES = {
   enableGrowth: true,
   growthSpeed: 1.0,
   aiCount: 4,
+
+  // 角色配置
+  roleOverrides: {},
 };
 
 let GAME_RULES = JSON.parse(JSON.stringify(DEFAULT_GAME_RULES));
@@ -129,7 +132,12 @@ let GAME_RULES = JSON.parse(JSON.stringify(DEFAULT_GAME_RULES));
 function loadCustomRules() {
   try {
     const saved = JSON.parse(localStorage.getItem('bedwars_custom_rules') || '{}');
-    GAME_RULES = { ...DEFAULT_GAME_RULES, ...saved };
+    GAME_RULES = {
+      ...DEFAULT_GAME_RULES,
+      ...saved,
+      resourceSpawnRates: { ...DEFAULT_GAME_RULES.resourceSpawnRates, ...(saved.resourceSpawnRates || {}) },
+      initialResources: { ...DEFAULT_GAME_RULES.initialResources, ...(saved.initialResources || {}) }
+    };
   } catch (_) {
     GAME_RULES = JSON.parse(JSON.stringify(DEFAULT_GAME_RULES));
   }
@@ -138,11 +146,17 @@ function loadCustomRules() {
   if (GAME_RULES.resourceSpawnRates.silver !== undefined) RES.SILVER.spawnSec = GAME_RULES.resourceSpawnRates.silver;
   if (GAME_RULES.resourceSpawnRates.gold !== undefined) RES.GOLD.spawnSec = GAME_RULES.resourceSpawnRates.gold;
   if (GAME_RULES.resourceSpawnRates.jade !== undefined) RES.JADE.spawnSec = GAME_RULES.resourceSpawnRates.jade;
+  loadRoleOverrides();
 }
 
 function saveCustomRules(rules) {
-  localStorage.setItem('bedwars_custom_rules', JSON.stringify(rules));
-  GAME_RULES = { ...DEFAULT_GAME_RULES, ...rules };
+  GAME_RULES = {
+    ...DEFAULT_GAME_RULES,
+    ...rules,
+    resourceSpawnRates: { ...DEFAULT_GAME_RULES.resourceSpawnRates, ...(rules.resourceSpawnRates || {}) },
+    initialResources: { ...DEFAULT_GAME_RULES.initialResources, ...(rules.initialResources || {}) }
+  };
+  localStorage.setItem('bedwars_custom_rules', JSON.stringify(GAME_RULES));
   // 同步到 RES 常量（向后兼容）
   if (GAME_RULES.resourceSpawnRates.copper !== undefined) RES.COPPER.spawnSec = GAME_RULES.resourceSpawnRates.copper;
   if (GAME_RULES.resourceSpawnRates.silver !== undefined) RES.SILVER.spawnSec = GAME_RULES.resourceSpawnRates.silver;
@@ -158,6 +172,26 @@ function resetRules() {
   if (GAME_RULES.resourceSpawnRates.silver !== undefined) RES.SILVER.spawnSec = GAME_RULES.resourceSpawnRates.silver;
   if (GAME_RULES.resourceSpawnRates.gold !== undefined) RES.GOLD.spawnSec = GAME_RULES.resourceSpawnRates.gold;
   if (GAME_RULES.resourceSpawnRates.jade !== undefined) RES.JADE.spawnSec = GAME_RULES.resourceSpawnRates.jade;
+}
+
+function loadRoleOverrides() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('bedwars_role_overrides') || '{}');
+    GAME_RULES.roleOverrides = saved;
+  } catch (_) {
+    GAME_RULES.roleOverrides = {};
+  }
+}
+
+function saveRoleOverrides(overrides) {
+  localStorage.setItem('bedwars_role_overrides', JSON.stringify(overrides));
+  GAME_RULES.roleOverrides = overrides;
+}
+
+function getRoleConfig(roleKey) {
+  const base = ROLES[roleKey] || {};
+  const override = GAME_RULES.roleOverrides[roleKey] || {};
+  return { ...base, ...override };
 }
 
 // 页面加载时自动读取自定义规则
@@ -2400,7 +2434,8 @@ class PlayerEntity {
     this.teamInfo = TEAMS[teamKey];
 
     // Stats
-    this.maxHp = this.roleInfo.hp;
+    const rc = typeof getRoleConfig === 'function' ? getRoleConfig(this.role) : (ROLES[this.role] || {});
+    this.maxHp = rc.hp || 100;
     this.hp = this.maxHp;
     this.armor = 0;
     this.armorMax = 0;
@@ -2588,9 +2623,10 @@ class PlayerEntity {
     const oldRatio = this.maxHp ? this.hp / this.maxHp : 1;
     this.role = roleKey;
     this.roleInfo = ROLES[roleKey];
+    const rc = typeof getRoleConfig === 'function' ? getRoleConfig(roleKey) : (ROLES[roleKey] || {});
     this.maxHp = this.role === 'WAIWAI'
       ? 1
-      : this.roleInfo.hp + Math.max(0, this.matchLevel - 1) * (window.GROWTH_CONFIG?.hpPerLevel || 2);
+      : rc.hp + Math.max(0, this.matchLevel - 1) * (window.GROWTH_CONFIG?.hpPerLevel || 2);
     this.hp = Math.max(1, Math.min(this.maxHp, Math.round(this.maxHp * oldRatio)));
     this.baseSpeed = 6;
     this.speed = this.baseSpeed;
@@ -4476,7 +4512,7 @@ class MapEditor {
     this.undoStack.push({ action: 'place', x, y, z, type });
     this.redoStack = [];
     // 使用 engine 的 placeBlock 逻辑
-    this.engine.placeBlock(new THREE.Vector3(x, y, z), type);
+    this.engine.placeBlock(x, y, z, type);
   }
 
   removeBlock(x, y, z) {
@@ -4506,7 +4542,7 @@ class MapEditor {
 
   clearMarkers() {
     for (const m of this.markers) {
-      if (m.mesh) this.engine.scene.remove(m.mesh);
+      if (m.mesh) this.engine._disposeMesh(m.mesh);
     }
     this.markers = [];
   }
@@ -4517,7 +4553,7 @@ class MapEditor {
     if (last.action === 'place') {
       this.engine.removeBlock(last.x, last.y, last.z);
     } else if (last.action === 'remove') {
-      this.engine.placeBlock(new THREE.Vector3(last.x, last.y, last.z), last.type);
+      this.engine.placeBlock(last.x, last.y, last.z, last.type);
     }
     this.redoStack.push(last);
   }
@@ -4526,7 +4562,7 @@ class MapEditor {
     if (this.redoStack.length === 0) return;
     const last = this.redoStack.pop();
     if (last.action === 'place') {
-      this.engine.placeBlock(new THREE.Vector3(last.x, last.y, last.z), last.type);
+      this.engine.placeBlock(last.x, last.y, last.z, last.type);
     } else if (last.action === 'remove') {
       this.engine.removeBlock(last.x, last.y, last.z);
     }
@@ -4548,18 +4584,24 @@ class MapEditor {
   }
 
   importMap(data) {
+    if (!data || !Array.isArray(data.blocks)) return;
+    this.undoStack = [];
+    this.redoStack = [];
     // 清除现有方块
     for (const [key, blk] of this.engine.blocks) {
       this.engine._disposeMesh(blk.mesh);
     }
     this.engine.blocks.clear();
     this.clearMarkers();
-    // 放置导入的方块
-    for (const b of data.blocks || []) {
-      this.engine.placeBlock(new THREE.Vector3(b.x, b.y, b.z), b.type);
+    // 放置导入的方块（过滤无效数据）
+    for (const b of data.blocks) {
+      if (typeof b.x !== 'number' || typeof b.y !== 'number' || typeof b.z !== 'number') continue;
+      if (!b.type || typeof b.type !== 'string') continue;
+      this.engine.placeBlock(b.x, b.y, b.z, b.type);
     }
     // 恢复标记
     for (const m of data.markers || []) {
+      if (!m.type || typeof m.x !== 'number') continue;
       this.addMarker(m.type, new THREE.Vector3(m.x, m.y, m.z), m.subtype);
     }
   }
