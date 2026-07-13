@@ -1343,3 +1343,14 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .rule-row input[type="number"], .rule-row input[type="range"], .rule-row select { width: 100px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
 .rule-row input[type="checkbox"] { width: auto; margin-right: 8px; }
 .workshop-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }
+.map-editor-actions { display: flex; gap: 8px; margin: 12px 0; }
+.map-list { max-height: 120px; overflow-y: auto; }
+.map-list-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 4px; cursor: pointer; }
+.map-list-item:hover { background: rgba(255,255,255,0.1); }
+.map-list-item span { color: #ddd; font-size: 13px; }
+.map-del-btn { background: rgba(255,80,80,0.2); border: 1px solid rgba(255,80,80,0.3); color: #ff6666; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+.editor-tool-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.editor-tool-row label { color: #aaa; font-size: 13px; }
+.editor-tool-row select, .editor-tool-row input[type="range"] { width: 140px; }
+.editor-hint { margin-top: 10px; padding: 8px; background: rgba(0,212,255,0.05); border-radius: 6px; }
+.editor-hint p { color: #88aabb; font-size: 11px; margin: 2px 0; }

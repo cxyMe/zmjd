@@ -1017,6 +1017,106 @@ function loadRuleUI() {
   document.getElementById('ruleScoreTargetRow').style.display = (rules.winCondition === 'score_target') ? 'flex' : 'none';
 }
 
+  // 地图编辑器
+  const mapEditorNewBtn = document.getElementById('mapEditorNewBtn');
+  const mapEditorLoadBtn = document.getElementById('mapEditorLoadBtn');
+  const mapEditorSaveBtn = document.getElementById('mapEditorSaveBtn');
+  const mapEditorTools = document.getElementById('mapEditorTools');
+  const editorToolSelect = document.getElementById('editorToolSelect');
+  const editorBlockSelect = document.getElementById('editorBlockSelect');
+  const editorFlySpeed = document.getElementById('editorFlySpeed');
+
+  function refreshMapList() {
+    const list = document.getElementById('mapEditorList');
+    if (!list) return;
+    const maps = [];
+    try {
+      const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
+      maps.push(...raw);
+    } catch (_) {}
+    list.innerHTML = maps.length === 0
+      ? '<p style="color:#888; font-size:12px;">暂无自定义地图</p>'
+      : maps.map((m, i) => `<div class="map-list-item" data-idx="${i}"><span>${escapeHtml(m.name || '未命名')}</span><button class="map-del-btn" data-idx="${i}">删除</button></div>`).join('');
+    list.querySelectorAll('.map-list-item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('map-del-btn')) return;
+        const idx = parseInt(el.dataset.idx);
+        const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
+        if (raw[idx]) {
+          if (window.game?.engine?.mapEditor) {
+            window.game.engine.mapEditor.importMap(raw[idx]);
+            window.game.engine.mapEditor.activate();
+            mapEditorTools.style.display = 'block';
+            document.getElementById('workshopPanel').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+            setAuthStatus('地图已加载，进入编辑模式');
+          }
+        }
+      });
+    });
+    list.querySelectorAll('.map-del-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
+        raw.splice(idx, 1);
+        localStorage.setItem('bedwars_custom_maps', JSON.stringify(raw));
+        refreshMapList();
+      });
+    });
+  }
+
+  if (mapEditorNewBtn) {
+    mapEditorNewBtn.addEventListener('click', () => {
+      if (window.game?.engine?.mapEditor) {
+        window.game.engine.mapEditor.activate();
+        mapEditorTools.style.display = 'block';
+        document.getElementById('workshopPanel').style.display = 'none';
+        document.getElementById('hud').style.display = 'block';
+        setAuthStatus('进入地图编辑模式：WASD飞行，左键放置，右键擦除');
+      }
+    });
+  }
+  if (mapEditorSaveBtn) {
+    mapEditorSaveBtn.addEventListener('click', () => {
+      if (!window.game?.engine?.mapEditor) return;
+      const data = window.game.engine.mapEditor.exportMap();
+      data.name = prompt('地图名称：', data.name) || data.name;
+      const maps = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
+      maps.push(data);
+      localStorage.setItem('bedwars_custom_maps', JSON.stringify(maps));
+      refreshMapList();
+      setAuthStatus('地图已保存！');
+    });
+  }
+  if (mapEditorLoadBtn) {
+    mapEditorLoadBtn.addEventListener('click', () => {
+      refreshMapList();
+    });
+  }
+  if (editorToolSelect) {
+    editorToolSelect.addEventListener('change', (e) => {
+      if (window.game?.engine?.mapEditor) {
+        window.game.engine.mapEditor.tool = e.target.value;
+      }
+      document.getElementById('editorBlockRow').style.display = e.target.value === 'place' ? 'flex' : 'none';
+    });
+  }
+  if (editorBlockSelect) {
+    editorBlockSelect.addEventListener('change', (e) => {
+      if (window.game?.engine?.mapEditor) {
+        window.game.engine.mapEditor.selectedBlock = e.target.value;
+      }
+    });
+  }
+  if (editorFlySpeed) {
+    editorFlySpeed.addEventListener('input', (e) => {
+      document.getElementById('editorFlySpeedVal').textContent = e.target.value;
+      if (window.game?.engine?.mapEditor) {
+        window.game.engine.mapEditor.flySpeed = parseInt(e.target.value);
+      }
+    });
+  }
+
 document.getElementById('lobbySettingsBtn').addEventListener('click', () => window.hudLayoutManager?.open?.());
   const sensSlider = document.getElementById('sensSlider');
   const sensVal = document.getElementById('sensVal');
@@ -1399,12 +1499,48 @@ document.getElementById('dissolveRoomBtn').addEventListener('click', async () =>
         </div>
       </div>
       
-      <!-- 地图工坊占位 -->
       <div class="workshop-section" id="workshopMaps" style="display:none;">
-        <div class="map-workshop-intro">
+        <div class="map-editor-intro">
           <h3>地图工坊</h3>
-          <p>自定义地图功能开发中，敬请期待...</p>
-          <p>当前可使用规则配置功能调整对局体验。</p>
+          <p>创建自定义地图：自由放置方块、设置出生点和资源生成器。</p>
+          <div class="map-editor-actions">
+            <button class="small-btn" id="mapEditorNewBtn">新建地图</button>
+            <button class="small-btn" id="mapEditorLoadBtn">加载地图</button>
+            <button class="small-btn" id="mapEditorSaveBtn">保存地图</button>
+          </div>
+          <div id="mapEditorList" class="map-list"></div>
+          <div id="mapEditorTools" style="display:none; margin-top:12px;">
+            <div class="editor-tool-row">
+              <label>工具：</label>
+              <select id="editorToolSelect">
+                <option value="place">放置方块</option>
+                <option value="erase">擦除方块</option>
+                <option value="spawn">标记出生点</option>
+                <option value="bed">标记床</option>
+                <option value="generator">标记资源生成器</option>
+              </select>
+            </div>
+            <div class="editor-tool-row" id="editorBlockRow">
+              <label>方块类型：</label>
+              <select id="editorBlockSelect">
+                <option value="wood_plank">木板</option>
+                <option value="stone_plate">石板</option>
+                <option value="iron_plate">铁板</option>
+                <option value="titanium">钛板</option>
+                <option value="blast_glass">防爆玻璃</option>
+                <option value="ground">地面</option>
+              </select>
+            </div>
+            <div class="editor-tool-row">
+              <label>飞行速度：</label>
+              <input type="range" id="editorFlySpeed" min="5" max="50" value="15">
+              <span id="editorFlySpeedVal">15</span>
+            </div>
+            <div class="editor-hint">
+              <p>WASD 移动 | Q上升 E下降 | 左键放置/标记 | 右键擦除 | Z撤销 | Y重做</p>
+              <p>按 ESC 退出编辑器</p>
+            </div>
+          </div>
         </div>
       </div>
       

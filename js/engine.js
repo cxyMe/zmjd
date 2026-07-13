@@ -237,6 +237,14 @@ class Engine {
     this.explosives = [];    // 定时爆炸物
     this.repairDrones = [];  // 自动修复无人机
     this.frostZones = [];    // 冰霜/火焰区域
+    this.mapEditor = new MapEditor(this);
+
+    // 键盘状态跟踪（用于地图编辑器飞行控制）
+    this.keys = {};
+    this._onKeyDown = (e) => { this.keys[e.key.toLowerCase()] = true; };
+    this._onKeyUp = (e) => { this.keys[e.key.toLowerCase()] = false; };
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -1027,6 +1035,9 @@ class Engine {
   update(dt) {
     // Entities
     for (const e of this.entities) e.update(dt);
+
+    // 地图编辑器更新
+    this.mapEditor.update(dt, { keys: this.keys || {} });
 
     // Particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -4359,5 +4370,197 @@ class PlayerEntity {
     this.weaponMesh = new THREE.Mesh(geo, mat);
     this.weaponMesh.position.set(0.4, 0.3, 0.3);
     this.mesh.add(this.weaponMesh);
+  }
+}
+
+// ============================================
+// 简易地图编辑器（乐园系统）
+// ============================================
+
+class MapEditor {
+  constructor(engine) {
+    this.engine = engine;
+    this.active = false;
+    this.tool = 'place'; // 'place' | 'erase' | 'spawn' | 'bed' | 'generator'
+    this.selectedBlock = 'wood_plank';
+    this.flying = true;
+    this.flySpeed = 15;
+    this.markers = []; // { type, pos, team }
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
+  activate() {
+    this.active = true;
+    this.engine.renderer.domElement.style.cursor = 'crosshair';
+    this.flying = true;
+  }
+
+  deactivate() {
+    this.active = false;
+    this.engine.renderer.domElement.style.cursor = 'default';
+    this.flying = false;
+  }
+
+  update(dt, input) {
+    if (!this.active || !this.flying) return;
+    const cam = this.engine.camera;
+    const dir = new THREE.Vector3();
+    cam.getWorldDirection(dir);
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+
+    let move = new THREE.Vector3();
+    if (input.keys.w || input.keys.arrowup) move.add(dir);
+    if (input.keys.s || input.keys.arrowdown) move.sub(dir);
+    if (input.keys.a || input.keys.arrowleft) move.sub(right);
+    if (input.keys.d || input.keys.arrowright) move.add(right);
+    if (input.keys.q || input.keys.space) move.add(up);
+    if (input.keys.e || input.keys.shift) move.sub(up);
+
+    if (move.lengthSq() > 0) {
+      move.normalize().multiplyScalar(this.flySpeed * dt);
+      cam.position.add(move);
+    }
+  }
+
+  raycastToGround(mx, my) {
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2(
+      (mx / window.innerWidth) * 2 - 1,
+      -(my / window.innerHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(mouse, this.engine.camera);
+
+    // 先检测现有方块
+    const blockMeshes = Array.from(this.engine.blocks.values()).map(b => b.mesh);
+    const hitBlocks = raycaster.intersectObjects(blockMeshes);
+    if (hitBlocks.length > 0) {
+      const hit = hitBlocks[0];
+      const normal = hit.face.normal;
+      const pos = hit.point.clone().add(normal.multiplyScalar(0.5));
+      return { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z), hit: true };
+    }
+
+    // 检测地面平面 y=0
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const target = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, target);
+    if (target) {
+      return { x: Math.floor(target.x), y: 0, z: Math.floor(target.z), hit: true };
+    }
+    return null;
+  }
+
+  onClick(mx, my, isRight = false) {
+    if (!this.active) return;
+    const rc = this.raycastToGround(mx, my);
+    if (!rc) return;
+
+    if (this.tool === 'place' && !isRight) {
+      this.placeBlock(rc.x, rc.y, rc.z, this.selectedBlock);
+    } else if (this.tool === 'erase' || (this.tool === 'place' && isRight)) {
+      this.removeBlock(rc.x, rc.y, rc.z);
+    } else if (this.tool === 'spawn') {
+      this.addMarker('spawn', new THREE.Vector3(rc.x + 0.5, rc.y + 1, rc.z + 0.5), 'RED');
+    } else if (this.tool === 'bed') {
+      this.addMarker('bed', new THREE.Vector3(rc.x + 0.5, rc.y + 0.5, rc.z + 0.5), 'RED');
+    } else if (this.tool === 'generator') {
+      this.addMarker('generator', new THREE.Vector3(rc.x + 0.5, rc.y + 1, rc.z + 0.5), 'COPPER');
+    }
+  }
+
+  placeBlock(x, y, z, type) {
+    const key = this.engine.getBlockKey(x, y, z);
+    if (this.engine.blocks.has(key)) return;
+    this.undoStack.push({ action: 'place', x, y, z, type });
+    this.redoStack = [];
+    // 使用 engine 的 placeBlock 逻辑
+    this.engine.placeBlock(new THREE.Vector3(x, y, z), type);
+  }
+
+  removeBlock(x, y, z) {
+    const key = this.engine.getBlockKey(x, y, z);
+    const blk = this.engine.blocks.get(key);
+    if (!blk) return;
+    this.undoStack.push({ action: 'remove', x, y, z, type: blk.type });
+    this.redoStack = [];
+    this.engine.removeBlock(x, y, z);
+  }
+
+  addMarker(type, pos, subtype) {
+    const marker = { type, pos: pos.clone(), subtype, id: Date.now() + Math.random() };
+    this.markers.push(marker);
+    this.showMarkerVisual(marker);
+  }
+
+  showMarkerVisual(marker) {
+    const colorMap = { spawn: 0x00ff00, bed: 0xff5555, generator: 0xffd700 };
+    const geo = new THREE.SphereGeometry(0.3, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: colorMap[marker.type] || 0xffffff });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(marker.pos);
+    this.engine.scene.add(mesh);
+    marker.mesh = mesh;
+  }
+
+  clearMarkers() {
+    for (const m of this.markers) {
+      if (m.mesh) this.engine.scene.remove(m.mesh);
+    }
+    this.markers = [];
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return;
+    const last = this.undoStack.pop();
+    if (last.action === 'place') {
+      this.engine.removeBlock(last.x, last.y, last.z);
+    } else if (last.action === 'remove') {
+      this.engine.placeBlock(new THREE.Vector3(last.x, last.y, last.z), last.type);
+    }
+    this.redoStack.push(last);
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) return;
+    const last = this.redoStack.pop();
+    if (last.action === 'place') {
+      this.engine.placeBlock(new THREE.Vector3(last.x, last.y, last.z), last.type);
+    } else if (last.action === 'remove') {
+      this.engine.removeBlock(last.x, last.y, last.z);
+    }
+    this.undoStack.push(last);
+  }
+
+  exportMap() {
+    const blocks = [];
+    for (const [key, blk] of this.engine.blocks) {
+      blocks.push({ key, type: blk.type, x: blk.mesh.position.x, y: blk.mesh.position.y, z: blk.mesh.position.z });
+    }
+    return {
+      version: 1,
+      name: '未命名地图',
+      blocks: blocks.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), z: Math.round(b.z), type: b.type })),
+      markers: this.markers.map(m => ({ type: m.type, x: m.pos.x, y: m.pos.y, z: m.pos.z, subtype: m.subtype })),
+      timestamp: Date.now()
+    };
+  }
+
+  importMap(data) {
+    // 清除现有方块
+    for (const [key, blk] of this.engine.blocks) {
+      this.engine._disposeMesh(blk.mesh);
+    }
+    this.engine.blocks.clear();
+    this.clearMarkers();
+    // 放置导入的方块
+    for (const b of data.blocks || []) {
+      this.engine.placeBlock(new THREE.Vector3(b.x, b.y, b.z), b.type);
+    }
+    // 恢复标记
+    for (const m of data.markers || []) {
+      this.addMarker(m.type, new THREE.Vector3(m.x, m.y, m.z), m.subtype);
+    }
   }
 }

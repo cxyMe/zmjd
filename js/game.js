@@ -17,6 +17,23 @@ class InputManager {
     document.addEventListener('keydown', e => {
       this.keys[e.code] = true;
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','Tab'].includes(e.code)) e.preventDefault();
+      // 地图编辑器快捷键
+      if (window.game?.engine?.mapEditor?.active) {
+        if (e.code === 'Escape') {
+          window.game.engine.mapEditor.deactivate();
+          document.getElementById('workshopPanel').style.display = 'flex';
+          document.getElementById('hud').style.display = 'none';
+          e.preventDefault();
+        }
+        if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) {
+          window.game.engine.mapEditor.undo();
+          e.preventDefault();
+        }
+        if (e.code === 'KeyY' && (e.ctrlKey || e.metaKey)) {
+          window.game.engine.mapEditor.redo();
+          e.preventDefault();
+        }
+      }
     });
     document.addEventListener('keyup', e => {
       this.keys[e.code] = false;
@@ -32,6 +49,12 @@ class InputManager {
     });
     document.addEventListener('mousedown', e => {
       if (e.target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel, #buildPanel, #timedAction')) return;
+      // 地图编辑器模式下，点击传递给编辑器
+      if (window.game?.engine?.mapEditor?.active) {
+        window.game.engine.mapEditor.onClick(e.clientX, e.clientY, e.button === 2);
+        e.preventDefault();
+        return;
+      }
       if (e.button === 0) { this.buttons.attack = true; this.buttons.attackHeld = true; }
       if (e.button === 2) {
         this.buttons.build = true;
