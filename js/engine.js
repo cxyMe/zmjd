@@ -640,8 +640,9 @@ class Engine {
     this.scene.remove(mesh);
     if (mesh.geometry) mesh.geometry.dispose();
     if (mesh.material) {
-      if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose ? m.dispose() : null);
-      else if (mesh.material.dispose) mesh.material.dispose();
+      if (mesh.material.map) mesh.material.map.dispose();
+      if (Array.isArray(mesh.material)) mesh.material.forEach(m => { if (m?.map) m.map.dispose(); m?.dispose?.(); });
+      else mesh.material.dispose();
     }
     if (mesh.children) mesh.children.forEach(c => this._disposeMesh(c));
   }
@@ -988,7 +989,7 @@ class Engine {
     label.position.set(0, 0.85, 0);
     mesh.add(label);
     this.scene.add(mesh);
-    const ex = { mesh, label, pos: mesh.position.clone(), owner, team: owner?.team, life: info.explosionDelay, radius: info.explosionRadius, damage: info.explosionDamage };
+    const ex = { mesh, label, pos: mesh.position.clone(), owner, team: owner?.team, life: info.explosionDelay, radius: info.explosionRadius, damage: info.explosionDamage, itemKey };
     this.explosives.push(ex);
     return ex;
   }
@@ -1085,7 +1086,7 @@ class Engine {
       }
       p.mesh.rotation.x += dt * 3;
       p.mesh.rotation.y += dt * 2;
-      if (p.life <= 0) { this.scene.remove(p.mesh); this.particles.splice(i, 1); }
+      if (p.life <= 0) { this._disposeMesh(p.mesh); this.particles.splice(i, 1); }
     }
 
     // Screen shake
@@ -1127,7 +1128,7 @@ class Engine {
             if (d.isCurrency) {
               ent.inv[d.currency] = (ent.inv[d.currency] || 0) + d.count;
               ent.matchStats.resourceContribution += d.count * (d.currency === 'jade' ? 18 : d.currency === 'gold' ? 8 : d.currency === 'silver' ? 3 : 1);
-              window.game?.growth?.addXp?.(ent, GROWTH_CONFIG.xp.collectResource[d.currency] || 1, '收集资源');
+              window.game?.growth?.addXp?.(ent, (window.GROWTH_CONFIG?.xp?.collectResource?.[d.currency] ?? 1), '收集资源');
             } else {
               const added = ent.addToBackpack(d.typeKey, d.count);
               if (!added) continue;
@@ -1275,6 +1276,9 @@ class Engine {
       }
       if (zone.life <= 0) {
         this._disposeMesh(zone.mesh);
+        for (const ent of this.entities) {
+          if (ent._frostZoneTime) ent._frostZoneTime.delete(zone);
+        }
         this.frostZones.splice(i, 1);
       }
     }
@@ -1287,7 +1291,7 @@ class Engine {
       this.updateTextSprite(ex.label, `${Math.max(0, ex.life).toFixed(1)}s`);
       if (ex.life <= 0) {
         this.explodeAt(ex.pos.clone(), ex.radius, ex.damage, ex.owner, ex.itemKey);
-        this.scene.remove(ex.mesh);
+        this._disposeMesh(ex.mesh);
         this.explosives.splice(i, 1);
       }
     }
@@ -1299,7 +1303,7 @@ class Engine {
       d.tick -= dt;
       d.angle += dt * 2.8;
       if (!d.owner || d.owner.isDead || d.life <= 0) {
-        this.scene.remove(d.mesh);
+        this._disposeMesh(d.mesh);
         this.repairDrones.splice(i, 1);
         continue;
       }
@@ -1474,6 +1478,15 @@ class Engine {
         } else {
           this.damageBlock(rc.pos.x, rc.pos.y, rc.pos.z, proj.damage);
         }
+        // 冰锥击中方块产生冰霜区域
+        if (proj.type === 'ice_spike' && proj.owner) {
+          proj.owner.createFrostZone(proj.mesh.position, 3, 2);
+        }
+        // 高能人箭矢击中方块产生火焰区域
+        if (proj.type === 'arrow' && proj.owner?.role === 'HIGH_ENERGY') {
+          proj.owner.createFireZone(proj.mesh.position);
+          this.spawnParticles(proj.mesh.position, 0xff4400, 8);
+        }
         this.spawnParticles(proj.mesh.position, 0xffaa00, 4);
         this._disposeMesh(proj.mesh);
         this.projectiles.splice(i, 1);
@@ -1508,6 +1521,8 @@ class Engine {
             if (ent.isLocal) {
               window.game?.showMessage?.('你被冰锥击中！冰冻3秒', '#88ccff');
             }
+            // 冰锥击中实体产生冰霜区域
+            if (proj.owner) proj.owner.createFrostZone(proj.mesh.position, 3, 2);
           }
           if (proj.owner?.role === 'HURRICANE' && proj.owner.equipped.weapon === 'bow') {
             ent.revealedTimer = Math.max(ent.revealedTimer || 0, 3);
@@ -1517,6 +1532,11 @@ class Engine {
             ent.revealedTimer = Math.max(ent.revealedTimer || 0, 5);
             ent.nameTag.visible = true;
             window.game?.showMessage?.(`${ent.name} 被标枪暴露了！`, '#ffdd00');
+          }
+          // 高能人箭矢击中实体产生火焰区域
+          if (proj.type === 'arrow' && proj.owner?.role === 'HIGH_ENERGY') {
+            proj.owner.createFireZone(proj.mesh.position);
+            this.spawnParticles(proj.mesh.position, 0xff4400, 8);
           }
           this.spawnParticles(proj.mesh.position, 0xff0000, 5);
           if (proj.type !== 'boomerang') {
@@ -3327,6 +3347,7 @@ class PlayerEntity {
         window.game?.showMessage?.('超能喷气已结束，进入冷却', '#ff8800');
       }
     }
+    if (this.frostPassiveCd > 0) this.frostPassiveCd = Math.max(0, this.frostPassiveCd - dt);
     if (this.revealedTimer > 0) this.revealedTimer -= dt;
     if (this.smokeBlindTimer > 0) this.smokeBlindTimer -= dt;
     if (this.smokeInvisibleTimer > 0) this.smokeInvisibleTimer -= dt;
@@ -3539,7 +3560,7 @@ class PlayerEntity {
       this.onGround = false;
       // 高能人悬浮时跳跃加速消耗
       if (this.jetpackTimer > 0) {
-        this.jetpackTimer = Math.max(0, this.jetpackTimer - 0.7); // 额外消耗0.7秒（约30%）
+        this.jetpackTimer = Math.max(0, this.jetpackTimer - this.jetpackMaxTime * 0.3);
         this.vel.y = 8; // 快速上升
       }
       this.acJumpCount++;
@@ -3654,7 +3675,7 @@ class PlayerEntity {
           tinfo.bedMesh.visible = false;
           this.engine.spawnParticles(tinfo.bedPos, tinfo.color, 20);
           this.matchStats.beds++;
-          window.game?.growth?.addXp?.(this, GROWTH_CONFIG.xp.bedBreak, '拆床');
+          window.game?.growth?.addXp?.(this, (window.GROWTH_CONFIG?.xp?.bedBreak ?? 90), '拆床');
           window.game?.onBedDestroyed(tkey, this);
         }
       }
@@ -3735,7 +3756,8 @@ class PlayerEntity {
       vel: dir.clone().multiplyScalar(speed),
       life,
       damage: finalDmg,
-      owner: this
+      owner: this,
+      type: 'arrow'
     });
     this.arrowCount--;
     if (this.engine.ui) this.engine.ui.updateArrowCount();
@@ -3822,7 +3844,7 @@ class PlayerEntity {
           : bridgeFx === 'miner_bridge_fx' ? 0xb388ff
           : 0xffffff;
         if (bridgeFx) this.engine.spawnParticles(center, fxColor, bridgeFx === 'starlight_bridge_fx' ? 12 : 8);
-        const xp = GROWTH_CONFIG.xp.placeBlock * (1 + (this.blockXpBoost || 0));
+        const xp = (window.GROWTH_CONFIG?.xp?.placeBlock ?? 2) * (1 + (this.blockXpBoost || 0));
         window.game?.growth?.addXp?.(this, xp, '建造');
         this.acBlocksPlaced++;
         if (this.acBlocksPlaced > 15) {
@@ -3856,7 +3878,7 @@ class PlayerEntity {
     if (this.role === 'STEEL_BONE' && this.glassBridgeTimer > 0) return;
     if (this.role !== 'FOX') this.breakCamouflage();
     const info = this.roleInfo;
-    if (this.role !== 'STEEL_BONE') {
+    if (this.role !== 'STEEL_BONE' && this.role !== 'HIGH_ENERGY') {
       this.skillCd = Math.max(3, info.active.cd - (this.skillCdBonus || 0));
     }
     this.skillActive = 0;
@@ -4118,8 +4140,9 @@ class PlayerEntity {
       }
     }
     // 冰霜被动（霜降）：受伤后在自身位置留下2x2冰霜区域
-    if (this.role === 'FROST' && !this.isDead) {
+    if (this.role === 'FROST' && !this.isDead && (this.frostPassiveCd || 0) <= 0) {
       this.createFrostZone(this.pos, 2, 3);
+      this.frostPassiveCd = 3; // 3秒冷却
     }
     let actual = Math.max(1, incoming);
     if (this.extraShield > 0) {
@@ -4131,7 +4154,7 @@ class PlayerEntity {
     this.hp -= actual;
     if (attacker) {
       attacker.matchStats.damage += actual;
-      window.game?.growth?.addXp?.(attacker, actual * GROWTH_CONFIG.xp.damage, '造成伤害');
+      window.game?.growth?.addXp?.(attacker, actual * (window.GROWTH_CONFIG?.xp?.damage ?? 0.8), '造成伤害');
       if (attacker.arrowSlow) this.slowTimer = Math.max(this.slowTimer || 0, 1.2);
       const kbPower = 3 * (1 - (this.knockbackReduce || 0));
       const kb = this.pos.clone().sub(attacker.pos).normalize().multiplyScalar(kbPower);
@@ -4162,13 +4185,13 @@ class PlayerEntity {
     this.hp = 0;
     this.mesh.visible = false;
     if (this.placePreviewMesh) {
-      this.engine.scene.remove(this.placePreviewMesh);
+      this.engine._disposeMesh(this.placePreviewMesh);
       this.placePreviewMesh = null;
     }
     if (this.fatTimer > 0 || this.skillActive > 0) this.deactivateSkill();
     this.fatTimer = 0;
     if (this.missileControl) {
-      this.engine.scene.remove(this.missileControl.mesh);
+      this.engine._disposeMesh(this.missileControl.mesh);
       const missileIdx = this.engine.projectiles.indexOf(this.missileControl);
       if (missileIdx >= 0) this.engine.projectiles.splice(missileIdx, 1);
       this.missileControl = null;
@@ -4261,7 +4284,7 @@ class PlayerEntity {
       killer.matchStats.kills++;
       // 反作弊：AI击杀不计排位段位，AI被杀时击杀者经验减半
       if (!killer.isAI) {
-        const xpAmount = this.isAI ? GROWTH_CONFIG.xp.kill * AI_CONFIG.XP_REDUCTION : GROWTH_CONFIG.xp.kill;
+        const xpAmount = this.isAI ? (window.GROWTH_CONFIG?.xp?.kill ?? 120) * AI_CONFIG.XP_REDUCTION : (window.GROWTH_CONFIG?.xp?.kill ?? 120);
         window.game?.growth?.addXp?.(killer, xpAmount, '击杀');
       }
       if (killer.killHeal) killer.hp = Math.min(killer.maxHp, killer.hp + killer.killHeal);

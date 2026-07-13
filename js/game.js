@@ -1852,8 +1852,8 @@ class Game {
     }
   }
 
-  buyItem(key, count = 1) {
-    const lp = this.localPlayer;
+  buyItem(key, count = 1, targetPlayer = null) {
+    const lp = targetPlayer || this.localPlayer;
     if (!lp) return;
     const item = ITEM_DB[key];
     if (!item) return;
@@ -1960,6 +1960,7 @@ class Game {
   }
 
   endGame(winnerName) {
+    if (!this.gameActive) return;
     this.gameActive = false;
     if (this.network?.roomNet?.setRoomStatus) {
       this.network.roomNet.setRoomStatus('ended').catch(console.warn);
@@ -2032,7 +2033,7 @@ class Game {
       if (allies.length > 0 && allySection) {
         allySection.style.display = 'block';
         document.getElementById('allyStatsList').innerHTML = allies.map(a =>
-          `<div class="ally-stat-row"><span>${a.name}</span><span>击杀:${a.matchStats?.kills || 0} 拆床:${a.matchStats?.beds || 0} 建筑:${a.matchStats?.blocksPlaced || 0}</span></div>`
+          `<div class="ally-stat-row"><span>${a.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span><span>击杀:${a.matchStats?.kills || 0} 拆床:${a.matchStats?.beds || 0} 建筑:${a.matchStats?.blocksPlaced || 0}</span></div>`
         ).join('');
       }
     }
@@ -2283,7 +2284,12 @@ class Game {
 
   assignSecretKillerRoles() {
     const alive = this.players.filter(p => !p.isDead);
-    const shuffled = [...alive].sort(() => Math.random() - 0.5);
+    const shuffled = [...alive];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    if (shuffled.length < 2) return;
 
     // Assign roles
     shuffled[0].skRole = 'killer';
@@ -2351,6 +2357,7 @@ class Game {
     this.gameActive = false;
 
     const lp = this.localPlayer;
+    if (!lp) return;
     let playerWon = false;
     if (winner === 'good') {
       playerWon = lp.skRole !== 'killer';

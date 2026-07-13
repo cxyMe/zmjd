@@ -327,18 +327,18 @@ class AIController {
 
     // 优先级：武器 > 护甲 > 箭矢 > 方块
     if (!hasWeapon) {
-      if (inv.silver >= 4) { this.ent.buyItem('wood_sword'); this.tacticalAction = 'develop'; return; }
-      if (inv.silver >= 8) { this.ent.buyItem('stone_sword'); this.tacticalAction = 'develop'; return; }
+      if (inv.copper >= 4) { this.game.buyItem('wood_sword', 1, this.ent); this.tacticalAction = 'develop'; return; }
+      if (inv.silver >= 3) { this.game.buyItem('stone_sword', 1, this.ent); this.tacticalAction = 'develop'; return; }
     }
     if (hasBow && arrowCount < 8) {
-      if (inv.silver >= 2) { this.ent.buyItem('arrow'); this.tacticalAction = 'develop'; return; }
+      if (inv.silver >= 2) { this.game.buyItem('arrow', 1, this.ent); this.tacticalAction = 'develop'; return; }
     }
     if (!hasArmor) {
-      if (inv.gold >= 8) { this.ent.buyItem('std_armor'); this.tacticalAction = 'develop'; return; }
+      if (inv.gold >= 8) { this.game.buyItem('std_armor', 1, this.ent); this.tacticalAction = 'develop'; return; }
     }
     // 买方块
-    if (inv.copper >= 16) { this.ent.buyItem('wood_plank'); }
-    else if (inv.silver >= 8) { this.ent.buyItem('stone_plate'); }
+    if (inv.copper >= 16) { this.game.buyItem('wood_plank', 1, this.ent); }
+    else if (inv.silver >= 8) { this.game.buyItem('stone_plate', 1, this.ent); }
 
     this.tacticalAction = 'develop';
     this.currentGoal = 'develop';
@@ -612,7 +612,8 @@ class AIController {
 
   // 资源拾取增强
   tryPickupResources() {
-    for (const drop of this.engine.dropItems) {
+    for (let i = this.engine.dropItems.length - 1; i >= 0; i--) {
+      const drop = this.engine.dropItems[i];
       if (drop.pos.distanceTo(this.ent.pos) < 2.5) {
         if (drop.isCurrency && drop.currency) {
           this.ent.inv[drop.currency] = (this.ent.inv[drop.currency] || 0) + drop.count;
@@ -643,13 +644,13 @@ class AIController {
     if (!this.game?.gens) return;
     for (const g of this.game.gens) {
       if (!g.pos || !g.drops || g.drops.length === 0) continue;
-      for (const drop of g.drops) {
+      for (let i = g.drops.length - 1; i >= 0; i--) {
+        const drop = g.drops[i];
         if (drop.pos.distanceTo(this.ent.pos) < 3) {
           if (drop.isCurrency && drop.currency) {
             this.ent.inv[drop.currency] = (this.ent.inv[drop.currency] || 0) + drop.count;
             this.engine.removeDropItem(drop);
-            const idx = g.drops.indexOf(drop);
-            if (idx >= 0) g.drops.splice(idx, 1);
+            if (i >= 0) g.drops.splice(i, 1);
           }
         }
       }

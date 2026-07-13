@@ -2,13 +2,18 @@
 // 主界面赛季/任务 + HUD自定义布局
 // ============================================
 
+function safeJSONParse(key, defaultValue) {
+  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(defaultValue)); }
+  catch (_) { return defaultValue; }
+}
+
 class MenuGrowthUI {
   constructor() {
     this.panel = document.getElementById('menuGrowthPanel');
     this.body = document.getElementById('menuGrowthBody');
     this.title = document.getElementById('menuGrowthTitle');
     this.tab = 'season';
-    this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
+    this.profile = safeJSONParse('bedwars_growth_profile', { stardust: 0, rankScore: 0, seasonXp: 0 });
     this.bind();
   }
 
@@ -22,7 +27,7 @@ class MenuGrowthUI {
 
   open(tab = 'season') {
     this.tab = tab;
-    this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
+    this.profile = safeJSONParse('bedwars_growth_profile', { stardust: 0, rankScore: 0, seasonXp: 0 });
     document.querySelectorAll('[data-menu-growth-tab]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.menuGrowthTab === tab);
     });
@@ -66,7 +71,7 @@ class MenuGrowthUI {
 
   renderTasks() {
     this.title.textContent = '赛季任务';
-    const taskState = JSON.parse(localStorage.getItem('bedwars_task_progress') || '{}');
+    const taskState = safeJSONParse('bedwars_task_progress', {});
     const tasks = [
       { key: 'daily_blocks', type: '日常', name: '累计放置500个方块', target: 500, value: taskState.daily_blocks || 0, reward: '120赛季积分' },
       { key: 'daily_resources', type: '日常', name: '拾取200个资源物品', target: 200, value: taskState.daily_resources || 0, reward: '80赛季积分' },
@@ -138,7 +143,7 @@ class HUDLayoutManager {
 
   init() {
     this.captureDefault();
-    this.apply(JSON.parse(localStorage.getItem(this.activeKey) || 'null'));
+    this.apply(safeJSONParse(this.activeKey, null));
     this.bindSizeSliders();
     this.applySizeSettings();
   }
@@ -287,7 +292,7 @@ class HUDLayoutManager {
   }
 
   load(slot) {
-    const layout = JSON.parse(localStorage.getItem(`bedwars_hud_layout_${slot}`) || 'null');
+    const layout = safeJSONParse(`bedwars_hud_layout_${slot}`, null);
     if (!layout) return this.setStatus(`布局${slot}还没有保存。`);
     this.apply(layout);
     localStorage.setItem(this.activeKey, JSON.stringify(layout));
@@ -295,7 +300,7 @@ class HUDLayoutManager {
   }
 
   reset() {
-    const defaults = JSON.parse(localStorage.getItem(this.defaultKey) || '{}');
+    const defaults = safeJSONParse(this.defaultKey, {});
     this.apply(defaults);
     localStorage.removeItem(this.activeKey);
     this.setStatus('已一键复原默认布局。');

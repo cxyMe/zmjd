@@ -27,7 +27,11 @@ const GROWTH_CONFIG = {
 class GrowthManager {
   constructor(game) {
     this.game = game;
-    this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
+    try {
+      this.profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"stardust":0,"rankScore":0,"seasonXp":0}');
+    } catch (e) {
+      this.profile = { stardust: 0, rankScore: 0, seasonXp: 0 };
+    }
   }
 
   addXp(player, amount, reason = '成长') {
@@ -79,7 +83,7 @@ class GrowthManager {
   }
 
   masteryTier(r) {
-    const score = r.kills + r.beds * 4 + r.wins * 8;
+    const score = r.kills + r.beds * 4 + (r.wins || 0) * 8;
     if (score >= 220) return '筑梦大师';
     if (score >= 100) return '黄金';
     if (score >= 35) return '白银';

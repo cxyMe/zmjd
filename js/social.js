@@ -43,7 +43,7 @@ class SocialManager {
   createChestVisual(teamKey, team) {
     if (!this.game.engine?.scene || !team.bedPos) return;
     const old = team.chestMesh;
-    if (old) this.game.engine.scene.remove(old);
+    if (old) this.game.engine._disposeMesh(old);
     const geo = new THREE.BoxGeometry(1.2, 0.8, 1.2);
     const mat = new THREE.MeshLambertMaterial({ color: team.color, emissive: team.color, emissiveIntensity: 0.15 });
     const mesh = new THREE.Mesh(geo, mat);
@@ -73,13 +73,14 @@ class SocialManager {
         m.mesh.material.opacity = Math.max(0, m.life / SOCIAL_CONFIG.markDuration);
       }
       if (m.life <= 0) {
-        this.game.engine.scene.remove(m.mesh);
+        this.game.engine._disposeMesh(m.mesh);
         this.markers.splice(i, 1);
       }
     }
   }
 
   updateCombo(dt) {
+    return; // 三人连携功能已移除
     const lp = this.game.localPlayer;
     if (!lp || lp.isDead || this.comboCd > 0) {
       this.updateComboUI();
@@ -248,7 +249,7 @@ class SocialManager {
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
     const line = new THREE.Line(geo, mat);
     this.game.engine.scene.add(line);
-    setTimeout(() => this.game.engine.scene.remove(line), 900);
+    setTimeout(() => this.game.engine._disposeMesh(line), 900);
   }
 
   castCombo(type = 'shield') {
@@ -300,14 +301,15 @@ class SocialManager {
     const panel = document.getElementById('postMatchGallery');
     const body = document.getElementById('postMatchBody');
     if (!panel || !body) return;
+    const esc = s => (s || '-').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
     const players = [...this.game.players];
     const bestBuilder = players.sort((a,b) => (b.matchStats.blocksPlaced||0)-(a.matchStats.blocksPlaced||0))[0];
     const bedHunter = players.sort((a,b) => (b.matchStats.beds||0)-(a.matchStats.beds||0))[0];
     const survivor = players.filter(p => !p.isDead)[0] || this.game.localPlayer;
     body.innerHTML = `
-      <div class="poster-card"><h3>最佳铺路人</h3><p>${bestBuilder?.name || '-'} 放置 ${bestBuilder?.matchStats.blocksPlaced || 0} 个方块</p></div>
-      <div class="poster-card"><h3>拆床猎手</h3><p>${bedHunter?.name || '-'} 拆床 ${bedHunter?.matchStats.beds || 0} 次</p></div>
-      <div class="poster-card"><h3>生存大师</h3><p>${survivor?.name || '-'} 坚持到最后</p></div>
+      <div class="poster-card"><h3>最佳铺路人</h3><p>${esc(bestBuilder?.name)} 放置 ${bestBuilder?.matchStats.blocksPlaced || 0} 个方块</p></div>
+      <div class="poster-card"><h3>拆床猎手</h3><p>${esc(bedHunter?.name)} 拆床 ${bedHunter?.matchStats.beds || 0} 次</p></div>
+      <div class="poster-card"><h3>生存大师</h3><p>${esc(survivor?.name)} 坚持到最后</p></div>
       <div class="poster-actions"><button onclick="window.game?.social?.voteTeammate('best_partner')">送出最佳搭档赞</button><button onclick="window.game?.social?.voteTeammate('funny_blame')">匿名猪队友标签</button></div>
       <p class="poster-tip">10秒后可继续操作，战报仅作展示，不影响排位分。</p>`;
     panel.style.display = 'flex';

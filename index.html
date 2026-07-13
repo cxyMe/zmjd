@@ -690,7 +690,7 @@ function setAuthStatus(text, isError = false) {
 
 function setRoomStatus(text, isError = false) {
   const el = document.getElementById('roomStatus');
-  el.innerHTML = text;
+  el.textContent = text;
   el.style.color = isError ? '#ff6666' : '#aaa';
 }
 
@@ -723,10 +723,11 @@ function renderRoom() {
   const members = netMgr?.members || [];
   const isMainHost = netMgr?.isHost;
   const myId = auth.user?.id;
-  const code = room?.code ? `<span class="room-code">${room.code}</span>` : '';
+  const code = room?.code ? `<span class="room-code">${escapeHtml(room.code)}</span>` : '';
   const hostText = isMainHost ? '你是主房主，负责保存权威游戏状态。' : '你是副房主/玩家，主房主掉线后会自动接管。';
   const teamCount = ['RED','BLUE','GREEN','YELLOW'].map(k => `${TEAMS[k].name}${members.filter(m => m.team === k).length}/3`).join(' ｜ ');
-  setRoomStatus(`当前房间 ${code} ${hostText}<br><span class="team-count-line">${teamCount}</span>`);
+  const statusEl = document.getElementById('roomStatus');
+  if (statusEl) statusEl.innerHTML = `当前房间 ${code} ${escapeHtml(hostText)}<br><span class="team-count-line">${escapeHtml(teamCount)}</span>`;
 
   // Update roomPanel
   const roomPanel = document.getElementById('roomPanel');
@@ -899,7 +900,7 @@ function openPanel(id) { document.getElementById(id)?.classList.add('open'); }
 function closePanel(id) { document.getElementById(id)?.classList.remove('open'); }
 function closeAllLobbyPanels() {
   document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
-  ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel','skinShopPanel','roomPanel'].forEach(id => {
+  ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel','skinShopPanel','roomPanel','workshopPanel'].forEach(id => {
     const panel = document.getElementById(id);
     if (panel) panel.style.display = 'none';
   });
@@ -993,7 +994,8 @@ document.getElementById('ruleResetBtn').addEventListener('click', () => {
 // 本地试玩
 document.getElementById('ruleTestBtn').addEventListener('click', () => {
   document.getElementById('workshopPanel').style.display = 'none';
-  document.getElementById('playOptionsPanel').style.display = 'flex';
+  const pop = document.getElementById('playOptionsPanel');
+  if (pop) { pop.classList.add('open'); pop.style.display = ''; }
 });
 
 // 角色配置
@@ -1290,9 +1292,9 @@ function openLocalModePanel() {
   const roomStartBtn = document.getElementById('roomStartBtn');
   const roomPanelMembers = document.getElementById('roomPanelMembers');
   if (roomPanel) {
-    roomPanel.style.display = 'flex';
-    document.getElementById('mainMenu').style.display = 'none';
     closeAllLobbyPanels();
+    document.getElementById('mainMenu').style.display = 'none';
+    roomPanel.style.display = 'flex';
     if (roomPanelTitle) roomPanelTitle.textContent = '本地试玩';
     if (roomPanelCode) roomPanelCode.textContent = '--';
     if (roomStartBtn) {
@@ -1321,9 +1323,9 @@ async function doCreateRoom() {
     setRoomStatus('正在创建房间...');
     const room = await netMgr.createRoom();
     renderRoom();
-    document.getElementById('roomPanel').style.display = 'flex';
-    document.getElementById('mainMenu').style.display = 'none';
     closeAllLobbyPanels();
+    document.getElementById('mainMenu').style.display = 'none';
+    document.getElementById('roomPanel').style.display = 'flex';
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '创建房间失败', true);
@@ -1351,9 +1353,9 @@ async function doJoinRoom() {
     setRoomStatus('正在加入房间...');
     await netMgr.joinRoom(code);
     renderRoom();
-    document.getElementById('roomPanel').style.display = 'flex';
-    document.getElementById('mainMenu').style.display = 'none';
     closeAllLobbyPanels();
+    document.getElementById('mainMenu').style.display = 'none';
+    document.getElementById('roomPanel').style.display = 'flex';
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '加入房间失败', true);
@@ -1380,9 +1382,9 @@ async function doReconnect() {
     setRoomStatus('正在重连上次房间...');
     await netMgr.reconnect();
     renderRoom();
-    document.getElementById('roomPanel').style.display = 'flex';
-    document.getElementById('mainMenu').style.display = 'none';
     closeAllLobbyPanels();
+    document.getElementById('mainMenu').style.display = 'none';
+    document.getElementById('roomPanel').style.display = 'flex';
     closePanel('playOptionsPanel');
   } catch (err) {
     setRoomStatus(err.message || '断线重连失败', true);

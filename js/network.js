@@ -202,7 +202,8 @@ class RoomNetwork {
   }
 
   async reconnectLastRoom() {
-    const saved = JSON.parse(localStorage.getItem('bedwars_last_room') || 'null');
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem('bedwars_last_room') || 'null'); } catch (_) { saved = null; }
     if (!saved?.code || Date.now() - saved.savedAt > 600000) throw new Error('没有可恢复的房间');
     return this.joinRoom(saved.code);
   }
@@ -509,7 +510,7 @@ class RoomNetwork {
     if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
     if (this.hostCheckTimer) { clearInterval(this.hostCheckTimer); this.hostCheckTimer = null; }
     if (this.roomTimeoutTimer) { clearInterval(this.roomTimeoutTimer); this.roomTimeoutTimer = null; }
-    if (this.channel) { await this.channel.unsubscribe(); this.channel = null; }
+    if (this.channel) { try { await this.channel.unsubscribe(); } catch (_) {} this.channel = null; }
 
     if (this.room && this.auth.user) {
       try {
@@ -534,6 +535,7 @@ class RoomNetwork {
 
   async handleRoomKick(reason) {
     await this.leave();
+    if (reason) window.game?.showMessage?.('已被踢出：' + reason, '#ff4444');
   }
 
   async dissolveRoom() {
