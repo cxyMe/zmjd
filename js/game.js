@@ -967,10 +967,10 @@ class Game {
     this.localPlayer = null;
     this.gameTime = 0;
     this.gameActive = false;
-    this.shrinkStartTime = 1500; // 第25分钟开始死亡边界
+    this.shrinkStartTime = GAME_RULES.shrinkStartTime;
     this.shrinkTimer = this.shrinkStartTime;
     this.shrinkActive = false;
-    this.shrinkInitialRadius = 125;
+    this.shrinkInitialRadius = GAME_RULES.shrinkInitialRadius;
     this.shrinkRadius = this.shrinkInitialRadius;
     this.nextDreamTide = 300;
     this.input = new InputManager();
@@ -1003,7 +1003,7 @@ class Game {
     this.skRoles = {}; // playerId -> 'killer'/'detective'/'civilian'
     this.skFragmentTimer = 0;
     this.skFragmentPoints = [];
-    this.skTimeLimit = 300; // 5 minutes
+    this.skTimeLimit = GAME_RULES.skTimeLimit;
     this.skRoleRevealed = false;
     this.genLabels = [];
   }
@@ -1434,8 +1434,8 @@ class Game {
     }
 
     // 梦域潮汐：每 5 分钟重排部分资源浮岛并刷新临时资源点
-    if (!this.isSecretKiller && this.gameTime >= this.nextDreamTide) {
-      this.nextDreamTide += 300;
+    if (!this.isSecretKiller && GAME_RULES.enableDreamTide && this.gameTime >= this.nextDreamTide) {
+      this.nextDreamTide += GAME_RULES.dreamTideInterval;
       if (this.engine.triggerDreamTide) {
         this.engine.triggerDreamTide(this.gens);
         this.showMessage('梦域潮汐涌动：资源浮岛路线发生变化！', '#b388ff');
@@ -1443,19 +1443,19 @@ class Game {
     }
 
     // Shrink (classic mode only)
-    if (!this.isSecretKiller) {
+    if (!this.isSecretKiller && GAME_RULES.enableShrink) {
     if (this.shrinkTimer <= 0 && !this.shrinkActive) {
       this.shrinkActive = true;
       this.showMessage('警告：死亡边界开始收缩！', '#ff4444');
     }
     if (this.shrinkActive) {
-      this.shrinkRadius = Math.max(8, this.shrinkInitialRadius - (this.gameTime - this.shrinkStartTime) * 0.203);
+      this.shrinkRadius = Math.max(GAME_RULES.shrinkFinalRadius, this.shrinkInitialRadius - (this.gameTime - this.shrinkStartTime) * GAME_RULES.shrinkSpeed);
       // Damage players outside
       for (const p of this.players) {
         if (p.isDead) continue;
         const dist = Math.sqrt(p.pos.x * p.pos.x + p.pos.z * p.pos.z);
         if (dist > this.shrinkRadius) {
-          p.takeDamage(10 * dt, null);
+          p.takeDamage(GAME_RULES.shrinkDamage * dt, null);
         }
       }
       // Destroy beds outside
@@ -1736,7 +1736,7 @@ class Game {
   }
 
   nextBlockUpgrade(type) {
-    const order = ['wood_plank','stone_plate','iron_plate','titanium'];
+    const order = GAME_RULES.blockUpgradeChain;
     const idx = order.indexOf(type);
     if (idx < 0 || idx >= order.length - 1) return null;
     return order[idx + 1];

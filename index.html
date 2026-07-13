@@ -91,6 +91,7 @@ updateOrientationGate();
 
     <aside class="lobby-start-dock">
       <button class="small-btn secondary wide" id="openPlayOptionsBtn">选择模式 / 房间</button>
+      <button class="menu-btn primary" id="workshopBtn">创作工坊</button>
       <div class="status-text" id="roomStatus">未进入房间；点击选择模式创建、加入或本地试玩。</div>
       <div class="room-members" id="roomMembers"></div>
     </aside>
@@ -913,6 +914,109 @@ function updateAiButton() {
 
 document.getElementById('profileCardBtn').addEventListener('click', () => openPanel('profilePanel'));
 document.getElementById('openPlayOptionsBtn').addEventListener('click', () => openPanel('playOptionsPanel'));
+
+  // 创作工坊按钮
+document.getElementById('workshopBtn').addEventListener('click', () => {
+  document.getElementById('workshopPanel').style.display = 'flex';
+  loadRuleUI();
+});
+document.getElementById('workshopClose').addEventListener('click', () => {
+  document.getElementById('workshopPanel').style.display = 'none';
+});
+
+// 创作工坊标签切换
+document.querySelectorAll('.workshop-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.workshop-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.workshop-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('workshop' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)).classList.add('active');
+  });
+});
+
+// 规则滑块实时显示值
+document.getElementById('ruleShrinkSpeed').addEventListener('input', (e) => {
+  document.getElementById('ruleShrinkSpeedVal').textContent = e.target.value;
+});
+
+// 胜利条件切换显示积分目标
+document.getElementById('ruleWinCondition').addEventListener('change', (e) => {
+  document.getElementById('ruleScoreTargetRow').style.display = e.target.value === 'score_target' ? 'flex' : 'none';
+});
+
+// 保存规则
+document.getElementById('ruleSaveBtn').addEventListener('click', () => {
+  const rules = {
+    winCondition: document.getElementById('ruleWinCondition').value,
+    scoreTarget: parseInt(document.getElementById('ruleScoreTarget').value) || 50,
+    gameDuration: (parseInt(document.getElementById('ruleGameDuration').value) || 30) * 60,
+    enableShrink: document.getElementById('ruleEnableShrink').checked,
+    shrinkStartTime: (parseInt(document.getElementById('ruleShrinkStart').value) || 25) * 60,
+    shrinkSpeed: parseFloat(document.getElementById('ruleShrinkSpeed').value) || 0.203,
+    shrinkDamage: parseInt(document.getElementById('ruleShrinkDamage').value) || 10,
+    respawnBaseTime: parseInt(document.getElementById('ruleRespawnBase').value) || 3,
+    respawnMaxTime: parseInt(document.getElementById('ruleRespawnMax').value) || 30,
+    respawnIncrement: parseInt(document.getElementById('ruleRespawnInc').value) || 2,
+    respawnInvulnTime: parseFloat(document.getElementById('ruleRespawnInvuln').value) || 1.5,
+    resourceSpawnRates: {
+      copper: parseInt(document.getElementById('ruleCopperRate').value) || 2,
+      silver: parseInt(document.getElementById('ruleSilverRate').value) || 6,
+      gold: parseInt(document.getElementById('ruleGoldRate').value) || 15,
+      jade: parseInt(document.getElementById('ruleJadeRate').value) || 42,
+    },
+    enableAdvancedResources: document.getElementById('ruleEnableAdvancedRes').checked,
+    skTimeLimit: parseInt(document.getElementById('ruleSKTimeLimit').value) || 300,
+    skFragmentCount: parseInt(document.getElementById('ruleSKFragments').value) || 5,
+  };
+  if (typeof saveCustomRules === 'function') {
+    saveCustomRules(rules);
+    setAuthStatus('规则已保存，下次对局生效！');
+  } else {
+    localStorage.setItem('bedwars_custom_rules', JSON.stringify(rules));
+    setAuthStatus('规则已保存（本地），下次对局生效！');
+  }
+});
+
+// 恢复默认
+document.getElementById('ruleResetBtn').addEventListener('click', () => {
+  if (typeof resetRules === 'function') resetRules();
+  else localStorage.removeItem('bedwars_custom_rules');
+  loadRuleUI();
+  setAuthStatus('已恢复默认规则');
+});
+
+// 本地试玩
+document.getElementById('ruleTestBtn').addEventListener('click', () => {
+  document.getElementById('workshopPanel').style.display = 'none';
+  document.getElementById('playOptionsPanel').style.display = 'flex';
+});
+
+// 加载规则UI
+function loadRuleUI() {
+  let rules = {};
+  try { rules = JSON.parse(localStorage.getItem('bedwars_custom_rules') || '{}'); } catch (_) {}
+  document.getElementById('ruleWinCondition').value = rules.winCondition || 'last_team_standing';
+  document.getElementById('ruleScoreTarget').value = rules.scoreTarget || 50;
+  document.getElementById('ruleGameDuration').value = Math.floor((rules.gameDuration || 1800) / 60);
+  document.getElementById('ruleEnableShrink').checked = rules.enableShrink !== false;
+  document.getElementById('ruleShrinkStart').value = Math.floor((rules.shrinkStartTime || 1500) / 60);
+  document.getElementById('ruleShrinkSpeed').value = rules.shrinkSpeed || 0.203;
+  document.getElementById('ruleShrinkSpeedVal').textContent = rules.shrinkSpeed || 0.203;
+  document.getElementById('ruleShrinkDamage').value = rules.shrinkDamage || 10;
+  document.getElementById('ruleRespawnBase').value = rules.respawnBaseTime || 3;
+  document.getElementById('ruleRespawnMax').value = rules.respawnMaxTime || 30;
+  document.getElementById('ruleRespawnInc').value = rules.respawnIncrement || 2;
+  document.getElementById('ruleRespawnInvuln').value = rules.respawnInvulnTime || 1.5;
+  document.getElementById('ruleCopperRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.copper) || 2;
+  document.getElementById('ruleSilverRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.silver) || 6;
+  document.getElementById('ruleGoldRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.gold) || 15;
+  document.getElementById('ruleJadeRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.jade) || 42;
+  document.getElementById('ruleEnableAdvancedRes').checked = rules.enableAdvancedResources !== false;
+  document.getElementById('ruleSKTimeLimit').value = rules.skTimeLimit || 300;
+  document.getElementById('ruleSKFragments').value = rules.skFragmentCount || 5;
+  document.getElementById('ruleScoreTargetRow').style.display = (rules.winCondition === 'score_target') ? 'flex' : 'none';
+}
+
 document.getElementById('lobbySettingsBtn').addEventListener('click', () => window.hudLayoutManager?.open?.());
   const sensSlider = document.getElementById('sensSlider');
   const sensVal = document.getElementById('sensVal');
@@ -1179,5 +1283,140 @@ document.getElementById('dissolveRoomBtn').addEventListener('click', async () =>
 });
 });
 </script>
+
+  <!-- 创作工坊面板 -->
+  <div id="workshopPanel" class="lobby-float-panel" style="display:none;">
+    <div class="panel-header">
+      <h2>创作工坊</h2>
+      <button class="panel-close" id="workshopClose">×</button>
+    </div>
+    <div class="panel-body">
+      <div class="workshop-tabs">
+        <button class="workshop-tab active" data-tab="rules">规则配置</button>
+        <button class="workshop-tab" data-tab="maps">地图工坊</button>
+        <button class="workshop-tab" data-tab="roles">角色配置</button>
+      </div>
+      
+      <!-- 规则配置 -->
+      <div class="workshop-section active" id="workshopRules">
+        <div class="rule-group">
+          <h3>胜利条件</h3>
+          <select id="ruleWinCondition">
+            <option value="last_team_standing">最后存活队伍</option>
+            <option value="destroy_all_beds">摧毁所有床</option>
+            <option value="elimination">歼灭模式</option>
+            <option value="score_target">积分目标</option>
+          </select>
+          <div class="rule-row" id="ruleScoreTargetRow" style="display:none;">
+            <label>目标积分</label>
+            <input type="number" id="ruleScoreTarget" value="50" min="10" max="500">
+          </div>
+        </div>
+        
+        <div class="rule-group">
+          <h3>游戏时长</h3>
+          <div class="rule-row">
+            <label>总时长（分钟）</label>
+            <input type="number" id="ruleGameDuration" value="30" min="5" max="120">
+          </div>
+          <div class="rule-row">
+            <label><input type="checkbox" id="ruleEnableShrink" checked> 启用死亡边界</label>
+          </div>
+          <div class="rule-row">
+            <label>缩圈开始时间（分钟）</label>
+            <input type="number" id="ruleShrinkStart" value="25" min="1" max="60">
+          </div>
+          <div class="rule-row">
+            <label>缩圈速度</label>
+            <input type="range" id="ruleShrinkSpeed" min="0.05" max="1" step="0.01" value="0.203">
+            <span id="ruleShrinkSpeedVal">0.203</span>
+          </div>
+          <div class="rule-row">
+            <label>缩圈外伤害/秒</label>
+            <input type="number" id="ruleShrinkDamage" value="10" min="1" max="100">
+          </div>
+        </div>
+        
+        <div class="rule-group">
+          <h3>复活机制</h3>
+          <div class="rule-row">
+            <label>基础复活时间（秒）</label>
+            <input type="number" id="ruleRespawnBase" value="3" min="0" max="30">
+          </div>
+          <div class="rule-row">
+            <label>最大复活时间（秒）</label>
+            <input type="number" id="ruleRespawnMax" value="30" min="5" max="60">
+          </div>
+          <div class="rule-row">
+            <label>死亡递增惩罚（秒）</label>
+            <input type="number" id="ruleRespawnInc" value="2" min="0" max="10">
+          </div>
+          <div class="rule-row">
+            <label>复活无敌时间（秒）</label>
+            <input type="number" id="ruleRespawnInvuln" value="1.5" min="0" max="5" step="0.5">
+          </div>
+        </div>
+        
+        <div class="rule-group">
+          <h3>资源生成</h3>
+          <div class="rule-row">
+            <label>铜币间隔（秒）</label>
+            <input type="number" id="ruleCopperRate" value="2" min="1" max="30">
+          </div>
+          <div class="rule-row">
+            <label>银币间隔（秒）</label>
+            <input type="number" id="ruleSilverRate" value="6" min="1" max="60">
+          </div>
+          <div class="rule-row">
+            <label>金币间隔（秒）</label>
+            <input type="number" id="ruleGoldRate" value="15" min="1" max="120">
+          </div>
+          <div class="rule-row">
+            <label>玉佩间隔（秒）</label>
+            <input type="number" id="ruleJadeRate" value="42" min="1" max="300">
+          </div>
+          <div class="rule-row">
+            <label><input type="checkbox" id="ruleEnableAdvancedRes" checked> 启用高级资源（金/玉佩）</label>
+          </div>
+        </div>
+        
+        <div class="rule-group">
+          <h3>密室杀手</h3>
+          <div class="rule-row">
+            <label>时间限制（秒）</label>
+            <input type="number" id="ruleSKTimeLimit" value="300" min="60" max="600">
+          </div>
+          <div class="rule-row">
+            <label>碎片数量</label>
+            <input type="number" id="ruleSKFragments" value="5" min="3" max="15">
+          </div>
+        </div>
+        
+        <div class="workshop-actions">
+          <button class="small-btn" id="ruleSaveBtn">保存规则</button>
+          <button class="small-btn secondary" id="ruleResetBtn">恢复默认</button>
+          <button class="small-btn" id="ruleTestBtn">本地试玩</button>
+        </div>
+      </div>
+      
+      <!-- 地图工坊占位 -->
+      <div class="workshop-section" id="workshopMaps" style="display:none;">
+        <div class="map-workshop-intro">
+          <h3>地图工坊</h3>
+          <p>自定义地图功能开发中，敬请期待...</p>
+          <p>当前可使用规则配置功能调整对局体验。</p>
+        </div>
+      </div>
+      
+      <!-- 角色配置占位 -->
+      <div class="workshop-section" id="workshopRoles" style="display:none;">
+        <div class="role-workshop-intro">
+          <h3>角色配置</h3>
+          <p>自定义角色功能开发中，敬请期待...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

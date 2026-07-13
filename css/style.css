@@ -1326,3 +1326,20 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   font-size: 14px; cursor: pointer;
 }
 .exit-btn:active { background: rgba(255,50,50,0.3); }
+
+/* 创作工坊面板 */
+#workshopPanel { width: 520px; max-height: 80vh; overflow-y: auto; }
+#workshopPanel .panel-body { padding: 16px; }
+.workshop-tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
+.workshop-tab { background: transparent; border: none; color: #888; padding: 6px 14px; cursor: pointer; border-radius: 6px; font-size: 14px; }
+.workshop-tab.active { color: #00d4ff; background: rgba(0,212,255,0.1); }
+.workshop-tab:hover { color: #fff; }
+.workshop-section { display: none; }
+.workshop-section.active { display: block; }
+.rule-group { margin-bottom: 18px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+.rule-group h3 { margin: 0 0 10px 0; font-size: 14px; color: #00d4ff; }
+.rule-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.rule-row label { color: #aaa; font-size: 13px; flex: 1; }
+.rule-row input[type="number"], .rule-row input[type="range"], .rule-row select { width: 100px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
+.rule-row input[type="checkbox"] { width: auto; margin-right: 8px; }
+.workshop-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); }

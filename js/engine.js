@@ -71,6 +71,99 @@ const RES = {
 };
 
 // ============================================
+// 可配置游戏规则（乐园系统：规则工坊）
+// ============================================
+const DEFAULT_GAME_RULES = {
+  // 胜利条件
+  winCondition: 'last_team_standing', // 'last_team_standing' | 'destroy_all_beds' | 'elimination' | 'score_target'
+  scoreTarget: 50,
+  gameDuration: 1800, // 30分钟（秒）
+  enableShrink: true,
+  shrinkStartTime: 1500, // 25分钟后开始缩圈
+  shrinkInitialRadius: 125,
+  shrinkFinalRadius: 8,
+  shrinkSpeed: 0.203, // 每秒缩小的半径
+  shrinkDamage: 10, // 缩圈外每秒伤害
+
+  // 复活机制
+  respawnBaseTime: 3,
+  respawnMaxTime: 30,
+  respawnIncrement: 2,
+  respawnInvulnTime: 1.5,
+  maxRespawnCount: -1, // -1 = 无限
+
+  // 资源生成
+  resourceSpawnRates: {
+    copper: 2,
+    silver: 6,
+    gold: 15,
+    jade: 42
+  },
+  resourceGeneratorsInvincible: false, // 资源生成器是否可被摧毁
+  initialResources: { copper: 0, silver: 0, gold: 0, jade: 0 },
+  enableAdvancedResources: true, // 是否启用金/玉佩
+
+  // 商店
+  shopPriceMultiplier: 1.0,
+  disabledShopItems: [], // 禁用物品key列表
+
+  // 特殊规则
+  enableDreamTide: true,
+  dreamTideInterval: 300, // 5分钟
+  enableAutoUpgrade: true, // 自动升级方块
+  blockUpgradeChain: ['wood_plank','stone_plate','iron_plate','titanium'],
+
+  // 密室杀手专用
+  skTimeLimit: 300,
+  skFragmentCount: 5,
+  skKillerRatio: 0.25,
+
+  // 其他
+  enableGrowth: true,
+  growthSpeed: 1.0,
+  aiCount: 4,
+};
+
+let GAME_RULES = JSON.parse(JSON.stringify(DEFAULT_GAME_RULES));
+
+function loadCustomRules() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('bedwars_custom_rules') || '{}');
+    GAME_RULES = { ...DEFAULT_GAME_RULES, ...saved };
+  } catch (_) {
+    GAME_RULES = JSON.parse(JSON.stringify(DEFAULT_GAME_RULES));
+  }
+  // 同步到 RES 常量（向后兼容）
+  if (GAME_RULES.resourceSpawnRates.copper !== undefined) RES.COPPER.spawnSec = GAME_RULES.resourceSpawnRates.copper;
+  if (GAME_RULES.resourceSpawnRates.silver !== undefined) RES.SILVER.spawnSec = GAME_RULES.resourceSpawnRates.silver;
+  if (GAME_RULES.resourceSpawnRates.gold !== undefined) RES.GOLD.spawnSec = GAME_RULES.resourceSpawnRates.gold;
+  if (GAME_RULES.resourceSpawnRates.jade !== undefined) RES.JADE.spawnSec = GAME_RULES.resourceSpawnRates.jade;
+}
+
+function saveCustomRules(rules) {
+  localStorage.setItem('bedwars_custom_rules', JSON.stringify(rules));
+  GAME_RULES = { ...DEFAULT_GAME_RULES, ...rules };
+  // 同步到 RES 常量（向后兼容）
+  if (GAME_RULES.resourceSpawnRates.copper !== undefined) RES.COPPER.spawnSec = GAME_RULES.resourceSpawnRates.copper;
+  if (GAME_RULES.resourceSpawnRates.silver !== undefined) RES.SILVER.spawnSec = GAME_RULES.resourceSpawnRates.silver;
+  if (GAME_RULES.resourceSpawnRates.gold !== undefined) RES.GOLD.spawnSec = GAME_RULES.resourceSpawnRates.gold;
+  if (GAME_RULES.resourceSpawnRates.jade !== undefined) RES.JADE.spawnSec = GAME_RULES.resourceSpawnRates.jade;
+}
+
+function resetRules() {
+  localStorage.removeItem('bedwars_custom_rules');
+  GAME_RULES = JSON.parse(JSON.stringify(DEFAULT_GAME_RULES));
+  // 同步到 RES 常量（向后兼容）
+  if (GAME_RULES.resourceSpawnRates.copper !== undefined) RES.COPPER.spawnSec = GAME_RULES.resourceSpawnRates.copper;
+  if (GAME_RULES.resourceSpawnRates.silver !== undefined) RES.SILVER.spawnSec = GAME_RULES.resourceSpawnRates.silver;
+  if (GAME_RULES.resourceSpawnRates.gold !== undefined) RES.GOLD.spawnSec = GAME_RULES.resourceSpawnRates.gold;
+  if (GAME_RULES.resourceSpawnRates.jade !== undefined) RES.JADE.spawnSec = GAME_RULES.resourceSpawnRates.jade;
+}
+
+// 页面加载时自动读取自定义规则
+loadCustomRules();
+
+// ============================================
 // Item Database
 // ============================================
 const ITEM_DB = {
@@ -4034,7 +4127,7 @@ class PlayerEntity {
       this.missileControl = null;
     }
     if (!isVoidDeath) this.deathCount++;
-    this.respawnTimer = Math.min(30, 3 + (this.deathCount - 1) * 2);
+    this.respawnTimer = Math.min(GAME_RULES.respawnMaxTime, GAME_RULES.respawnBaseTime + (this.deathCount - 1) * GAME_RULES.respawnIncrement);
     this.pendingElimination = !this.teamInfo?.bedAlive;
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
 
@@ -4174,7 +4267,7 @@ class PlayerEntity {
     this.detectorEnemyCount = 0;
     this.jetpackTimer = 0;
     this._frostZoneTime = null;
-    this.invulnTimer = 1.5; // 复活后短暂无敌，防止连续死亡
+    this.invulnTimer = GAME_RULES.respawnInvulnTime;
     this.mesh.visible = true;
     if (this.mesh.material) {
       this.mesh.material.transparent = false;
