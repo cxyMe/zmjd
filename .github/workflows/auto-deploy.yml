@@ -1,0 +1,19 @@
+name: Auto Deploy to Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Server Deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: 154.194.253.140
+          port: 2398
+          username: administrator
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            cd /opt/zmjd && git pull origin main && systemctl restart zmjd
