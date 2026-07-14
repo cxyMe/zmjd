@@ -138,10 +138,27 @@ class InputManager {
 
     // Mobile touch
     this.setupMobile();
+    // 强制确保移动端控件可见（CSS媒体查询可能不被某些移动浏览器正确匹配）
+    this._ensureMobileControls();
   }
 
   isMobile() {
-    return window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    return window.matchMedia('(hover: none) and (pointer: coarse)').matches
+      || ('ontouchstart' in window && window.matchMedia('(max-width: 1024px)').matches);
+  }
+
+  _ensureMobileControls() {
+    if (!this.isMobile()) return;
+    const mc = document.getElementById('mobileControls');
+    if (mc) mc.style.setProperty('display', 'block', 'important');
+    const mql = window.matchMedia('(hover: none) and (pointer: coarse)');
+    const apply = () => {
+      if (mql.matches || this.isMobile()) {
+        const el = document.getElementById('mobileControls');
+        if (el) el.style.setProperty('display', 'block', 'important');
+      }
+    };
+    mql.addEventListener?.('change', apply);
   }
 
   setupMobile() {

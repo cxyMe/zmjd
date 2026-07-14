@@ -664,6 +664,10 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 @media (hover: none) and (pointer: coarse) {
   #mobileControls { display: block; }
 }
+/* 备选：触摸支持 + 小屏幕也显示移动控件 */
+@media (pointer: coarse), (max-width: 768px) and (hover: none) {
+  #mobileControls { display: block; }
+}
 #joystickZone {
   position: absolute; bottom: 100px; left: 40px; width: 140px; height: 140px; z-index: 150; touch-action: none;
 }
