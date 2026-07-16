@@ -665,7 +665,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   #mobileControls { display: block; }
 }
 /* 备选：触摸支持 + 小屏幕也显示移动控件 */
-@media (pointer: coarse), (max-width: 768px) and (hover: none) {
+@media (pointer: coarse), (any-pointer: coarse), (max-width: 768px) and (hover: none) {
   #mobileControls { display: block; }
 }
 #joystickZone {
@@ -868,7 +868,8 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .shape-steel { background: linear-gradient(135deg,#6b7280,#d1d5db,#374151,#9ca3af); border-radius: 10%; box-shadow: 0 0 16px rgba(140,200,255,.3), inset 0 0 10px rgba(255,255,255,.15); }
 .shape-waiwai { background: linear-gradient(135deg,#fff7df,#d6c3a0,#ffffff); border-radius: 50% 50% 42% 42%; box-shadow: 0 0 12px rgba(245,240,220,.28), inset 0 0 16px rgba(120,95,60,.25); clip-path: polygon(50% 0, 88% 26%, 78% 100%, 22% 100%, 12% 26%); }
 @keyframes hurricaneSpin { to { transform: rotate(360deg); } }
-.start-role-card h3 { text-align: center; color: #ffdd00; margin-bottom: 10px; font-size: 20px; }
+.start-role-card h3 { text-align: center; color: #ffdd00; margin-bottom: 6px; font-size: 20px; }
+.role-category { text-align: center; font-size: 11px; color: #8be9fd; background: rgba(139,233,253,.12); border: 1px solid rgba(139,233,253,.25); border-radius: 999px; padding: 2px 10px; margin: 0 auto 10px; width: fit-content; }
 .role-stat { display: flex; justify-content: space-between; gap: 8px; color: #cbd5e1; font-size: 12px; margin-bottom: 8px; }
 .role-skill-box { margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.08); }
 .role-skill-box b { color: #8be9fd; font-size: 12px; }

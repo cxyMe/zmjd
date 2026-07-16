@@ -144,7 +144,9 @@ class InputManager {
 
   isMobile() {
     return window.matchMedia('(hover: none) and (pointer: coarse)').matches
-      || ('ontouchstart' in window && window.matchMedia('(max-width: 1024px)').matches);
+      || window.matchMedia('(pointer: coarse)').matches
+      || ('ontouchstart' in window && window.innerWidth <= 1024)
+      || (navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
   }
 
   _ensureMobileControls() {
@@ -158,6 +160,7 @@ class InputManager {
         if (el) el.style.setProperty('display', 'block', 'important');
       }
     };
+    apply(); // 立即执行一次
     mql.addEventListener?.('change', apply);
   }
 
@@ -1268,6 +1271,7 @@ class Game {
       document.getElementById('teamInfo').style.display = 'none';
       document.getElementById('crosshair').style.display = 'block';
       window.hudLayoutManager?.init?.();
+      this._ensureMobileControls();
 
       // Show secret killer HUD
       const skHud = document.getElementById('secretKillerHud');
@@ -1369,6 +1373,7 @@ class Game {
       <div class="start-role-card" data-role="${key}">
         <div class="role-shape ${shapeClass[key]}"></div>
         <h3>${role.name}</h3>
+        <div class="role-category">${role.category || '通用'}</div>
         <div class="role-stat"><span>定位</span><b>${subtitles[key]}</b></div>
         <div class="role-stat"><span>生命</span><b>${role.hp}</b></div>
         <div class="role-stat"><span>初始</span><b>${starterText(role)}</b></div>

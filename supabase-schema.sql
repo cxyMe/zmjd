@@ -75,5 +75,21 @@ create policy "bedwars members all" on public.bw_room_members for all using (tru
 create policy "bedwars events all" on public.bw_room_events for all using (true) with check (true);
 create policy "bedwars snapshots all" on public.bw_room_snapshots for all using (true) with check (true);
 
+-- 游戏本地账号系统（用于跨设备同步，替代纯 localStorage 方案）
+create table if not exists public.bw_game_users (
+  id text primary key,
+  username text not null unique,
+  password_hash text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists bw_game_users_username_idx on public.bw_game_users(username);
+
+alter table public.bw_game_users replica identity full;
+alter table public.bw_game_users enable row level security;
+
+drop policy if exists "bedwars game users all" on public.bw_game_users;
+create policy "bedwars game users all" on public.bw_game_users for all using (true) with check (true);
+
 -- 请在 Supabase Dashboard 的 Realtime 页面中打开这四张表的复制：
 -- bw_rooms, bw_room_members, bw_room_events, bw_room_snapshots

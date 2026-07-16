@@ -12,48 +12,56 @@ const TEAMS = {
 const ROLES = {
   FOX: {
     name: '狐狸', hp: 90, skinClass: 'role-fox',
+    category: '先锋',
     passive: { name: '狐假虎威', desc: '生命低于20%时，造成伤害增加20%' },
     active: { name: '伪装', desc: '12秒隐身，移速+50%；跳跃和移动不破隐，其他操作破隐', cd: 16 },
     starter: [{ key: 'wood_sword', count: 1 }, { currency: 'copper', count: 10 }]
   },
   PORK_DOCTOR: {
     name: '猪排博士', hp: 110, skinClass: 'role-pork',
+    category: '支援',
     passive: { name: '吃饱喝足', desc: '每15秒恢复5点生命' },
     active: { name: '五斤肥肉', desc: '获得150额外生命并立即回复150，体积+20%，移速-25%，持续8秒', cd: 22 },
     starter: [{ currency: 'copper', count: 15 }]
   },
   HURRICANE: {
     name: '飓风', hp: 95, skinClass: 'role-hurricane',
+    category: '先锋',
     passive: { name: '透视箭', desc: '远程武器命中目标后透视标记3秒' },
     active: { name: '飓风之力', desc: '向准心方向位移6格，5秒内伤害固定+12', cd: 16 },
     starter: [{ key: 'bow', count: 1 }, { key: 'arrow', count: 5 }]
   },
   DRIFTWOOD: {
     name: '浮木', hp: 100, skinClass: 'role-driftwood',
+    category: '坦克',
     passive: { name: '动能回收', desc: '每次攻击命中目标获得3点护盾' },
     active: { name: '天罚', desc: '操控一枚高速导弹，8秒内自动爆炸或碰撞爆炸，可被远程武器摧毁', cd: 30 },
     starter: [{ key: 'wood_sword', count: 1 }]
   },
   STEEL_BONE: {
     name: '钢骨', hp: 105, skinClass: 'role-steel',
+    category: '坦克',
     passive: { name: '建筑加固', desc: '自己放置的建筑血量增加20%' },
     active: { name: '玻璃桥', desc: '从玩家位置向前生成宽2格长15格玻璃桥，无法被爆炸摧毁，持续12秒', cd: 25 },
     starter: [{ key: 'wood_plank', count: 35 }]
   },
   HIGH_ENERGY: {
     name: '高能人', hp: 75, skinClass: 'role-highenergy',
+    category: '法师',
     passive: { name: '附魔箭矢', desc: '发射的箭落地后留下3x3火焰区域3秒，每秒15点伤害' },
     active: { name: '超能喷气', desc: '悬浮22秒可自由移动/攻击，跳跃加速消耗30%悬浮时间，冷却30秒', cd: 30 },
     starter: [{ currency: 'silver', count: 5 }]
   },
   FROST: {
     name: '冰霜', hp: 90, skinClass: 'role-frost',
+    category: '法师',
     passive: { name: '霜降', desc: '受伤后在自身位置留下2x2冰霜区域，敌人移速-60%且3秒后冰冻' },
     active: { name: '绝对零度', desc: '向准心发射3个冰锥，击中冰冻3秒，落地产生3x3冰霜2秒', cd: 27 },
     starter: []
   },
   WAIWAI: {
     name: '歪歪', hp: 1, skinClass: 'role-waiwai',
+    category: '辅助',
     passive: { name: 'miss体质', desc: '复活获得3点miss；每30秒恢复1点；每点miss抵挡一次任意伤害并无敌1.2秒' },
     active: { name: '骨头阵', desc: '在地上生成2×4骨头阵，敌人每0.1秒损失2点生命', cd: 35 },
     starter: [{ key: 'bow', count: 1 }, { key: 'arrow', count: 5 }]
@@ -3874,7 +3882,7 @@ class PlayerEntity {
       window.game?.showMessage?.('导弹已加速至15格/秒！', '#ffdd00');
       return;
     }
-    if (this.isDead || this.isFrozen || this.skillCd > 0) return;
+    if (this.isDead || this.isFrozen || this.skillCd > 0 || this.skillActive > 0) return;
     if (this.role === 'STEEL_BONE' && this.glassBridgeTimer > 0) return;
     if (this.role !== 'FOX') this.breakCamouflage();
     const info = this.roleInfo;
@@ -3893,7 +3901,13 @@ class PlayerEntity {
       this.skillActive = 8;
       this.mesh.scale.set(1.2, 1.2, 1.2);
     } else if (this.role === 'HURRICANE') {
-      const dir = this.getForwardDir();
+      let dir;
+      if (this.isLocal && this.engine.camera) {
+        dir = new THREE.Vector3();
+        this.engine.camera.getWorldDirection(dir);
+      } else {
+        dir = this.getForwardDir();
+      }
       const target = this.pos.clone().addScaledVector(dir, 6);
       target.y = Math.max(this.getGroundHeight(target.x, target.z) + this.radius, target.y);
       this.pos.copy(target);

@@ -1013,7 +1013,7 @@ function renderRoleConfig() {
     div.innerHTML = `
       <div class="role-config-header">
         <span class="role-config-name">${escapeHtml(role.name)}</span>
-        <span class="role-config-info">${escapeHtml(role.passive?.name || '')} / ${escapeHtml(role.active?.name || '')}</span>
+        <span class="role-config-info">${escapeHtml(role.category || '通用')} · ${escapeHtml(role.passive?.name || '')} / ${escapeHtml(role.active?.name || '')}</span>
       </div>
       <div class="role-config-fields">
         <div class="rule-row">
@@ -1237,7 +1237,7 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
   const password = document.getElementById('loginPassword').value;
   try {
     setAuthStatus('正在登录...');
-    auth.login(username, password);
+    await auth.login(username, password);
     localOnly = false;
     renderAuth();
     setAuthStatus('登录成功');
@@ -1251,7 +1251,7 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
   const password = document.getElementById('loginPassword').value;
   try {
     setAuthStatus('正在注册...');
-    auth.register(username, password);
+    await auth.register(username, password);
     localOnly = false;
     renderAuth();
     setAuthStatus('注册并登录成功');

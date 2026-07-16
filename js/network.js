@@ -8,6 +8,7 @@ class AuthManager {
     this.config = config;
     this.user = null;
     this.session = null;
+    this.client = null;
     this.loadSession();
   }
 
@@ -16,6 +17,39 @@ class AuthManager {
     let t = '';
     for (let i = 0; i < 32; i++) t += chars[Math.floor(Math.random() * chars.length)];
     return t;
+  }
+
+  get _supabaseEnabled() {
+    return !!(this.config.supabaseUrl && this.config.supabaseAnonKey && window.supabase);
+  }
+
+  initClient() {
+    if (!this._supabaseEnabled) throw new Error('Supabase 未配置');
+    if (!this.client) {
+      this.client = window.supabase.createClient(this.config.supabaseUrl, this.config.supabaseAnonKey);
+    }
+    return this.client;
+  }
+
+  async _hashPassword(password, salt) {
+    const text = salt + ':' + password;
+    if (window.crypto && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    // fallback for non-secure contexts
+    let s = text;
+    for (let i = 0; i < 3; i++) {
+      try {
+        s = btoa(unescape(encodeURIComponent(s.split('').reverse().join('') + 'bw_salt_' + i)));
+      } catch (e) {
+        s = btoa(s.split('').reverse().join('') + 'bw_salt_' + i);
+      }
+    }
+    return s;
   }
 
   _users() {
@@ -42,21 +76,47 @@ class AuthManager {
     }
   }
 
-  register(username, password) {
+  async register(username, password) {
     const uname = String(username || '').trim();
     if (!uname) throw new Error('请输入用户名');
     if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{2,16}$/.test(uname)) throw new Error('用户名为 2-16 位，支持中英文、数字、下划线');
     if (!password || password.length < 6) throw new Error('密码至少 6 位');
 
-    const users = this._users();
     const key = uname.toLowerCase();
-    if (users[key]) throw new Error('该用户名已被注册');
-
     const uid = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+    const passwordHash = await this._hashPassword(password, key);
+
+    // 1) 优先尝试写入 Supabase（实现跨设备同步）
+    if (this._supabaseEnabled) {
+      try {
+        const client = this.initClient();
+        const { data: existing } = await client.from('bw_game_users').select('username').eq('username', key).maybeSingle();
+        if (existing) throw new Error('该用户名已被注册');
+        const { error } = await client.from('bw_game_users').insert({
+          id: uid,
+          username: key,
+          password_hash: passwordHash,
+          created_at: new Date().toISOString()
+        });
+        if (error) {
+          const msg = String(error.message || error.code || '').toLowerCase();
+          if (!msg.includes('does not exist') && !msg.includes('42p01')) {
+            console.warn('Supabase 注册写入失败，降级到本地:', error);
+          }
+        }
+      } catch (e) {
+        if (e.message === '该用户名已被注册') throw e;
+        console.warn('Supabase 注册失败，降级到本地:', e);
+      }
+    }
+
+    // 2) 同时保存到 localStorage（作为离线缓存与回退）
+    const users = this._users();
+    if (users[key]) throw new Error('该用户名已被注册');
     users[key] = {
       id: uid,
       username: uname,
-      password, // 本地存储，无服务器
+      password: passwordHash,
       createdAt: Date.now()
     };
     this._saveUsers(users);
@@ -68,16 +128,51 @@ class AuthManager {
     return { user: this.user, session: this.session };
   }
 
-  login(username, password) {
+  async login(username, password) {
     const uname = String(username || '').trim();
     if (!uname) throw new Error('请输入用户名');
     if (!password) throw new Error('请输入密码');
 
-    const users = this._users();
     const key = uname.toLowerCase();
+    const passwordHash = await this._hashPassword(password, key);
+
+    // 1) 优先尝试 Supabase 登录（跨设备同步）
+    if (this._supabaseEnabled) {
+      try {
+        const client = this.initClient();
+        const { data: rec, error } = await client.from('bw_game_users').select('*').eq('username', key).maybeSingle();
+        if (!error && rec) {
+          if (rec.password_hash !== passwordHash) throw new Error('密码错误');
+          this.user = { id: rec.id, username: uname, nickname: uname };
+          this.session = { access_token: this._makeToken(), expires_at: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60 };
+          localStorage.setItem('bedwars_auth', JSON.stringify({ user: this.user, session: this.session, savedAt: Date.now() }));
+          // 同步到本地缓存
+          const users = this._users();
+          users[key] = { id: rec.id, username: uname, password: rec.password_hash, createdAt: new Date(rec.created_at).getTime() };
+          this._saveUsers(users);
+          return { user: this.user, session: this.session };
+        }
+      } catch (e) {
+        if (e.message === '密码错误') throw e;
+        console.warn('Supabase 登录失败，降级到本地:', e);
+      }
+    }
+
+    // 2) 本地回退（兼容旧数据）
+    const users = this._users();
     const rec = users[key];
     if (!rec) throw new Error('用户名不存在');
-    if (rec.password !== password) throw new Error('密码错误');
+
+    const stored = rec.password || '';
+    if (stored === passwordHash) {
+      // 哈希匹配
+    } else if (stored === password) {
+      // 兼容旧明文密码：验证通过后自动升级为哈希
+      rec.password = passwordHash;
+      this._saveUsers(users);
+    } else {
+      throw new Error('密码错误');
+    }
 
     this.user = { id: rec.id, username: rec.username, nickname: rec.username };
     this.session = { access_token: this._makeToken(), expires_at: Math.floor(Date.now() / 1000) + 14 * 24 * 60 * 60 };
