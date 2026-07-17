@@ -162,7 +162,7 @@ function _fibSphere(count, baseRadius, jitter) {
   const pts = [];
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < count; i++) {
-    const y = 1 - (i / (count - 1)) * 2;
+    const y = 1 - (i / Math.max(1, count - 1)) * 2;
     const r = Math.sqrt(Math.max(0, 1 - y * y));
     const theta = golden * i;
     const jit = (Math.random() - 0.5) * (jitter || 0);
@@ -231,7 +231,6 @@ class ChibiModelBuilder {
       return null;
     }
 
-    if (parentMesh.geometry) parentMesh.geometry.visible = false;
     parentMesh.visible = true;
 
     const modelGroup = new THREE.Group();

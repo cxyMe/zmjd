@@ -776,8 +776,8 @@ const AIManager = {
   },
 
   removeAll() {
-    for (const ctrl of this.controllers) {
-      ctrl.ent.die(null);
+    for (let i = this.controllers.length - 1; i >= 0; i--) {
+      this.controllers[i].ent.die(null);
     }
     this.controllers = [];
     this.activeCount = 0;

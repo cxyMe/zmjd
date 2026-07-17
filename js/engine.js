@@ -267,6 +267,10 @@ class Engine {
     this.entities = [];
     this.blocks = new Map(); // key="x,y,z"
     this.particles = [];
+    if (!Engine._particleGeo) {
+      Engine._particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+      Engine._particleExplosionGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    }
     this.shakeTimer = 0;
     this.shakeIntensity = 0;
     this.projectiles = [];
@@ -401,9 +405,10 @@ class Engine {
     const key = this.getBlockKey(x, y, z);
     const blk = this.blocks.get(key);
     if (!blk) return false;
+    const pos = blk.mesh.position.clone();
     this._disposeMesh(blk.mesh);
     this.blocks.delete(key);
-    this.spawnParticles(blk.mesh.position, 0xcccccc, 6);
+    this.spawnParticles(pos, 0xcccccc, 6);
     return true;
   }
 
@@ -428,6 +433,7 @@ class Engine {
   }
 
   destroyBedBlock(x, y, z, blk) {
+    this._disposeMesh(blk.mesh);
     this.blocks.delete(this.getBlockKey(x, y, z));
     // 检查这个队伍的所有床方块是否都被清除
     const teamKey = blk.teamKey;
@@ -465,9 +471,8 @@ class Engine {
 
   spawnParticles(pos, color, count) {
     for (let i = 0; i < count; i++) {
-      const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(Engine._particleGeo, mat);
       mesh.position.copy(pos);
       mesh.position.x += (Math.random() - 0.5) * 0.8;
       mesh.position.y += (Math.random() - 0.5) * 0.8;
@@ -491,11 +496,10 @@ class Engine {
     const fx = fxMap[itemKey] || fxMap.tnt;
     for (let i = 0; i < fx.count; i++) {
       const c = fx.colors[Math.floor(Math.random() * fx.colors.length)];
-      const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
       const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true });
       mat.emissive = new THREE.Color(c);
       mat.emissiveIntensity = fx.emissiveIntensity;
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(Engine._particleExplosionGeo, mat);
       mesh.position.copy(pos);
       const angle = Math.random() * Math.PI * 2;
       const speed = 2 + Math.random() * radius * 1.5;
@@ -646,7 +650,7 @@ class Engine {
   _disposeMesh(mesh) {
     if (!mesh) return;
     this.scene.remove(mesh);
-    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.geometry && mesh.geometry !== Engine._particleGeo && mesh.geometry !== Engine._particleExplosionGeo) mesh.geometry.dispose();
     if (mesh.material) {
       if (mesh.material.map) mesh.material.map.dispose();
       if (Array.isArray(mesh.material)) mesh.material.forEach(m => { if (m?.map) m.map.dispose(); m?.dispose?.(); });
@@ -3980,7 +3984,7 @@ class PlayerEntity {
 
   launchMissile() {
     if (this.missileControl) return;
-    const dir = this.getForwardDir().normalize();
+    const dir = this.getForwardDir().normalize().clone();
     const start = this.pos.clone().add(new THREE.Vector3(0, 1, 0)).addScaledVector(dir, 2);
     const geo = new THREE.ConeGeometry(0.22, 0.75, 10);
     geo.rotateX(Math.PI / 2);

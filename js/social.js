@@ -5,7 +5,7 @@
 const SOCIAL_CONFIG = {
   markDuration: 8,
   markCooldown: 3,
- 援助冷却: 10,
+  aidCooldown: 10,
   comboCooldown: 600,
   rescueWindow: 3,
   rescueCostRate: 0.2
@@ -129,7 +129,8 @@ class SocialManager {
     const body = document.getElementById('markOptions');
     if (!panel || !body) return;
     const options = this.optionsForTarget(target);
-    body.innerHTML = options.map(o => `<button data-type="${o.type}">${o.label}</button>`).join('');
+    const esc = s => (s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    body.innerHTML = options.map(o => `<button data-type="${esc(o.type)}">${esc(o.label)}</button>`).join('');
     body.querySelectorAll('button').forEach(btn => {
       btn.onclick = () => {
         const opt = options.find(o => o.type === btn.dataset.type);
@@ -238,7 +239,7 @@ class SocialManager {
     const amount = Math.min(cur === 'copper' ? 20 : 5, Math.floor(lp.inv[cur] || 0));
     lp.inv[cur] -= amount;
     mate.inv[cur] = (mate.inv[cur] || 0) + amount;
-    this.aidCd = SOCIAL_CONFIG.援助冷却;
+    this.aidCd = SOCIAL_CONFIG.aidCooldown;
     this.createAidTrail(lp.pos, mate.pos, RES[cur.toUpperCase()]?.color || 0xffffff);
     this.game.showMessage(`物资急援：${this.currencyName(cur)} x${amount} → ${mate.name}`, '#8be9fd');
     this.logSocialEvent('resource_aid', mate.playerId, { currency: cur, amount });

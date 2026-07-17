@@ -270,6 +270,7 @@ class HUDLayoutManager {
   apply(layout) {
     if (!layout) return;
     Object.entries(layout).forEach(([id, pos]) => {
+      if (id === 'mobileControls') return;
       const el = document.getElementById(id);
       if (!el) return;
       el.style.top = pos.top;

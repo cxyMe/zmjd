@@ -12,9 +12,10 @@ class InputManager {
     this.buttons = { jump: false, attack: false, attackHeld: false, build: false, skill: false, skillHeld: false, action: false, actionHeld: false };
     this.lookSensitivity = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
     this.lastTouchAction = { x: 0, y: 0 };
+    this._handlers = [];
 
     // Keyboard
-    document.addEventListener('keydown', e => {
+    const onKeyDown = e => {
       this.keys[e.code] = true;
       if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','Tab'].includes(e.code)) e.preventDefault();
       // 地图编辑器快捷键
@@ -36,20 +37,28 @@ class InputManager {
           e.preventDefault();
         }
       }
-    });
-    document.addEventListener('keyup', e => {
+    };
+    document.addEventListener('keydown', onKeyDown);
+    this._handlers.push({ target: document, type: 'keydown', fn: onKeyDown });
+
+    const onKeyUp = e => {
       this.keys[e.code] = false;
       if (e.code === 'KeyQ') this.buttons.skill = true;
-    });
+    };
+    document.addEventListener('keyup', onKeyUp);
+    this._handlers.push({ target: document, type: 'keyup', fn: onKeyUp });
 
     // Mouse
-    document.addEventListener('mousemove', e => {
+    const onMouseMove = e => {
       if (document.pointerLockElement) {
         this.mouse.dx += e.movementX;
         this.mouse.dy += e.movementY;
       }
-    });
-    document.addEventListener('mousedown', e => {
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    this._handlers.push({ target: document, type: 'mousemove', fn: onMouseMove });
+
+    const onMouseDown = e => {
       if (e.target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel, #buildPanel, #timedAction')) return;
       // 地图编辑器模式下，点击传递给编辑器
       if (window.game?.engine?.mapEditor?.active) {
@@ -64,31 +73,48 @@ class InputManager {
           ? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
           : { x: e.clientX, y: e.clientY };
       }
-    });
-    document.addEventListener('mouseup', e => {
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    this._handlers.push({ target: document, type: 'mousedown', fn: onMouseDown });
+
+    const onMouseUp = e => {
       if (e.button === 0) { this.buttons.attack = false; this.buttons.attackHeld = false; }
       if (e.button === 2) this.buttons.build = false;
-    });
-    document.addEventListener('contextmenu', e => e.preventDefault());
+    };
+    document.addEventListener('mouseup', onMouseUp);
+    this._handlers.push({ target: document, type: 'mouseup', fn: onMouseUp });
+
+    const onCtxMenu = e => e.preventDefault();
+    document.addEventListener('contextmenu', onCtxMenu);
+    this._handlers.push({ target: document, type: 'contextmenu', fn: onCtxMenu });
 
     // Mouse wheel for hotbar
-    document.addEventListener('wheel', e => {
+    const onWheel = e => {
       this.mouse.scroll = Math.sign(e.deltaY);
-    }, { passive: true });
+    };
+    document.addEventListener('wheel', onWheel, { passive: true });
+    this._handlers.push({ target: document, type: 'wheel', fn: onWheel, opts: { passive: true } });
 
     // Lock pointer on click
     const canvas = document.getElementById('gameCanvas');
-    canvas?.addEventListener('click', () => {
-      if (window.game?.gameActive && !this.isMobile()) {
-        canvas.requestPointerLock();
-      }
-    });
-    document.addEventListener('pointerlockchange', () => {
+    if (canvas) {
+      const onCanvasClick = () => {
+        if (window.game?.gameActive && !this.isMobile()) {
+          canvas.requestPointerLock();
+        }
+      };
+      canvas.addEventListener('click', onCanvasClick);
+      this._handlers.push({ target: canvas, type: 'click', fn: onCanvasClick });
+    }
+
+    const onPointerLockChange = () => {
       this.mouse.locked = !!document.pointerLockElement;
-    });
+    };
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    this._handlers.push({ target: document, type: 'pointerlockchange', fn: onPointerLockChange });
 
     const isGameUiTarget = (target) => target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel');
-    document.addEventListener('touchstart', e => {
+    const onTouchStart = e => {
       if (!window.game?.gameActive || !this.isMobile()) return;
       if (isGameUiTarget(e.target)) return;
       const t = e.changedTouches[0];
@@ -116,8 +142,11 @@ class InputManager {
       this.touchLook.id = t.identifier;
       this.touchLook.lastX = t.clientX;
       this.touchLook.lastY = t.clientY;
-    }, { passive: true });
-    document.addEventListener('touchmove', e => {
+    };
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    this._handlers.push({ target: document, type: 'touchstart', fn: onTouchStart, opts: { passive: true } });
+
+    const onTouchMove = e => {
       if (!this.touchLook.active || !window.game?.gameActive || !this.isMobile()) return;
       const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
       if (!t) return;
@@ -126,7 +155,10 @@ class InputManager {
       this.mouse.dy += (t.clientY - this.touchLook.lastY) * sens * 0.6;
       this.touchLook.lastX = t.clientX;
       this.touchLook.lastY = t.clientY;
-    }, { passive: true });
+    };
+    document.addEventListener('touchmove', onTouchMove, { passive: true });
+    this._handlers.push({ target: document, type: 'touchmove', fn: onTouchMove, opts: { passive: true } });
+
     const endLook = (e) => {
       if (!this.touchLook.active) return;
       const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
@@ -135,12 +167,21 @@ class InputManager {
       this.touchLook.id = null;
     };
     document.addEventListener('touchend', endLook, { passive: true });
+    this._handlers.push({ target: document, type: 'touchend', fn: endLook, opts: { passive: true } });
     document.addEventListener('touchcancel', endLook, { passive: true });
+    this._handlers.push({ target: document, type: 'touchcancel', fn: endLook, opts: { passive: true } });
 
     // Mobile touch
     this.setupMobile();
     // 强制确保移动端控件可见（CSS媒体查询可能不被某些移动浏览器正确匹配）
     this._ensureMobileControls();
+  }
+
+  destroy() {
+    for (const h of this._handlers) {
+      h.target.removeEventListener(h.type, h.fn, h.opts);
+    }
+    this._handlers = [];
   }
 
   isMobile() {
@@ -1020,6 +1061,7 @@ class Game {
     this.ui = null;
     this.lastTime = 0;
     this.killFeed = [];
+    this._timeouts = [];
     this.shrinkBoundary = null;
     this.shopDirty = true;
     this.network = options.network || null;
@@ -1328,6 +1370,7 @@ class Game {
     document.getElementById('crosshair').style.display = 'block';
     document.getElementById('skillBtn').style.display = 'flex';
     window.hudLayoutManager?.init?.();
+    this._ensureMobileControls();
 
     // Show skill info
     const skillBtn = document.getElementById('skillBtn');
@@ -1735,7 +1778,7 @@ class Game {
         g.ready = true;
         // Visual pulse
         g.mesh.scale.set(1.2, 1.2, 1.2);
-        setTimeout(() => { if(g.mesh) g.mesh.scale.set(1,1,1); }, 200);
+        this._timeouts.push(setTimeout(() => { if(g.mesh) g.mesh.scale.set(1,1,1); }, 200));
         // Spawn currency drop item
         const resKey = g.type === 'COPPER' ? 'copper' : g.type === 'SILVER' ? 'silver' : g.type === 'GOLD' ? 'gold' : 'jade';
         const dropPos = g.pos.clone();
@@ -2033,6 +2076,9 @@ class Game {
   endGame(winnerName) {
     if (!this.gameActive) return;
     this.gameActive = false;
+    this.input?.destroy?.();
+    for (const tid of this._timeouts) clearTimeout(tid);
+    this._timeouts = [];
     if (this.network?.roomNet?.setRoomStatus) {
       this.network.roomNet.setRoomStatus('ended').catch(console.warn);
     }
@@ -2140,7 +2186,7 @@ class Game {
     div.textContent = text;
     div.style.color = color;
     container.appendChild(div);
-    setTimeout(() => div.remove(), 3500);
+    this._timeouts.push(setTimeout(() => div.remove(), 3500));
   }
 
   addKillFeed(text) {
@@ -2149,7 +2195,7 @@ class Game {
     div.className = 'kill-msg';
     div.textContent = text;
     container.appendChild(div);
-    setTimeout(() => div.remove(), 6000);
+    this._timeouts.push(setTimeout(() => div.remove(), 6000));
     if (container.children.length > 6) container.removeChild(container.firstChild);
   }
 
