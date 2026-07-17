@@ -121,8 +121,9 @@ class InputManager {
       if (!this.touchLook.active || !window.game?.gameActive || !this.isMobile()) return;
       const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
       if (!t) return;
-      this.mouse.dx += (t.clientX - this.touchLook.lastX) * 1.35;
-      this.mouse.dy += (t.clientY - this.touchLook.lastY) * 1.2;
+      const sens = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
+      this.mouse.dx += (t.clientX - this.touchLook.lastX) * sens * 0.8;
+      this.mouse.dy += (t.clientY - this.touchLook.lastY) * sens * 0.6;
       this.touchLook.lastX = t.clientX;
       this.touchLook.lastY = t.clientY;
     }, { passive: true });
@@ -150,18 +151,14 @@ class InputManager {
   }
 
   _ensureMobileControls() {
-    if (!this.isMobile()) return;
+    // 在任何有触摸能力的设备上强制显示
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (!hasTouch) return;
     const mc = document.getElementById('mobileControls');
-    if (mc) mc.style.setProperty('display', 'block', 'important');
-    const mql = window.matchMedia('(hover: none) and (pointer: coarse)');
-    const apply = () => {
-      if (mql.matches || this.isMobile()) {
-        const el = document.getElementById('mobileControls');
-        if (el) el.style.setProperty('display', 'block', 'important');
-      }
-    };
-    apply(); // 立即执行一次
-    mql.addEventListener?.('change', apply);
+    if (mc) {
+      mc.style.setProperty('display', 'block', 'important');
+      mc.style.setProperty('pointer-events', 'auto', 'important');
+    }
   }
 
   setupMobile() {
@@ -1369,9 +1366,61 @@ class Game {
       WAIWAI: '1血极限 / miss免伤'
     };
     const starterText = (role) => (role.starter || []).map(s => s.currency ? `${s.count}${s.currency === 'copper' ? '铜币' : s.currency}` : `${ITEM_DB[s.key]?.name || s.key}x${s.count}`).join('、') || '无';
+    // 分类栏
+    const categories = {};
+    for (const [key, role] of Object.entries(ROLES)) {
+      const cat = role.category || '通用';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(key);
+    }
+    
+    // 如果面板还没有分类栏，创建一个
+    let catBar = document.getElementById('roleCatBar');
+    if (!catBar) {
+      catBar = document.createElement('div');
+      catBar.id = 'roleCatBar';
+      catBar.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;';
+      panel.insertBefore(catBar, cards);
+    }
+    catBar.innerHTML = '';
+    const allCats = ['全部', ...Object.keys(categories)];
+    allCats.forEach((cat, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'role-cat-btn' + (i === 0 ? ' active' : '');
+      btn.textContent = cat;
+      btn.style.cssText = 'padding:4px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#ccc;cursor:pointer;font-size:12px;transition:all .2s;';
+      btn.addEventListener('click', () => {
+        catBar.querySelectorAll('.role-cat-btn').forEach(b => {
+          b.classList.remove('active');
+          b.style.background = 'rgba(255,255,255,.08)';
+          b.style.color = '#ccc';
+          b.style.borderColor = 'rgba(255,255,255,.2)';
+        });
+        btn.classList.add('active');
+        btn.style.background = 'rgba(0,212,255,.25)';
+        btn.style.color = '#00d4ff';
+        btn.style.borderColor = '#00d4ff';
+        // 过滤角色
+        const filter = btn.textContent;
+        cards.querySelectorAll('.start-role-card').forEach(card => {
+          if (filter === '全部' || ROLES[card.dataset.role]?.category === filter) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+      if (i === 0) {
+        btn.style.background = 'rgba(0,212,255,.25)';
+        btn.style.color = '#00d4ff';
+        btn.style.borderColor = '#00d4ff';
+      }
+      catBar.appendChild(btn);
+    });
+
     cards.innerHTML = Object.entries(ROLES).map(([key, role]) => `
       <div class="start-role-card" data-role="${key}">
-        <div class="role-shape ${shapeClass[key]}"></div>
+        <div class="role-shape ${shapeClass[key] || ''}"></div>
         <h3>${role.name}</h3>
         <div class="role-category">${role.category || '通用'}</div>
         <div class="role-stat"><span>定位</span><b>${subtitles[key]}</b></div>

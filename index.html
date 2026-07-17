@@ -846,6 +846,23 @@ function renderRoom() {
       }
     });
   });
+  // 进入游戏按钮
+  let enterBtn = document.getElementById('enterGameBtn');
+  if (!enterBtn) {
+    enterBtn = document.createElement('button');
+    enterBtn.id = 'enterGameBtn';
+    enterBtn.className = 'small-btn primary wide';
+    enterBtn.style.cssText = 'margin-top:10px;padding:10px;font-size:15px;';
+    enterBtn.textContent = '进入游戏';
+    enterBtn.addEventListener('click', () => {
+      const startBtn = document.getElementById('startGameBtn');
+      if (startBtn && !startBtn.disabled) startBtn.click();
+    });
+    const statusEl = document.getElementById('roomStatus');
+    if (statusEl && statusEl.parentNode) {
+      statusEl.parentNode.insertBefore(enterBtn, statusEl.nextSibling);
+    }
+  }
   updateStartBtn();
   updateAiButton();
 }
