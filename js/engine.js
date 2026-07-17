@@ -2697,6 +2697,22 @@ class PlayerEntity {
     this.mesh.geometry = this.createRoleGeometry(roleKey);
     this.skinColor = this.getEquippedSkinColor();
     this.mesh.material = new THREE.MeshStandardMaterial({ color: this.skinColor });
+    // 附加Q版角色模型
+    this.chibiData = null;
+    if (typeof ChibiModelBuilder !== 'undefined') {
+      try {
+        const tc = this.team ? TEAMS[this.team]?.color : 0xffffff;
+        this.chibiData = ChibiModelBuilder.attach(this.mesh, roleKey, tc);
+        // 隐藏原始几何体，只显示Q版模型
+        if (this.mesh.geometry) {
+          this.mesh.geometry.dispose();
+        }
+        this.mesh.geometry = new THREE.SphereGeometry(0.01, 4, 4); // 极小占位
+        this.mesh.material = new THREE.MeshBasicMaterial({ visible: false });
+      } catch (e) {
+        console.warn('Q版模型加载失败，使用默认几何体:', e);
+      }
+    }
     if (oldTag) this.mesh.add(oldTag);
     this.weaponMesh = null;
     this.updateWeaponMesh();
@@ -3381,7 +3397,22 @@ class PlayerEntity {
 
     // Update mesh
     this.mesh.position.copy(this.pos);
-    this.mesh.rotation.y = this.yaw;
+    if (this.chibiData?.parts?.modelGroup) {
+      this.chibiData.parts.modelGroup.rotation.y = this.yaw;
+    } else {
+      this.mesh.rotation.y = this.yaw;
+    }
+
+    // Q版模型动画
+    if (this.chibiData?.animator) {
+      let animState = 'idle';
+      if (this.isDead) animState = 'dead';
+      else if (this.hurtTimer > 0) animState = 'hurt';
+      else if (this.buttons?.attack || this.buttons?.attackHeld) animState = 'attack';
+      else if (this.skillActive > 0) animState = 'skill';
+      else if (this.moveInput?.x || this.moveInput?.z || this.moveInput?.forward) animState = 'walk';
+      this.chibiData.animator.update(dt, animState);
+    }
 
     // 隐身视觉：狐狸伪装只留下非常淡的白色轮廓，武器和名称全部隐藏
     if (this.smokeInvisibleTimer <= 0 && this.camouflageTimer <= 0) this.isInvisible = false;
@@ -4198,6 +4229,13 @@ class PlayerEntity {
     this.isDead = true;
     this.hp = 0;
     this.mesh.visible = false;
+    // 清理Q版模型
+    if (this.chibiData) {
+      if (this.chibiData.parts?.modelGroup) {
+        this.engine._disposeMesh(this.chibiData.parts.modelGroup);
+      }
+      this.chibiData = null;
+    }
     if (this.placePreviewMesh) {
       this.engine._disposeMesh(this.placePreviewMesh);
       this.placePreviewMesh = null;
@@ -4358,6 +4396,17 @@ class PlayerEntity {
       this.mesh.material.opacity = 1;
       this.mesh.material.wireframe = false;
       if (this.mesh.material.emissive) this.mesh.material.emissive.setHex(0x000000);
+    }
+    // 重建Q版模型
+    this.chibiData = null;
+    if (typeof ChibiModelBuilder !== 'undefined') {
+      try {
+        const tc = this.team ? TEAMS[this.team]?.color : 0xffffff;
+        this.chibiData = ChibiModelBuilder.attach(this.mesh, this.role, tc);
+        if (this.mesh.geometry) this.mesh.geometry.dispose();
+        this.mesh.geometry = new THREE.SphereGeometry(0.01, 4, 4);
+        this.mesh.material = new THREE.MeshBasicMaterial({ visible: false });
+      } catch (e) {}
     }
     this.pos.copy(this.findSafeRespawnPosition());
     this.vel.set(0, 0, 0);
