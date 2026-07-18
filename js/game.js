@@ -1093,6 +1093,20 @@ class Game {
 
   init() {
     const container = document.getElementById('gameCanvas');
+    // 清理旧的 engine（如果存在，比如上局游戏未完全清理）
+    if (window.game?.engine) {
+      try {
+        const oldRenderer = window.game.engine.renderer;
+        if (oldRenderer) {
+          oldRenderer.domElement.remove();
+          oldRenderer.dispose();
+        }
+      } catch(_) {}
+      window.game.engine = null;
+    }
+    // 移除容器中所有旧的 canvas（防御性清理）
+    container.querySelectorAll('canvas').forEach(c => c.remove());
+
     this.engine = new Engine(container);
     this.gens = generateWorld(this.engine, this.selectedMap);
     this.social?.initMatch?.();
@@ -1232,7 +1246,7 @@ class Game {
     });
 
     // Start loop
-    requestAnimationFrame(t => this.loop(t));
+    this._rafId = requestAnimationFrame(t => this.loop(t));
 
     // Subscribe to admin commands
     this.subscribeAdminCommands();
@@ -1608,7 +1622,8 @@ class Game {
   }
 
   loop(time) {
-    requestAnimationFrame(t => this.loop(t));
+    if (!this.gameActive && !this.isCampusMode) return; // 停止循环
+    this._rafId = requestAnimationFrame(t => this.loop(t));
     const dt = Math.min((time - this.lastTime) / 1000, 0.05);
     this.lastTime = time;
 
@@ -2282,6 +2297,8 @@ class Game {
   endGame(winnerName) {
     if (!this.gameActive) return;
     this.gameActive = false;
+    // 停止渲染循环
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     this.input?.destroy?.();
     for (const tid of this._timeouts) clearTimeout(tid);
     this._timeouts = [];

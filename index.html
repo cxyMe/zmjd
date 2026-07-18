@@ -1515,8 +1515,18 @@ document.getElementById('roomStartBtn').addEventListener('click', () => {
     window.game.start(selectedTeam, 'FOX', selectedMode);
   } catch (err) {
     console.error('游戏启动失败:', err);
-    setRoomStatus('游戏启动失败: ' + (err.message || '未知错误'), true);
+    // 清理可能已部分创建的Game对象
+    if (window.game?.engine) {
+      try { window.game.engine.dispose?.(); } catch(_) {}
+    }
+    window.game = null;
+    setRoomStatus('启动失败: ' + (err.message || err.stack || '未知错误'), true);
+    // 恢复所有UI到主菜单状态
+    closeAllLobbyPanels();
     document.getElementById('mainMenu').style.display = '';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('startRolePanel').style.display = 'none';
+    return; // 不执行后续网络状态更新
   }
   if (!localOnly && netMgr?.isHost) {
     netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
