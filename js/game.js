@@ -1471,11 +1471,8 @@ class Game {
       skillBtn.querySelector('span:first-child').textContent = ROLES[roleKey].active.name;
     }
 
-    // Lock pointer
-    if (!this.input.isMobile()) {
-      this.engine.renderer.domElement.requestPointerLock();
-    }
-
+    // Lock pointer - 延迟到角色选择完成后再锁定
+    // beginRoleSelection 中 confirmRoleSelection 会触发 pointerLock
     this.showMessage('游戏开始！保护你的床，摧毁敌人的床！');
     this.social?.initMatch?.();
     this.beginRoleSelection();
