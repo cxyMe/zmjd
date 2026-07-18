@@ -198,7 +198,6 @@ class InputManager {
     const mc = document.getElementById('mobileControls');
     if (mc) {
       mc.style.setProperty('display', 'block', 'important');
-      mc.style.setProperty('pointer-events', 'auto', 'important');
     }
   }
 
@@ -1113,7 +1112,11 @@ class Game {
     });
 
     document.querySelector('.shop-close').onclick = () => this.toggleShop();
-    document.getElementById('shopBtn').onclick = () => this.toggleShop();
+    const shopBtn = document.getElementById('shopBtn');
+    if (shopBtn) {
+      shopBtn.onclick = () => this.toggleShop();
+      shopBtn.addEventListener('touchend', e => { e.preventDefault(); this.toggleShop(); });
+    }
     document.getElementById('layoutBtn').onclick = () => window.hudLayoutManager?.open();
     document.getElementById('rescueBtn').onclick = () => this.social?.rescueVoidMate();
     document.querySelectorAll('.growth-tab').forEach(tab => {

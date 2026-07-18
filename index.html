@@ -855,7 +855,7 @@ function renderRoom() {
     enterBtn.style.cssText = 'margin-top:10px;padding:10px;font-size:15px;';
     enterBtn.textContent = '进入游戏';
     enterBtn.addEventListener('click', () => {
-      const startBtn = document.getElementById('startGameBtn');
+      const startBtn = document.getElementById('roomStartBtn');
       if (startBtn && !startBtn.disabled) startBtn.click();
     });
     const statusEl = document.getElementById('roomStatus');

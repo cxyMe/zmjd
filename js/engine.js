@@ -2589,6 +2589,21 @@ class PlayerEntity {
     this.mesh.position.copy(this.pos);
     this.mesh.castShadow = true;
 
+    // 尝试创建Q版角色模型
+    this.chibiData = null;
+    if (typeof ChibiModelBuilder !== 'undefined') {
+      try {
+        const tc = this.team ? TEAMS[this.team]?.color : 0xffffff;
+        this.chibiData = ChibiModelBuilder.attach(this.mesh, this.role, tc);
+        this.mesh.geometry.dispose();
+        this.mesh.geometry = new THREE.SphereGeometry(0.01, 4, 4);
+        this.mesh.material = new THREE.MeshBasicMaterial({ visible: false });
+      } catch (e) {
+        console.warn('构造函数Q版模型创建失败:', e);
+        this.chibiData = null;
+      }
+    }
+
     // Name label
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 64;

@@ -614,7 +614,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 }
 
 /* Mobile Controls */
-#mobileControls { display: none; position: absolute; inset: 0; pointer-events: auto !important; }
+#mobileControls { display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none !important; }
 #mobileControls * { pointer-events: auto; }
 #deathOverlay {
   position: fixed; inset: 0; z-index: 220; display: none; align-items: center; justify-content: center;
