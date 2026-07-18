@@ -273,6 +273,21 @@ updateOrientationGate();
   <div id="killFeed"></div>
   <div class="net-badge" id="netBadge" style="display:none;">联机状态：<span class="online">本地</span></div>
 
+  <!-- Campus Treasure Hunt HUD -->
+  <div id="campusHud" style="display:none;">
+    <div id="campusTimer" style="position:fixed;top:12px;left:50%;transform:translateX(-50%);color:#00ffaa;font-size:20px;font-weight:bold;text-shadow:0 0 8px rgba(0,255,170,0.5);z-index:200;"></div>
+    <div id="campusStatus" style="position:fixed;top:40px;left:12px;color:#e2e8f0;font-size:12px;z-index:200;"></div>
+    <div id="campusWeight" style="position:fixed;top:12px;right:12px;color:#e2e8f0;font-size:12px;z-index:200;"></div>
+    <div id="campusEvent" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff4444;font-size:48px;font-weight:bold;text-shadow:0 0 20px rgba(255,0,0,0.8);z-index:250;display:none;pointer-events:none;"></div>
+    <div id="campusBackpack" style="display:none;position:fixed;right:10px;top:50%;transform:translateY(-50%);z-index:210;background:rgba(15,15,35,0.9);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;width:280px;max-height:70vh;overflow-y:auto;color:#e2e8f0;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-weight:bold;">背包</span>
+        <span id="campusBpCount" style="color:#94a3b8;font-size:11px;"></span>
+      </div>
+      <div id="campusBpGrid" style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;"></div>
+    </div>
+  </div>
+
   <!-- Mobile Controls -->
   <div id="mobileControls">
     <div id="joystickZone">
@@ -412,6 +427,13 @@ updateOrientationGate();
         <div class="mode-select" id="roomModeSelect">
           <div class="mode-card selected" data-mode="classic">经典模式</div>
           <div class="mode-card" data-mode="secret_killer">密室杀手</div>
+          <div class="play-option campus-option" data-mode="campus" onclick="selectMode('campus')">
+            <div class="mode-icon">🏛️</div>
+            <div class="mode-info">
+              <h3>校园寻宝</h3>
+              <p>潜入校园，搜集秘宝，安全撤离</p>
+            </div>
+          </div>
         </div>
       </div>
       <div class="room-panel-section">
@@ -601,6 +623,8 @@ updateOrientationGate();
 <script defer src="js/growth.js"></script>
 <script defer src="js/social.js"></script>
 <script defer src="js/chibi-models.js"></script>
+<script defer src="js/campus-mode.js"></script>
+<script defer src="js/campus-map.js"></script>
 <script defer src="js/engine.js"></script>
 <script defer src="js/ai-controller.js"></script>
 <script defer src="js/game.js"></script>
@@ -657,9 +681,19 @@ document.querySelectorAll('.map-card').forEach(card => {
 });
 
 // Mode selection
+function selectMode(mode) {
+  window._selectedMode = mode;
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+  const match = document.querySelector(`.mode-card[data-mode="${mode}"]`);
+  if (match) match.classList.add('selected');
+  document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
+  const campusOpt = document.querySelector('.campus-option[data-mode="campus"]');
+  if (campusOpt && mode === 'campus') campusOpt.classList.add('selected');
+}
 document.querySelectorAll('.mode-card').forEach(card => {
   card.addEventListener('click', () => {
     document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
     card.classList.add('selected');
     window._selectedMode = card.dataset.mode;
   });

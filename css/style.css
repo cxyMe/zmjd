@@ -1378,3 +1378,8 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .skill-info-row { margin-bottom: 8px; }
 .skill-info-row b { color: #a78bfa; font-size: 12px; }
 .skill-info-row p { color: #94a3b8; font-size: 11px; margin: 2px 0 0; }
+
+/* ========== Campus Treasure Hunt Mode ========== */
+.campus-option { cursor: pointer; }
+.campus-option:hover { background: rgba(0, 255, 170, 0.1) !important; border-color: #00ffaa !important; }
+.campus-option.selected { border-color: #00ffaa !important; box-shadow: 0 0 15px rgba(0,255,170,0.3); }

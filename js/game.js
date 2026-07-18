@@ -1222,7 +1222,12 @@ class Game {
       }
       if (e.code === 'Tab') {
         e.preventDefault();
-        this.toggleBackpack();
+        if (this.isCampusMode) {
+          const bp = document.getElementById('campusBackpack');
+          if (bp) bp.style.display = bp.style.display === 'none' ? 'block' : 'none';
+        } else {
+          this.toggleBackpack();
+        }
       }
     });
 
@@ -1325,6 +1330,53 @@ class Game {
       }
 
       return; // Skip normal start logic
+    }
+
+    // === 校园寻宝模式 ===
+    if (mode === 'campus') {
+      closeAllLobbyPanels();
+      document.getElementById('mainMenu').style.display = 'none';
+      document.getElementById('hud').style.display = 'block';
+      document.getElementById('gameOverScreen').style.display = 'none';
+      document.getElementById('shopPanel').style.display = 'none';
+      document.getElementById('crosshair').style.display = 'none';
+      document.getElementById('skillBtn').style.display = 'none';
+      document.getElementById('resourceBar').style.display = 'none';
+      document.getElementById('teamInfo').style.display = 'none';
+      document.getElementById('hotbar').style.display = 'none';
+      document.getElementById('shopBtn').style.display = 'none';
+      
+      // 显示校园HUD
+      document.getElementById('campusHud').style.display = 'block';
+      
+      this._ensureMobileControls();
+      
+      // 初始化校园寻宝
+      this.campusMode = new CampusMode(this.engine);
+      const mapGen = new CampusMapGenerator(this.engine.scene);
+      this._campusMapGen = mapGen;
+      mapGen.generate();
+      
+      // 等待地图生成后初始化玩家
+      this.campusMode.init('ATHLETE', this.playerName);
+      
+      // 设置事件回调
+      this.campusMode.onEvent = (type, msg) => {
+        this.showMessage(msg);
+        const eventEl = document.getElementById('campusEvent');
+        if (eventEl) {
+          eventEl.textContent = msg;
+          eventEl.style.display = 'block';
+          setTimeout(() => { eventEl.style.display = 'none'; }, 3000);
+        }
+      };
+      
+      this.campusMode.onEnd = (success, reason, player) => {
+        this.endCampusMode(success, reason, player);
+      };
+      
+      this.isCampusMode = true;
+      return;
     }
 
     // Create local player (classic mode)
@@ -1673,9 +1725,27 @@ class Game {
     // Local input
     if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
       const move = this.input.getMovement();
+      if (this.isCampusMode && this.campusMode?.localPlayer) {
+        const campusInput = {
+          forward: !!move.z && move.z > 0,
+          backward: !!move.z && move.z < 0,
+          left: !!move.x && move.x < 0,
+          right: !!move.x && move.x > 0,
+          sprint: this.input.isDown('ShiftLeft'),
+          crouch: this.input.isDown('ControlLeft'),
+        };
+        this.campusMode.localPlayer.update(dt, campusInput);
+        this.campusMode.localPlayer.look(look.dx, look.dy);
+      }
       this.localPlayer.moveInput(move.x, move.z, this.input.isDown('ShiftLeft'));
       const look = this.input.getLook();
       this.localPlayer.look(look.dx, look.dy);
+      // 校园寻宝模式
+      if (this.isCampusMode && this.campusMode) {
+        this.campusMode.update(dt);
+        this._updateCampusHud();
+        return; // skip normal game loop
+      }
       // Scroll hotbar
       const scroll = this.input.getHotbarScroll();
       if (scroll !== 0) {
@@ -2126,6 +2196,89 @@ class Game {
       if (c > bestCount) { bestCount = c; bestTeam = t; }
     }
     this.endGame(bestTeam ? TEAMS[bestTeam].name : '无');
+  }
+
+  endCampusMode(success, reason, player) {
+    this.isCampusMode = false;
+    document.getElementById('campusHud').style.display = 'none';
+    
+    // 显示结算
+    const goScreen = document.getElementById('gameOverScreen');
+    if (goScreen) {
+      goScreen.style.display = 'flex';
+      const resultTitle = goScreen.querySelector('.result-title');
+      const resultDesc = goScreen.querySelector('.result-desc');
+      if (resultTitle) resultTitle.textContent = success ? '撤离成功！' : '撤离失败';
+      if (resultTitle) resultTitle.style.color = success ? '#00ffaa' : '#ff4444';
+      if (resultDesc) resultDesc.textContent = reason || '';
+      
+      // 显示收集的物品
+      let itemsHtml = '<div style="margin-top:12px;color:#94a3b8;">';
+      if (player) {
+        const items = player.backpack.filter(Boolean);
+        const unique = {};
+        items.forEach(i => { unique[i.key] = (unique[i.key] || 0) + 1; });
+        let totalCredits = 0;
+        for (const [key, count] of Object.entries(unique)) {
+          const info = CAMPUS_ITEMS[key];
+          if (info) {
+            itemsHtml += `<div style="display:flex;justify-content:space-between;padding:4px 0;">
+              <span style="color:#e2e8f0;">${info.char} ${info.name} x${count}</span>
+              <span style="color:#ffd700;">${(info.credits || 0) * count}学分</span>
+            </div>`;
+            totalCredits += (info.credits || 0) * count;
+          }
+        }
+        itemsHtml += `<div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;display:flex;justify-content:space-between;">
+          <span style="color:#e2e8f0;font-weight:bold;">总计</span>
+          <span style="color:#ffd700;font-weight:bold;">${totalCredits} 学分</span>
+        </div>`;
+      }
+      itemsHtml += '</div>';
+      
+      const statsEl = goScreen.querySelector('.result-stats');
+      if (statsEl) statsEl.innerHTML = itemsHtml;
+    }
+    
+    // 清理
+    if (this.campusMode) {
+      this.campusMode.dispose();
+      this.campusMode = null;
+    }
+    if (this._campusMapGen) {
+      this._campusMapGen.dispose();
+      this._campusMapGen = null;
+    }
+  }
+
+  _updateCampusHud() {
+    const cm = this.campusMode;
+    if (!cm || !cm.localPlayer) return;
+    const p = cm.localPlayer;
+    
+    // Timer
+    const timerEl = document.getElementById('campusTimer');
+    if (timerEl) {
+      const remaining = Math.max(0, cm.maxTime - cm.gameTime);
+      const min = Math.floor(remaining / 60);
+      const sec = Math.floor(remaining % 60);
+      timerEl.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+    }
+    
+    // Status (HP/Stamina/Career)
+    const statusEl = document.getElementById('campusStatus');
+    if (statusEl) {
+      statusEl.innerHTML = `命 <span style="color:${p.hp > 30 ? '#00ffaa' : '#ff4444'}">${Math.ceil(p.hp)}</span> · 力 <span style="color:#44aaff">${Math.ceil(p.stamina)}</span> · ${p.career.name}`;
+    }
+    
+    // Weight
+    const weightEl = document.getElementById('campusWeight');
+    if (weightEl) {
+      const w = p.totalWeight;
+      const speed = p.getSpeedMultiplier();
+      const color = w > 40 ? '#ff4444' : w > 20 ? '#ffaa44' : '#00ffaa';
+      weightEl.innerHTML = `负重: <span style="color:${color}">${w}kg</span> · 移速${Math.round(speed * 100)}%`;
+    }
   }
 
   endGame(winnerName) {
