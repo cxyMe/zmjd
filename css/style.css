@@ -35,11 +35,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 #mainMenu {
   position: fixed; inset: 0; z-index: 1000;
   background:
-    radial-gradient(circle at 18% 20%, rgba(139,233,253,0.2), transparent 28%),
-    radial-gradient(circle at 86% 70%, rgba(255,221,0,0.15), transparent 32%),
-    linear-gradient(135deg, #070816 0%, #140d2e 45%, #071d2a 100%);
+    radial-gradient(circle at 18% 20%, rgba(99,102,241,0.15), transparent 28%),
+    radial-gradient(circle at 86% 70%, rgba(139,92,246,0.12), transparent 32%),
+    linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 45%, #0a0a1a 100%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: #fff; overflow-y: auto; overflow-x: hidden; padding: 20px 12px;
+  color: #e2e8f0; overflow-y: auto; overflow-x: hidden; padding: 20px 12px;
 }
 .menu-bg-orb { position: absolute; width: 260px; height: 260px; border-radius: 50%; filter: blur(30px); opacity: .35; pointer-events: none; }
 .orb-a { left: 8%; top: 12%; background: #00d4ff; }
@@ -126,11 +126,11 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .lobby-float-panel.open { display: flex; }
 .lobby-float-card {
   width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 28px); overflow: auto;
-  position: relative; padding: 20px; border-radius: 22px; color: #fff;
-  background: rgba(18,18,35,.96); border: 1px solid rgba(255,255,255,.14);
-  box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  position: relative; padding: 20px; border-radius: 22px; color: #e2e8f0;
+  background: rgba(15,15,35,0.92); border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 24px 80px rgba(0,0,0,.45); backdrop-filter: blur(12px);
 }
-.lobby-float-card h2 { color:#8be9fd; margin-bottom: 14px; }
+.lobby-float-card h2 { color:#a78bfa; margin-bottom: 14px; }
 .float-close {
   position: absolute; top: 12px; right: 12px; width: 34px; height: 34px;
   border: none; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff; font-size: 22px; cursor: pointer;
@@ -143,8 +143,8 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
   width:100%; min-height:48px; margin-bottom:10px; border:none; border-radius:14px;
   background: rgba(139,233,253,.16); color:#8be9fd; font-weight:bold; cursor:pointer; font-size:15px;
 }
-.play-option.primary { background: linear-gradient(90deg,#00d4ff,#0088ff); color:#fff; }
-.play-option.secondary { background: rgba(255,255,255,.08); color:#dfe7ff; }
+.play-option.primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #e2e8f0; }
+.play-option.secondary { background: rgba(255,255,255,0.1); color: #94a3b8; }
 .join-row { display:grid; grid-template-columns: 1fr 128px; gap:8px; margin-bottom:10px; }
 .join-row input { border:1px solid rgba(255,255,255,.12); border-radius:14px; background:rgba(0,0,0,.32); color:#fff; padding:0 12px; }
 .lobby-left, .lobby-right, .lobby-center, .lobby-bottom {
@@ -211,19 +211,19 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .chat-lines { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 9px; }
 .chat-lines p { color: #cfd7ff; font-size: 12px; line-height: 1.5; padding: 8px; background: rgba(255,255,255,0.045); border-radius: 10px; }
 .chat-lines b { color: #ffdd00; margin-right: 6px; }
-.chat-input { padding: 10px; border-radius: 12px; color: #7884aa; font-size: 12px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); }
+.chat-input { padding: 10px; border-radius: 12px; color: #94a3b8; font-size: 12px; background: #1e293b; border: 1px solid #334155; }
 .lobby-bottom.menu-panel {
   grid-column: 1 / -1; width: auto; max-height: 255px; padding: 14px; grid-template-columns: 1fr 1.15fr;
   overflow: auto; background: rgba(10,14,28,0.62);
 }
 .menu-panel {
-  position: relative; background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.045));
-  border: 1px solid rgba(255,255,255,0.16); border-radius: 22px; padding: 20px;
-  backdrop-filter: blur(14px); width: min(880px, calc(100vw - 28px)); max-height: calc(100vh - 138px);
+  position: relative; background: rgba(15,15,35,0.92);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 20px;
+  backdrop-filter: blur(12px); width: min(880px, calc(100vw - 28px)); max-height: calc(100vh - 138px);
   overflow-y: auto; overflow-x: hidden; box-shadow: 0 24px 80px rgba(0,0,0,0.38);
   display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px;
 }
-.menu-panel h2 { font-size: 20px; margin-bottom: 20px; text-align: center; color: #00d4ff; }
+.menu-panel h2 { font-size: 20px; margin-bottom: 20px; text-align: center; color: #a78bfa; }
 .menu-panel > h2 { grid-column: 1 / -1; margin: 4px 0 0; }
 .team-select { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
 .team-btn {
@@ -276,19 +276,19 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .form-row input {
   flex: 1 1 150px; min-width: 0; padding: 10px 12px; border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.16); background: rgba(0,0,0,0.3);
+  border: 1px solid #334155; background: #1e293b;
   color: #fff; outline: none;
 }
-.form-row input:focus { border-color: #00d4ff; }
+.form-row input:focus { border-color: #6366f1; }
 .small-btn {
   padding: 10px 12px; border: none; border-radius: 8px; cursor: pointer; flex: 0 0 auto;
-  background: rgba(0,212,255,0.18); color: #fff; font-weight: bold;
-  border: 1px solid rgba(0,212,255,0.45);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #e2e8f0; font-weight: bold;
+  border: 1px solid rgba(99,102,241,0.45);
 }
 .small-btn:hover { filter: brightness(1.2); }
-.small-btn.secondary { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+.small-btn.secondary { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.15); }
 .small-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.status-text { font-size: 12px; color: #aaa; min-height: 18px; line-height: 1.4; }
+.status-text { font-size: 12px; color: #94a3b8; min-height: 18px; line-height: 1.4; }
 .room-code {
   display: inline-flex; align-items: center; justify-content: center; min-width: 88px;
   padding: 6px 10px; border-radius: 8px; margin-left: 6px;
@@ -1366,3 +1366,15 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 .role-config-name { color: #00d4ff; font-size: 14px; font-weight: bold; }
 .role-config-info { color: #888; font-size: 11px; margin-left: 8px; }
 .role-config-fields { padding-left: 8px; }
+
+/* ========== Team Detail Panel ========== */
+.team-detail-content { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.team-player-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.05); font-size: 13px; }
+.team-player-row.me { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); }
+.tp-name { font-weight: bold; color: #e2e8f0; }
+.tp-role { color: #818cf8; font-size: 12px; }
+.tp-stats { color: #94a3b8; font-size: 11px; }
+.my-skill-info { margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); }
+.skill-info-row { margin-bottom: 8px; }
+.skill-info-row b { color: #a78bfa; font-size: 12px; }
+.skill-info-row p { color: #94a3b8; font-size: 11px; margin: 2px 0 0; }

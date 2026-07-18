@@ -1372,6 +1372,44 @@ class Game {
     document.getElementById('shopPanel').style.display = 'none';
     document.getElementById('crosshair').style.display = 'block';
     document.getElementById('skillBtn').style.display = 'flex';
+
+    // Team info click -> detail panel
+    const teamInfoEl = document.getElementById('teamInfo');
+    if (teamInfoEl && !teamInfoEl._boundDetailClick) {
+      teamInfoEl._boundDetailClick = true;
+      teamInfoEl.style.cursor = 'pointer';
+      teamInfoEl.onclick = () => {
+        const panel = document.getElementById('teamDetailPanel');
+        if (!panel) return;
+        if (panel.style.display === 'flex') {
+          panel.style.display = 'none';
+          return;
+        }
+        let html = '<div class="team-detail-content">';
+        if (this.players) {
+          for (const p of this.players) {
+            if (p.team !== this.localPlayer?.team && !p.isLocal) continue;
+            const role = ROLES[p.role] || {};
+            const isMe = p.isLocal;
+            html += `<div class="team-player-row ${isMe ? 'me' : ''}">
+              <span class="tp-name">${isMe ? '&#9654; ' : ''}${p.name || '???'}</span>
+              <span class="tp-role">${role.name || '?'}</span>
+              <span class="tp-stats">\u51FB\u6740:${p.kills||0} \u590D\u6D3B:${p.respawnCount||0}</span>
+            </div>`;
+            if (isMe && role.passive && role.active) {
+              html += `<div class="my-skill-info">
+                <div class="skill-info-row"><b>\u88AB\u52A8\uFF1A${role.passive.name}</b><p>${role.passive.desc}</p></div>
+                <div class="skill-info-row"><b>\u4E3B\u52A8\uFF1A${role.active.name}</b><p>${role.active.desc} | \u51B7\u5374 ${role.active.cd}\u79D2</p></div>
+              </div>`;
+            }
+          }
+        }
+        html += '</div><button class="small-btn" style="margin-top:8px;" onclick="document.getElementById(\'teamDetailPanel\').style.display=\'none\'">\u5173\u95ED</button>';
+        panel.innerHTML = html;
+        panel.style.display = 'flex';
+      };
+    }
+
     window.hudLayoutManager?.init?.();
     this._ensureMobileControls();
 
@@ -1480,6 +1518,8 @@ class Game {
       card.onclick = () => this.confirmRoleSelection(card.dataset.role);
     });
     panel.style.display = 'flex';
+    panel.style.visibility = 'visible';
+    panel.style.zIndex = '240';
     if (document.pointerLockElement) document.exitPointerLock();
     this.updateRoleSelectionUI();
   }
@@ -1521,6 +1561,18 @@ class Game {
     requestAnimationFrame(t => this.loop(t));
     const dt = Math.min((time - this.lastTime) / 1000, 0.05);
     this.lastTime = time;
+
+    // FPS counter
+    if (!this._fpsFrames) this._fpsFrames = 0;
+    if (!this._fpsTime) this._fpsTime = performance.now();
+    this._fpsFrames++;
+    const now = performance.now();
+    if (now - this._fpsTime >= 1000) {
+      window._fpsCounter = this._fpsFrames;
+      this._fpsFrames = 0;
+      this._fpsTime = now;
+    }
+
     if (!this.gameActive) {
       this.engine.render();
       return;

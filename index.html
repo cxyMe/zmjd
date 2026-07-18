@@ -64,10 +64,10 @@ updateOrientationGate();
 
     <div class="lobby-top-actions">
       <button class="lobby-icon-btn" id="lobbySettingsBtn">设置</button>
-      <button class="pass-crystal-btn compact" id="seasonPassBtn"><span>通行证</span><small id="passCrystalText">Lv.1 · 0%</small></button>
+      <button class="pass-crystal-btn compact" id="seasonPassBtn" style="display:none"><span>通行证</span><small id="passCrystalText">Lv.1 · 0%</small></button>
       <div class="lobby-mini-row">
-        <button class="menu-feature-btn" id="menuSeasonBtn">赛季</button>
-        <button class="menu-feature-btn" id="menuTasksBtn">任务</button>
+        <button class="menu-feature-btn" id="menuSeasonBtn" style="display:none">赛季</button>
+        <button class="menu-feature-btn" id="menuTasksBtn" style="display:none">任务</button>
         <button class="menu-feature-btn" id="menuSkinShopBtn">外观商店</button>
       </div>
     </div>
@@ -172,6 +172,9 @@ updateOrientationGate();
     <div class="team-name" id="teamName">--</div>
     <div class="bed-status" id="bedStatus">--</div>
     <div class="players">队友存活: --</div>
+  </div>
+
+  <div id="teamDetailPanel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;background:rgba(15,15,35,0.95);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px;min-width:300px;max-width:400px;color:#e2e8f0;flex-direction:column;gap:12px;">
   </div>
 
   <!-- Minimap -->
@@ -293,7 +296,7 @@ updateOrientationGate();
 </div>
 
 <!-- ========== Season Pass Manual ========== -->
-<div id="seasonPassPanel">
+<div id="seasonPassPanel" style="display:none">
   <div class="pass-container">
     <div class="pass-header">
       <div>
@@ -322,7 +325,7 @@ updateOrientationGate();
   </div>
 </div>
 
-<div id="passPayPanel">
+<div id="passPayPanel" style="display:none">
   <div class="pass-pay-card">
     <button class="pass-close mini" id="passPayCloseBtn">&times;</button>
     <h2>赞助开发者</h2>
@@ -341,7 +344,7 @@ updateOrientationGate();
 </div>
 
 <!-- ========== Main Menu Season / Tasks ========== -->
-<div id="menuGrowthPanel">
+<div id="menuGrowthPanel" style="display:none">
   <div class="growth-container">
     <div class="growth-header">
       <h2 id="menuGrowthTitle">赛季任务</h2>
@@ -490,7 +493,7 @@ updateOrientationGate();
     </div>
     <div class="growth-tabs">
       <button class="growth-tab active" data-growth-tab="mastery">勋章墙</button>
-      <button class="growth-tab" data-growth-tab="season">赛季征程</button>
+      <button class="growth-tab" data-growth-tab="season" style="display:none">赛季征程</button>
     </div>
     <div id="growthBody" class="growth-body"></div>
   </div>
@@ -865,6 +868,21 @@ function renderRoom() {
   }
   updateStartBtn();
   updateAiButton();
+  
+  // 性能信息
+  let perfEl = document.getElementById('roomPerfInfo');
+  if (!perfEl) {
+    perfEl = document.createElement('div');
+    perfEl.id = 'roomPerfInfo';
+    perfEl.style.cssText = 'font-size:11px;color:#64748b;text-align:center;margin-top:6px;';
+    const roomInfo = document.querySelector('.room-info') || document.getElementById('roomPanel');
+    if (roomInfo) roomInfo.appendChild(perfEl);
+  }
+  if (perfEl) {
+    const fps = typeof window._fpsCounter !== 'undefined' ? Math.round(window._fpsCounter) : '--';
+    const pktLoss = window.game?.network?.packetLoss || 0;
+    perfEl.textContent = 'FPS: ' + fps + ' | \u4E22\u5305\u7387: ' + pktLoss + '%';
+  }
 }
 
 async function handleRoomKick(reason = '你已离开房间') {
