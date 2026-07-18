@@ -1365,29 +1365,8 @@ class Game {
       
       this._ensureMobileControls();
       
-      // 初始化校园寻宝
-      this.campusMode = new CampusMode(this.engine);
-      const mapGen = new CampusMapGenerator(this.engine.scene);
-      this._campusMapGen = mapGen;
-      mapGen.generate();
-      
-      // 等待地图生成后初始化玩家
-      this.campusMode.init('ATHLETE', this.playerName);
-      
-      // 设置事件回调
-      this.campusMode.onEvent = (type, msg) => {
-        this.showMessage(msg);
-        const eventEl = document.getElementById('campusEvent');
-        if (eventEl) {
-          eventEl.textContent = msg;
-          eventEl.style.display = 'block';
-          setTimeout(() => { eventEl.style.display = 'none'; }, 3000);
-        }
-      };
-      
-      this.campusMode.onEnd = (success, reason, player) => {
-        this.endCampusMode(success, reason, player);
-      };
+      // 显示校园职业选择面板
+      this._showCampusCareerSelection();
       
       this.isCampusMode = true;
       return;
@@ -1622,12 +1601,9 @@ class Game {
   }
 
   loop(time) {
-    if (!this.gameActive && !this.isCampusMode) return; // 停止循环
     this._rafId = requestAnimationFrame(t => this.loop(t));
     const dt = Math.min((time - this.lastTime) / 1000, 0.05);
     this.lastTime = time;
-
-    // FPS counter
     if (!this._fpsFrames) this._fpsFrames = 0;
     if (!this._fpsTime) this._fpsTime = performance.now();
     this._fpsFrames++;
@@ -2209,6 +2185,70 @@ class Game {
       if (c > bestCount) { bestCount = c; bestTeam = t; }
     }
     this.endGame(bestTeam ? TEAMS[bestTeam].name : '无');
+  }
+
+  _showCampusCareerSelection() {
+    const panel = document.getElementById('startRolePanel');
+    if (!panel) { this._startCampusWithCareer('ATHLETE'); return; }
+    const careers = [
+      { key: 'ATHLETE', name: '体育生', code: '体', desc: '被动:体力+50%  主动:冲刺(移速200%/3秒)', color: '#ff4444' },
+      { key: 'ENGINEER', name: '工科生', code: '工', desc: '被动:破解减半  主动:信号干扰(8m屏蔽)', color: '#44aaff' },
+      { key: 'CHEMIST', name: '化学系', code: '化', desc: '被动:免疫毒气  主动:粘液陷阱(定身1.5秒)', color: '#44ff44' },
+      { key: 'ARTIST', name: '美术生', code: '美', desc: '被动:感知+20%  主动:全息投影(8秒分身)', color: '#ff44ff' },
+      { key: 'SCHOLAR', name: '文科生', code: '文', desc: '被动:自动线索  主动:心理威慑(击退+眩晕)', color: '#ffaa44' },
+    ];
+    let cardsHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">';
+    for (const c of careers) {
+      cardsHtml += `<div class="start-role-card" data-career="${c.key}" style="cursor:pointer;padding:16px;border-radius:10px;border:2px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);text-align:center;min-width:120px;transition:all 0.2s;">
+        <div style="font-size:36px;font-weight:bold;color:${c.color};">${c.code}</div>
+        <div style="color:#e2e8f0;font-weight:bold;margin:6px 0 4px;">${c.name}</div>
+        <div style="color:#94a3b8;font-size:11px;line-height:1.4;">${c.desc}</div>
+      </div>`;
+    }
+    cardsHtml += '</div>';
+    panel.innerHTML = `
+      <div style="text-align:center;margin-bottom:16px;">
+        <h2 style="color:#00ffaa;margin:0 0 6px;">选择你的职业</h2>
+        <p style="color:#94a3b8;font-size:13px;margin:0;">校园寻宝模式 - 每个职业有独特技能</p>
+      </div>
+      <div id="startRoleCards" style="overflow-x:auto;padding:0 10px;">${cardsHtml}</div>`;
+    panel.style.display = 'flex';
+    panel.style.visibility = 'visible';
+    panel.style.zIndex = '9999';
+
+    panel.querySelectorAll('.start-role-card').forEach(card => {
+      const handler = (e) => { e.preventDefault(); e.stopPropagation(); this._startCampusWithCareer(card.dataset.career); };
+      card.onclick = handler;
+      card.addEventListener('touchend', handler, { passive: false });
+      card.addEventListener('mouseenter', () => { card.style.borderColor = '#00ffaa'; card.style.background = 'rgba(0,255,170,0.1)'; });
+      card.addEventListener('mouseleave', () => { card.style.borderColor = 'rgba(255,255,255,0.1)'; card.style.background = 'rgba(255,255,255,0.05)'; });
+    });
+  }
+
+  _startCampusWithCareer(careerKey) {
+    const panel = document.getElementById('startRolePanel');
+    if (panel) panel.style.display = 'none';
+
+    this.campusMode = new CampusMode(this.engine);
+    const mapGen = new CampusMapGenerator(this.engine.scene);
+    this._campusMapGen = mapGen;
+    mapGen.generate();
+
+    this.campusMode.init(careerKey, this.playerName);
+
+    this.campusMode.onEvent = (type, msg) => {
+      this.showMessage(msg);
+      const eventEl = document.getElementById('campusEvent');
+      if (eventEl) {
+        eventEl.textContent = msg;
+        eventEl.style.display = 'block';
+        setTimeout(() => { eventEl.style.display = 'none'; }, 3000);
+      }
+    };
+
+    this.campusMode.onEnd = (success, reason, player) => {
+      this.endCampusMode(success, reason, player);
+    };
   }
 
   endCampusMode(success, reason, player) {

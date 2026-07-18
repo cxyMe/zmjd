@@ -1504,39 +1504,61 @@ document.getElementById('roomStartBtn').addEventListener('click', () => {
   closeAllLobbyPanels();
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
   if (!window._selectedMap) window._selectedMap = 'classic';
-  try {
-    window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
-    window.game.selectedMap = window._selectedMap || 'classic';
-    const selectedMode = window._selectedMode || 'classic';
-    if (selectedMode === 'secret_killer') {
-      window.game.selectedMap = 'secret_killer';
+  const selectedMode = window._selectedMode || 'classic';
+
+  // 显示加载提示
+  const loadingTip = document.createElement('div');
+  loadingTip.id = '_loadingTip';
+  loadingTip.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(15,15,35,0.95);color:#e2e8f0;padding:30px 40px;border-radius:12px;font-size:16px;text-align:center;';
+  loadingTip.textContent = '正在加载游戏...';
+  document.body.appendChild(loadingTip);
+
+  // 用 setTimeout 让浏览器先渲染加载提示，再执行可能耗时的初始化
+  setTimeout(() => {
+    try {
+      window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
+      window.game.selectedMap = window._selectedMap || 'classic';
+      if (selectedMode === 'secret_killer') {
+        window.game.selectedMap = 'secret_killer';
+      }
+      window.game.init();
+      window.game.start(selectedTeam, 'FOX', selectedMode);
+      // 成功启动，移除加载提示
+      loadingTip.remove();
+    } catch (err) {
+      console.error('游戏启动失败:', err);
+      loadingTip.remove();
+      // 清理可能已部分创建的Game对象
+      if (window.game?.engine) {
+        try { window.game.engine.renderer?.domElement?.remove?.(); } catch(_) {}
+        try { window.game.engine.renderer?.dispose?.(); } catch(_) {}
+      }
+      window.game = null;
+      // 在页面上显示详细错误
+      const errMsg = document.createElement('div');
+      errMsg.id = '_errMsg';
+      errMsg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(40,10,10,0.97);color:#ff6666;padding:24px 32px;border-radius:12px;font-size:14px;max-width:90vw;max-height:70vh;overflow-y:auto;border:1px solid #ff4444;white-space:pre-wrap;word-break:break-all;';
+      errMsg.innerHTML = '<b style="font-size:18px;color:#ff4444;">游戏启动失败</b>\n\n' + 
+        (err.message || '未知错误') + '\n\n' + 
+        (err.stack || '').split('\n').slice(0, 5).join('\n') +
+        '\n\n<button onclick="this.parentElement.remove();document.getElementById(\'mainMenu\').style.display=\'\';" style="margin-top:12px;padding:8px 20px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">返回主菜单</button>';
+      document.body.appendChild(errMsg);
+      // 恢复UI
+      document.getElementById('mainMenu').style.display = '';
+      document.getElementById('hud').style.display = 'none';
+      document.getElementById('startRolePanel').style.display = 'none';
+      return;
     }
-    window.game.init();
-    window.game.start(selectedTeam, 'FOX', selectedMode);
-  } catch (err) {
-    console.error('游戏启动失败:', err);
-    // 清理可能已部分创建的Game对象
-    if (window.game?.engine) {
-      try { window.game.engine.dispose?.(); } catch(_) {}
+    if (!localOnly && netMgr?.isHost) {
+      netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
+      netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);
     }
-    window.game = null;
-    setRoomStatus('启动失败: ' + (err.message || err.stack || '未知错误'), true);
-    // 恢复所有UI到主菜单状态
-    closeAllLobbyPanels();
-    document.getElementById('mainMenu').style.display = '';
-    document.getElementById('hud').style.display = 'none';
-    document.getElementById('startRolePanel').style.display = 'none';
-    return; // 不执行后续网络状态更新
-  }
-  if (!localOnly && netMgr?.isHost) {
-    netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
-    netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);
-  }
-  const badge = document.getElementById('netBadge');
-  badge.style.display = 'block';
-  badge.innerHTML = localOnly
-    ? '联机状态：<span class="online">本地试玩</span>'
-    : `联机状态：<span class="online">在线</span>｜<span class="host">${netMgr?.isHost ? '主房主' : '副房主'}</span>`;
+    const badge = document.getElementById('netBadge');
+    badge.style.display = 'block';
+    badge.innerHTML = localOnly
+      ? '联机状态：<span class="online">本地试玩</span>'
+      : `联机状态：<span class="online">在线</span>｜<span class="host">${netMgr?.isHost ? '主房主' : '副房主'}</span>`;
+  }, 50); // 50ms 延迟让加载提示先渲染
 });
 
 document.getElementById('dissolveRoomBtn').addEventListener('click', async () => {
