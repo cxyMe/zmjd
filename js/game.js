@@ -1564,11 +1564,12 @@ class Game {
       </div>
     `).join('');
     cards.querySelectorAll('.start-role-card').forEach(card => {
-      card.onclick = () => this.confirmRoleSelection(card.dataset.role);
+      const handler = (e) => { e.preventDefault(); e.stopPropagation(); this.confirmRoleSelection(card.dataset.role); };
+      card.onclick = handler;
+      card.addEventListener('touchend', handler, { passive: false });
     });
     panel.style.display = 'flex';
     panel.style.visibility = 'visible';
-    panel.style.zIndex = '240';
     if (document.pointerLockElement) document.exitPointerLock();
     this.updateRoleSelectionUI();
   }

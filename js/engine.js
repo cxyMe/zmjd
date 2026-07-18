@@ -271,6 +271,7 @@ class Engine {
       Engine._particleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
       Engine._particleExplosionGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
     }
+    this._particleMats = {};
     this.shakeTimer = 0;
     this.shakeIntensity = 0;
     this.projectiles = [];
@@ -471,7 +472,11 @@ class Engine {
 
   spawnParticles(pos, color, count) {
     for (let i = 0; i < count; i++) {
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true });
+      let mat = this._particleMats[color];
+      if (!mat) {
+        mat = new THREE.MeshBasicMaterial({ color, transparent: true });
+        this._particleMats[color] = mat;
+      }
       const mesh = new THREE.Mesh(Engine._particleGeo, mat);
       mesh.position.copy(pos);
       mesh.position.x += (Math.random() - 0.5) * 0.8;
@@ -654,7 +659,7 @@ class Engine {
     if (mesh.material) {
       if (mesh.material.map) mesh.material.map.dispose();
       if (Array.isArray(mesh.material)) mesh.material.forEach(m => { if (m?.map) m.map.dispose(); m?.dispose?.(); });
-      else mesh.material.dispose();
+      else if (!this._particleMats || !Object.values(this._particleMats).includes(mesh.material)) mesh.material.dispose();
     }
     if (mesh.children) mesh.children.forEach(c => this._disposeMesh(c));
   }
@@ -1092,7 +1097,8 @@ class Engine {
       p.life -= dt;
       p.mesh.position.addScaledVector(p.vel, dt);
       p.vel.y -= 5 * dt;
-      p.mesh.material.opacity = p.life;
+      const s = Math.max(0.01, p.life);
+      p.mesh.scale.set(s, s, s);
       if (p.emissiveIntensity) {
         p.mesh.material.emissiveIntensity = p.emissiveIntensity * p.life;
       }
@@ -2485,6 +2491,9 @@ class PlayerEntity {
     // Movement
     this.pos = this.teamInfo.spawn.clone();
     this.vel = new THREE.Vector3();
+    this._moveDir = new THREE.Vector3();
+    this._forward = new THREE.Vector3();
+    this._right = new THREE.Vector3();
     this.onGround = false;
     this.baseSpeed = 6;
     this.speed = this.baseSpeed;
@@ -3588,14 +3597,14 @@ class PlayerEntity {
     const slowMult = this.frostTimer > 0 ? 0.7 : (this.slowTimer > 0 ? 0.65 : 1);
     const roleSpeedMult = (this.camouflageTimer > 0 ? 1.5 : 1) * (this.fatTimer > 0 ? 0.75 : 1);
     const spd = (sprint ? 1.5 : 1) * this.speed * slowMult * roleSpeedMult * (this.speedPotionTimer > 0 ? 1.25 : 1) * (this.healAction ? 0.5 : 1);
-    const moveDir = new THREE.Vector3();
+    const moveDir = this._moveDir.set(0, 0, 0);
     if (this.isLocal) {
-      const forward = new THREE.Vector3();
+      const forward = this._forward;
       this.engine.camera.getWorldDirection(forward);
       forward.y = 0;
       if (forward.lengthSq() < 0.0001) forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       forward.normalize();
-      const right = new THREE.Vector3().setFromMatrixColumn(this.engine.camera.matrixWorld, 0);
+      const right = this._right.setFromMatrixColumn(this.engine.camera.matrixWorld, 0);
       right.y = 0;
       right.normalize();
       moveDir.addScaledVector(forward, dz);

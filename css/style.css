@@ -818,7 +818,7 @@ button, input, select, .team-btn, .chat-panel, .lobby-profile-card { touch-actio
 
 /* ========== Start Role Selection ========== */
 #startRolePanel {
-  position: fixed; inset: 0; z-index: 240; display: none;
+  position: fixed; inset: 0; z-index: 9999; display: none;
   align-items: center; justify-content: center; padding: 18px;
   background: radial-gradient(circle at 50% 10%, rgba(139,233,253,.18), rgba(0,0,0,.86) 70%);
   backdrop-filter: blur(5px);

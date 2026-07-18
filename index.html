@@ -1504,15 +1504,20 @@ document.getElementById('roomStartBtn').addEventListener('click', () => {
   closeAllLobbyPanels();
   document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
   if (!window._selectedMap) window._selectedMap = 'classic';
-  window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
-  window.game.selectedMap = window._selectedMap || 'classic';
-  // Secret killer mode: auto-select map and override
-  const selectedMode = window._selectedMode || 'classic';
-  if (selectedMode === 'secret_killer') {
-    window.game.selectedMap = 'secret_killer';
+  try {
+    window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
+    window.game.selectedMap = window._selectedMap || 'classic';
+    const selectedMode = window._selectedMode || 'classic';
+    if (selectedMode === 'secret_killer') {
+      window.game.selectedMap = 'secret_killer';
+    }
+    window.game.init();
+    window.game.start(selectedTeam, 'FOX', selectedMode);
+  } catch (err) {
+    console.error('游戏启动失败:', err);
+    setRoomStatus('游戏启动失败: ' + (err.message || '未知错误'), true);
+    document.getElementById('mainMenu').style.display = '';
   }
-  window.game.init();
-  window.game.start(selectedTeam, 'FOX', selectedMode);
   if (!localOnly && netMgr?.isHost) {
     netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
     netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);
