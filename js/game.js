@@ -1111,6 +1111,14 @@ class Game {
     // 移除容器中所有旧的 canvas（防御性清理）
     container.querySelectorAll('canvas').forEach(c => c.remove());
 
+    // 检测 WebGL 支持
+    const testCanvas = document.createElement('canvas');
+    const gl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
+    if (!gl) {
+      throw new Error('你的浏览器不支持 WebGL，无法运行3D游戏。请尝试：1. 更新浏览器 2. 启用硬件加速 3. 使用 Chrome/Edge/Firefox');
+    }
+    testCanvas.remove();
+
     this.engine = new Engine(container);
     this.gens = generateWorld(this.engine, this.selectedMap);
     this.social?.initMatch?.();
