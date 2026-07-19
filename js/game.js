@@ -590,21 +590,25 @@ class UIManager {
 
     // Resources
     const r = lp.inv;
-    document.getElementById('resCopper').textContent = Math.floor(r.copper || 0);
-    document.getElementById('resSilver').textContent = Math.floor(r.silver || 0);
-    document.getElementById('resGold').textContent = Math.floor(r.gold || 0);
-    document.getElementById('resJade').textContent = Math.floor(r.jade || 0);
+    const $ = id => document.getElementById(id);
+    const resC = $('resCopper'), resS = $('resSilver'), resG = $('resGold'), resJ = $('resJade');
+    if (resC) resC.textContent = Math.floor(r.copper || 0);
+    if (resS) resS.textContent = Math.floor(r.silver || 0);
+    if (resG) resG.textContent = Math.floor(r.gold || 0);
+    if (resJ) resJ.textContent = Math.floor(r.jade || 0);
 
     // HP / Armor
-    document.getElementById('hpFill').style.width = `${(lp.hp / lp.maxHp) * 100}%`;
-    document.getElementById('hpText').textContent = `${Math.ceil(lp.hp)}/${lp.maxHp}`;
-    document.getElementById('armorFill').style.width = `${lp.armorMax ? Math.min(100, (lp.armor / lp.armorMax) * 100) : 0}%`;
-    document.getElementById('armorText').textContent = `${Math.ceil(lp.armor)}${lp.armorMax ? '/' + lp.armorMax : ''}`;
+    const hpF = $('hpFill'), hpT = $('hpText'), arF = $('armorFill'), arT = $('armorText');
+    if (hpF) hpF.style.width = `${(lp.hp / lp.maxHp) * 100}%`;
+    if (hpT) hpT.textContent = `${Math.ceil(lp.hp)}/${lp.maxHp}`;
+    if (arF) arF.style.width = `${lp.armorMax ? Math.min(100, (lp.armor / lp.armorMax) * 100) : 0}%`;
+    if (arT) arT.textContent = `${Math.ceil(lp.armor)}${lp.armorMax ? '/' + lp.armorMax : ''}`;
     const currentNeed = GROWTH_CONFIG.levelXp[lp.matchLevel - 1] || 0;
     const nextNeed = GROWTH_CONFIG.levelXp[lp.matchLevel] || GROWTH_CONFIG.levelXp[GROWTH_CONFIG.levelXp.length - 1];
     const xpPct = lp.matchLevel >= GROWTH_CONFIG.maxInMatchLevel ? 100 : ((lp.matchXp - currentNeed) / Math.max(1, nextNeed - currentNeed)) * 100;
-    document.getElementById('xpFill').style.width = `${Math.max(0, Math.min(100, xpPct))}%`;
-    document.getElementById('xpText').textContent = `Lv.${lp.matchLevel}`;
+    const xpF = $('xpFill'), xpT = $('xpText');
+    if (xpF) xpF.style.width = `${Math.max(0, Math.min(100, xpPct))}%`;
+    if (xpT) xpT.textContent = `Lv.${lp.matchLevel}`;
 
     // Timer
     const mins = Math.floor(this.game.gameTime / 60);
@@ -1125,14 +1129,17 @@ class Game {
       };
     });
 
-    document.querySelector('.shop-close').onclick = () => this.toggleShop();
+    const shopClose = document.querySelector('.shop-close');
+    if (shopClose) shopClose.onclick = () => this.toggleShop();
     const shopBtn = document.getElementById('shopBtn');
     if (shopBtn) {
       shopBtn.onclick = () => this.toggleShop();
       shopBtn.addEventListener('touchend', e => { e.preventDefault(); this.toggleShop(); });
     }
-    document.getElementById('layoutBtn').onclick = () => window.hudLayoutManager?.open();
-    document.getElementById('rescueBtn').onclick = () => this.social?.rescueVoidMate();
+    const layoutBtn = document.getElementById('layoutBtn');
+    if (layoutBtn) layoutBtn.onclick = () => window.hudLayoutManager?.open();
+    const rescueBtn = document.getElementById('rescueBtn');
+    if (rescueBtn) rescueBtn.onclick = () => this.social?.rescueVoidMate();
     document.querySelectorAll('.growth-tab').forEach(tab => {
       tab.onclick = () => {
         document.querySelectorAll('.growth-tab').forEach(t => t.classList.remove('active'));
@@ -1714,6 +1721,7 @@ class Game {
     // Local input
     if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
       const move = this.input.getMovement();
+      const look = this.input.getLook();
       if (this.isCampusMode && this.campusMode?.localPlayer) {
         const campusInput = {
           forward: !!move.z && move.z > 0,
@@ -1727,7 +1735,6 @@ class Game {
         this.campusMode.localPlayer.look(look.dx, look.dy);
       }
       this.localPlayer.moveInput(move.x, move.z, this.input.isDown('ShiftLeft'));
-      const look = this.input.getLook();
       this.localPlayer.look(look.dx, look.dy);
       // 校园寻宝模式
       if (this.isCampusMode && this.campusMode) {
@@ -2353,13 +2360,14 @@ class Game {
     if (document.pointerLockElement) document.exitPointerLock();
     this.social?.showPostMatchGallery?.(winnerName);
     const screen = document.getElementById('gameOverScreen');
+    if (!screen) return;
     screen.style.display = 'flex';
     screen.querySelector('h1').textContent = winnerName === '无' ? '平局！' : '游戏结束！';
     screen.querySelector('.winner').textContent = winnerName === '无' ? '所有队伍都覆灭了' : `胜利者: ${winnerName}`;
 
     const lp = this.localPlayer;
     const stats = screen.querySelector('.stats');
-    stats.innerHTML = '';
+    if (stats) stats.innerHTML = '';
     const growthResult = this.growth?.settlement?.(winnerName);
     const passResult = window.seasonPass?.addMatchSettlement?.(lp?.matchStats || {}, winnerName === lp?.teamInfo?.name, false);
     // 反作弊：AI对局经验减半
@@ -2511,7 +2519,7 @@ class Game {
       tick: Math.floor(this.gameTime),
       updated_at: new Date().toISOString()
     };
-    this.network?.roomNet?.client?.from('active_matches').upsert(snapshot, { onConflict: 'room_id' }).catch(()=>{});
+    try { this.network?.roomNet?.client?.from('active_matches')?.upsert?.(snapshot, { onConflict: 'room_id' })?.catch?.(()=>{}); } catch(_) {}
   }
 
   reportEconomyStats() {
@@ -2532,7 +2540,7 @@ class Game {
       match_count: 1,
       player_count: this.players.length
     };
-    this.network?.roomNet?.client?.from('economy_stats').upsert(stats, { onConflict: 'hour_key' }).catch(()=>{});
+    try { this.network?.roomNet?.client?.from('economy_stats')?.upsert?.(stats, { onConflict: 'hour_key' })?.catch?.(()=>{}); } catch(_) {}
   }
 
   reportCheat(playerId, type, details, severity) {
@@ -2751,12 +2759,13 @@ class Game {
     if (document.pointerLockElement) document.exitPointerLock();
 
     const screen = document.getElementById('gameOverScreen');
+    if (!screen) return;
     screen.style.display = 'flex';
     screen.querySelector('h1').textContent = '游戏结束！';
     screen.querySelector('.winner').textContent = winnerText;
 
     const stats = screen.querySelector('.stats');
-    stats.innerHTML = '';
+    if (stats) stats.innerHTML = '';
     const rows = [
       ['你的身份', lp.skRole === 'killer' ? '杀手' : lp.skRole === 'detective' ? '侦探' : '平民'],
       ['游戏结果', playerWon ? '胜利' : '失败'],
