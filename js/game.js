@@ -1097,37 +1097,19 @@ class Game {
 
   init() {
     const container = document.getElementById('gameCanvas');
-    // 清理旧的 engine（如果存在，比如上局游戏未完全清理）
-    if (window.game?.engine) {
-      try {
-        const oldRenderer = window.game.engine.renderer;
-        if (oldRenderer) {
-          oldRenderer.domElement.remove();
-          oldRenderer.dispose();
-        }
-      } catch(_) {}
-      window.game.engine = null;
-    }
-    // 移除容器中所有旧的 canvas（防御性清理）
-    container.querySelectorAll('canvas').forEach(c => c.remove());
+    if (!container) throw new Error('gameCanvas 容器不存在');
 
-    // 检测 WebGL 支持
-    const testCanvas = document.createElement('canvas');
-    const gl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
-    if (!gl) {
-      throw new Error('你的浏览器不支持 WebGL，无法运行3D游戏。请尝试：1. 更新浏览器 2. 启用硬件加速 3. 使用 Chrome/Edge/Firefox');
-    }
-    testCanvas.remove();
-
+    // 创建 3D 引擎
     this.engine = new Engine(container);
     this.gens = generateWorld(this.engine, this.selectedMap);
-    this.social?.initMatch?.();
+
+    // 创建子系统
     this.ai = new AISystem(this);
     this.ui = new UIManager(this);
     this.growth = new GrowthManager(this);
     this.social = new SocialManager(this);
 
-    // Build shop tabs
+    // 绑定商店标签
     document.querySelectorAll('.shop-tab').forEach(tab => {
       tab.onclick = () => {
         document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
@@ -1137,17 +1119,22 @@ class Game {
       };
     });
 
+    // 绑定按钮事件（全部安全检查）
     const shopClose = document.querySelector('.shop-close');
     if (shopClose) shopClose.onclick = () => this.toggleShop();
+
     const shopBtn = document.getElementById('shopBtn');
     if (shopBtn) {
       shopBtn.onclick = () => this.toggleShop();
       shopBtn.addEventListener('touchend', e => { e.preventDefault(); this.toggleShop(); });
     }
+
     const layoutBtn = document.getElementById('layoutBtn');
-    if (layoutBtn) layoutBtn.onclick = () => window.hudLayoutManager?.open();
+    if (layoutBtn) layoutBtn.onclick = () => window.hudLayoutManager?.open?.();
+
     const rescueBtn = document.getElementById('rescueBtn');
-    if (rescueBtn) rescueBtn.onclick = () => this.social?.rescueVoidMate();
+    if (rescueBtn) rescueBtn.onclick = () => this.social?.rescueVoidMate?.();
+
     document.querySelectorAll('.growth-tab').forEach(tab => {
       tab.onclick = () => {
         document.querySelectorAll('.growth-tab').forEach(t => t.classList.remove('active'));
@@ -1156,11 +1143,13 @@ class Game {
         this.ui.renderGrowthCenter();
       };
     });
-    // Skill button onclick removed; useSkill triggered via consumeSkill in loop
+
     document.getElementById('buildUpgradeBtn')?.addEventListener('click', () => this.upgradeSelectedBlock());
     document.getElementById('buildDestroyBtn')?.addEventListener('click', () => this.destroySelectedBlock());
     document.getElementById('buildMoveBtn')?.addEventListener('click', () => this.prepareMoveSelectedBlock());
     document.getElementById('buildCancelBtn')?.addEventListener('click', () => this.closeBuildPanel());
+
+    // 绑定快捷栏
     document.querySelectorAll('.hotbar-slot').forEach((slot, idx) => {
       let longPressTimer = null;
       let longPressTriggered = false;
@@ -1275,139 +1264,59 @@ class Game {
     this.shrinkRadius = this.shrinkInitialRadius;
     this.nextDreamTide = 300;
 
-    // Reset teams
+    // 重置队伍状态
     for (const t of Object.values(TEAMS)) { t.bedAlive = true; if (t.bedMesh) t.bedMesh.visible = true; }
 
-    // Clear old entities
-    for (const p of this.players) this.engine.removeEntity(p);
+    // 清除旧实体
+    for (const p of this.players) { try { this.engine.removeEntity(p); } catch(_) {} }
     this.players = [];
     this.killFeed = [];
-    document.getElementById('killFeed').innerHTML = '';
+    const killFeedEl = document.getElementById('killFeed');
+    if (killFeedEl) killFeedEl.innerHTML = '';
 
-    // Secret killer mode branch
-    if (mode === 'secret_killer') {
-      this.isSecretKiller = true;
-      this.skState = 'countdown';
-      this.skCountdown = 5;
-      this.skFragmentTimer = 0;
-      this.skRoles = {};
-      this.skRoleRevealed = false;
-      // Disable shrink for this mode
-      this.shrinkActive = false;
-      this.shrinkTimer = 99999;
+    // === 通用 UI 切换 ===
+    const hideIds = ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel','gameOverScreen','shopPanel','startRolePanel'];
+    hideIds.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
+    const mainMenu = document.getElementById('mainMenu');
+    if (mainMenu) mainMenu.style.display = 'none';
 
-      // Create all 10 players (1 local + 9 AI)
-      AIManager.MAX_AI_COUNT_SAVE = AIManager.MAX_AI_COUNT;
-      AIManager.MAX_AI_COUNT = 12;
+    // 按模式分发
+    if (mode === 'campus') return this._startCampusMode();
+    if (mode === 'secret_killer') return this._startSecretKillerMode(teamKey, roleKey);
+    this._startClassicMode(teamKey, roleKey);
+  }
 
-      // Local player at center
-      const localId = this.onlineMode && this.network?.auth?.user?.id
-        ? this.network.auth.user.id
-        : 'local-' + Math.random().toString(36).slice(2, 10);
-      this.localPlayer = new PlayerEntity(this.engine, 'RED', 'FOX', true, this.playerName, localId);
-      this.localPlayer.pos.set(0, 1, 0);
-      this.players.push(this.localPlayer);
+  /** 经典起床战争模式 */
+  _startClassicMode(teamKey, roleKey) {
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = 'block';
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) crosshair.style.display = 'block';
+    const skillBtn = document.getElementById('skillBtn');
+    if (skillBtn) skillBtn.style.display = 'flex';
+    window.hudLayoutManager?.init?.();
+    this.input._ensureMobileControls();
 
-      // Create 9 AI
-      AIManager.removeAll();
-      const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India'];
-      let nameIdx = 0;
-      for (let i = 0; i < 9; i++) {
-        const spawnAngles = [0, Math.PI/2, Math.PI, Math.PI*1.5, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4, Math.PI/6];
-        const angle = spawnAngles[i] || Math.random() * Math.PI * 2;
-        const result = AIManager.createAI(this.engine, this, 'RED', botNames[nameIdx++] || 'Bot', 'FOX');
-        if (result) {
-          result.entity.pos.set(Math.cos(angle) * 8, 1, Math.sin(angle) * 8);
-          result.entity.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
-          result.entity.maxHp = 100;
-          result.entity.hp = 100;
-          result.entity.baseSpeed = 5.5;
-          result.entity.speed = 5.5;
-          result.entity.hotbar = Array(8).fill(null);
-          result.entity.backpack = Array(20).fill(null);
-          result.entity.equipped = { weapon: null, armor: null };
-          result.entity.arrowCount = 0;
-          this.players.push(result.entity);
-        }
-      }
-
-      // Hide UI elements not needed in secret killer
-      document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
-      ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel'].forEach(id => {
-        const panel = document.getElementById(id);
-        if (panel) panel.style.display = 'none';
-      });
-      document.getElementById('mainMenu').style.display = 'none';
-      document.getElementById('hud').style.display = 'block';
-      document.getElementById('gameOverScreen').style.display = 'none';
-      document.getElementById('shopPanel').style.display = 'none';
-      document.getElementById('shopBtn').style.display = 'none';
-      document.getElementById('skillBtn').style.display = 'none';
-      document.getElementById('resourceBar').style.display = 'none';
-      document.getElementById('teamInfo').style.display = 'none';
-      document.getElementById('crosshair').style.display = 'block';
-      window.hudLayoutManager?.init?.();
-      this.input._ensureMobileControls();
-
-      // Show secret killer HUD
-      const skHud = document.getElementById('secretKillerHud');
-      if (skHud) skHud.style.display = 'block';
-
-      // Lock pointer
-      if (!this.input.isMobile()) {
-        this.engine.renderer.domElement.requestPointerLock();
-      }
-
-      return; // Skip normal start logic
-    }
-
-    // === 校园寻宝模式 ===
-    if (mode === 'campus') {
-      closeAllLobbyPanels();
-      document.getElementById('mainMenu').style.display = 'none';
-      document.getElementById('hud').style.display = 'block';
-      document.getElementById('gameOverScreen').style.display = 'none';
-      document.getElementById('shopPanel').style.display = 'none';
-      document.getElementById('crosshair').style.display = 'none';
-      document.getElementById('skillBtn').style.display = 'none';
-      document.getElementById('resourceBar').style.display = 'none';
-      document.getElementById('teamInfo').style.display = 'none';
-      document.getElementById('hotbar').style.display = 'none';
-      document.getElementById('shopBtn').style.display = 'none';
-      
-      // 显示校园HUD
-      document.getElementById('campusHud').style.display = 'block';
-      
-      this.input._ensureMobileControls();
-      
-      // 显示校园职业选择面板
-      this._showCampusCareerSelection();
-      
-      this.isCampusMode = true;
-      return;
-    }
-
-    // Create local player (classic mode)
+    // 创建本地玩家
     const localId = this.onlineMode && this.network?.auth?.user?.id
       ? this.network.auth.user.id
       : 'local-' + Math.random().toString(36).slice(2, 10);
     this.localPlayer = new PlayerEntity(this.engine, teamKey, roleKey, true, this.playerName, localId);
     this.players.push(this.localPlayer);
 
-    // Create AI bots (max 4, controlled by AIController)
+    // 创建 AI
     AIManager.removeAll();
     const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India','Juliet','Kilo','Lima'];
     let nameIdx = 0;
     const roles = Object.keys(ROLES);
     const desiredAiCount = this.onlineMode ? (window.lobbyAiSlots || 0) : Math.max(4, window.lobbyAiSlots || 0);
-    for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-      const count = desiredAiCount > 0 ? 1 : 0; // 每队最多1个AI，总数不超过4
+    for (const [tkey] of Object.entries(TEAMS)) {
+      const count = desiredAiCount > 0 ? 1 : 0;
       for (let i = 0; i < count; i++) {
-        if (AIManager.getCount() >= desiredAiCount) break;
-        if (AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
+        if (AIManager.getCount() >= desiredAiCount || AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
         const role = roles[Math.floor(Math.random() * roles.length)];
-        const name = botNames[nameIdx++] || 'Bot';
-        const result = AIManager.createAI(this.engine, this, tkey, name, role);
+        const result = AIManager.createAI(this.engine, this, tkey, botNames[nameIdx++] || 'Bot', role);
         if (result) {
           result.entity.applyStarterGear?.();
           result.entity.addToBackpack('wood_plank', 32);
@@ -1416,24 +1325,10 @@ class Game {
           this.players.push(result.entity);
         }
       }
-      if (AIManager.getCount() >= desiredAiCount) break;
-      if (AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
+      if (AIManager.getCount() >= desiredAiCount || AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
     }
 
-    // UI
-    document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
-    ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel'].forEach(id => {
-      const panel = document.getElementById(id);
-      if (panel) panel.style.display = 'none';
-    });
-    document.getElementById('mainMenu').style.display = 'none';
-    document.getElementById('hud').style.display = 'block';
-    document.getElementById('gameOverScreen').style.display = 'none';
-    document.getElementById('shopPanel').style.display = 'none';
-    document.getElementById('crosshair').style.display = 'block';
-    document.getElementById('skillBtn').style.display = 'flex';
-
-    // Team info click -> detail panel
+    // 队伍信息面板
     const teamInfoEl = document.getElementById('teamInfo');
     if (teamInfoEl && !teamInfoEl._boundDetailClick) {
       teamInfoEl._boundDetailClick = true;
@@ -1441,26 +1336,23 @@ class Game {
       teamInfoEl.onclick = () => {
         const panel = document.getElementById('teamDetailPanel');
         if (!panel) return;
-        if (panel.style.display === 'flex') {
-          panel.style.display = 'none';
-          return;
-        }
+        if (panel.style.display === 'flex') { panel.style.display = 'none'; return; }
         let html = '<div class="team-detail-content">';
         if (this.players) {
           for (const p of this.players) {
             if (p.team !== this.localPlayer?.team && !p.isLocal) continue;
             const role = ROLES[p.role] || {};
             const isMe = p.isLocal;
-            html += `<div class="team-player-row ${isMe ? 'me' : ''}">
-              <span class="tp-name">${isMe ? '&#9654; ' : ''}${p.name || '???'}</span>
-              <span class="tp-role">${role.name || '?'}</span>
-              <span class="tp-stats">\u51FB\u6740:${p.kills||0} \u590D\u6D3B:${p.respawnCount||0}</span>
-            </div>`;
+            html += '<div class="team-player-row ' + (isMe ? 'me' : '') + '">'
+              + '<span class="tp-name">' + (isMe ? '&#9654; ' : '') + (p.name || '???') + '</span>'
+              + '<span class="tp-role">' + (role.name || '?') + '</span>'
+              + '<span class="tp-stats">\u51FB\u6740:' + (p.kills||0) + ' \u590D\u6D3B:' + (p.respawnCount||0) + '</span>'
+              + '</div>';
             if (isMe && role.passive && role.active) {
-              html += `<div class="my-skill-info">
-                <div class="skill-info-row"><b>\u88AB\u52A8\uFF1A${role.passive.name}</b><p>${role.passive.desc}</p></div>
-                <div class="skill-info-row"><b>\u4E3B\u52A8\uFF1A${role.active.name}</b><p>${role.active.desc} | \u51B7\u5374 ${role.active.cd}\u79D2</p></div>
-              </div>`;
+              html += '<div class="my-skill-info">'
+                + '<div class="skill-info-row"><b>\u88AB\u52A8\uFF1A' + role.passive.name + '</b><p>' + role.passive.desc + '</p></div>'
+                + '<div class="skill-info-row"><b>\u4E3B\u52A8\uFF1A' + role.active.name + '</b><p>' + role.active.desc + ' | \u51B7\u5374 ' + role.active.cd + '\u79D2</p></div>'
+                + '</div>';
             }
           }
         }
@@ -1470,23 +1362,111 @@ class Game {
       };
     }
 
-    window.hudLayoutManager?.init?.();
-    this.input._ensureMobileControls();
-
-    // Show skill info
-    const skillBtn = document.getElementById('skillBtn');
-    if (skillBtn) {
-      skillBtn.querySelector('span:first-child').textContent = ROLES[roleKey].active.name;
+    // 技能按钮文字
+    const skillBtnEl = document.getElementById('skillBtn');
+    if (skillBtnEl) {
+      const roleData = ROLES[roleKey];
+      if (roleData?.active) {
+        const span = skillBtnEl.querySelector('span:first-child');
+        if (span) span.textContent = roleData.active.name;
+      }
     }
 
-    // Lock pointer - 延迟到角色选择完成后再锁定
-    // beginRoleSelection 中 confirmRoleSelection 会触发 pointerLock
     this.showMessage('游戏开始！保护你的床，摧毁敌人的床！');
     this.social?.initMatch?.();
     this.beginRoleSelection();
     if (this.network) {
       this.network.startSnapshotLoop?.(() => this.getNetworkState());
     }
+  }
+
+  /** 密室杀手模式 */
+  _startSecretKillerMode(teamKey, roleKey) {
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = 'block';
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) crosshair.style.display = 'block';
+    const shopBtn = document.getElementById('shopBtn');
+    if (shopBtn) shopBtn.style.display = 'none';
+    const skillBtn = document.getElementById('skillBtn');
+    if (skillBtn) skillBtn.style.display = 'none';
+    const resourceBar = document.getElementById('resourceBar');
+    if (resourceBar) resourceBar.style.display = 'none';
+    const teamInfo = document.getElementById('teamInfo');
+    if (teamInfo) teamInfo.style.display = 'none';
+    window.hudLayoutManager?.init?.();
+    this.input._ensureMobileControls();
+
+    const skHud = document.getElementById('secretKillerHud');
+    if (skHud) skHud.style.display = 'block';
+
+    this.isSecretKiller = true;
+    this.skState = 'countdown';
+    this.skCountdown = 5;
+    this.skFragmentTimer = 0;
+    this.skRoles = {};
+    this.skRoleRevealed = false;
+    this.shrinkActive = false;
+    this.shrinkTimer = 99999;
+
+    AIManager.MAX_AI_COUNT_SAVE = AIManager.MAX_AI_COUNT;
+    AIManager.MAX_AI_COUNT = 12;
+
+    const localId = this.onlineMode && this.network?.auth?.user?.id
+      ? this.network.auth.user.id
+      : 'local-' + Math.random().toString(36).slice(2, 10);
+    this.localPlayer = new PlayerEntity(this.engine, 'RED', 'FOX', true, this.playerName, localId);
+    this.localPlayer.pos.set(0, 1, 0);
+    this.players.push(this.localPlayer);
+
+    AIManager.removeAll();
+    const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India'];
+    for (let i = 0; i < 9; i++) {
+      const spawnAngles = [0, Math.PI/2, Math.PI, Math.PI*1.5, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4, Math.PI/6];
+      const angle = spawnAngles[i] || Math.random() * Math.PI * 2;
+      const result = AIManager.createAI(this.engine, this, 'RED', botNames[i] || 'Bot', 'FOX');
+      if (result) {
+        result.entity.pos.set(Math.cos(angle) * 8, 1, Math.sin(angle) * 8);
+        result.entity.inv = { copper: 0, silver: 0, gold: 0, jade: 0 };
+        result.entity.maxHp = 100;
+        result.entity.hp = 100;
+        result.entity.baseSpeed = 5.5;
+        result.entity.speed = 5.5;
+        result.entity.hotbar = Array(8).fill(null);
+        result.entity.backpack = Array(20).fill(null);
+        result.entity.equipped = { weapon: null, armor: null };
+        result.entity.arrowCount = 0;
+        this.players.push(result.entity);
+      }
+    }
+
+    if (!this.input.isMobile()) {
+      try { this.engine.renderer.domElement.requestPointerLock(); } catch(_) {}
+    }
+  }
+
+  /** 校园寻宝模式 */
+  _startCampusMode() {
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = 'block';
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) crosshair.style.display = 'none';
+    const skillBtn = document.getElementById('skillBtn');
+    if (skillBtn) skillBtn.style.display = 'none';
+    const resourceBar = document.getElementById('resourceBar');
+    if (resourceBar) resourceBar.style.display = 'none';
+    const teamInfo = document.getElementById('teamInfo');
+    if (teamInfo) teamInfo.style.display = 'none';
+    const hotbar = document.getElementById('hotbar');
+    if (hotbar) hotbar.style.display = 'none';
+    const shopBtn = document.getElementById('shopBtn');
+    if (shopBtn) shopBtn.style.display = 'none';
+    const campusHud = document.getElementById('campusHud');
+    if (campusHud) campusHud.style.display = 'block';
+
+    this.input._ensureMobileControls();
+    this.isCampusMode = true;
+    this._showCampusCareerSelection();
   }
 
   beginRoleSelection() {

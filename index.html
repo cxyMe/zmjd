@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>3D 起床战争 - Bed Wars 3D</title>
-  <link rel="stylesheet" href="css/style.css?v=7">
+  <link rel="stylesheet" href="css/style.css?v=8">
   <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -637,18 +637,18 @@ updateOrientationGate();
   }
 })();
 </script>
-<script defer src="js/config.js?v=7"></script>
-<script defer src="js/network.js?v=7"></script>
-<script defer src="js/growth.js?v=7"></script>
-<script defer src="js/social.js?v=7"></script>
-<script defer src="js/chibi-models.js?v=7"></script>
-<script defer src="js/campus-mode.js?v=7"></script>
-<script defer src="js/campus-map.js?v=7"></script>
-<script defer src="js/engine.js?v=7"></script>
-<script defer src="js/ai-controller.js?v=7"></script>
-<script defer src="js/game.js?v=7"></script>
-<script defer src="js/season-pass.js?v=7"></script>
-<script defer src="js/menu-features.js?v=7"></script>
+<script defer src="js/config.js?v=8"></script>
+<script defer src="js/network.js?v=8"></script>
+<script defer src="js/growth.js?v=8"></script>
+<script defer src="js/social.js?v=8"></script>
+<script defer src="js/chibi-models.js?v=8"></script>
+<script defer src="js/campus-mode.js?v=8"></script>
+<script defer src="js/campus-map.js?v=8"></script>
+<script defer src="js/engine.js?v=8"></script>
+<script defer src="js/ai-controller.js?v=8"></script>
+<script defer src="js/game.js?v=8"></script>
+<script defer src="js/season-pass.js?v=8"></script>
+<script defer src="js/menu-features.js?v=8"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
 // ============================================
@@ -1508,76 +1508,112 @@ const loadInterval = setInterval(() => {
 
 // Start game
 document.getElementById('roomStartBtn').addEventListener('click', () => {
+  // === 前置检查 ===
   if (!auth.user) {
     openPanel('profilePanel');
     return setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
   }
-  if (!selectedTeam) {
-    selectedTeam = 'RED';
-    document.querySelectorAll('.team-btn').forEach(b => b.classList.toggle('selected', b.dataset.team === selectedTeam));
-  }
+  if (!selectedTeam) selectedTeam = 'RED';
   if (!localOnly && !netMgr?.inRoom) {
     openPanel('playOptionsPanel');
     return setRoomStatus('请选择创建房间、加入房间，或本地试玩。', true);
   }
+
+  const teamKey = selectedTeam;
+  const mode = window._selectedMode || 'classic';
+  const mapKey = mode === 'secret_killer' ? 'secret_killer' : (window._selectedMap || 'classic');
+  const playerName = auth.user.nickname || '你';
+
+  // === 关闭所有大厅面板 ===
   closeAllLobbyPanels();
-  document.getElementById('teamName').textContent = TEAMS[selectedTeam].name;
-  if (!window._selectedMap) window._selectedMap = 'classic';
-  const selectedMode = window._selectedMode || 'classic';
+  const teamNameEl = document.getElementById('teamName');
+  if (teamNameEl && TEAMS[teamKey]) teamNameEl.textContent = TEAMS[teamKey].name;
 
-  // 显示加载提示
-  const loadingTip = document.createElement('div');
-  loadingTip.id = '_loadingTip';
-  loadingTip.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(15,15,35,0.95);color:#e2e8f0;padding:30px 40px;border-radius:12px;font-size:16px;text-align:center;';
-  loadingTip.textContent = '正在加载游戏...';
-  document.body.appendChild(loadingTip);
+  // === 显示加载遮罩 ===
+  const overlay = document.createElement('div');
+  overlay.id = '_loadingOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,30,0.95);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
+  overlay.innerHTML = '<div style="color:#e2e8f0;font-size:18px;">正在加载游戏...</div><div style="color:#64748b;font-size:13px;">首次加载可能需要几秒</div>';
+  document.body.appendChild(overlay);
 
-  // 用 setTimeout 让浏览器先渲染加载提示，再执行可能耗时的初始化
-  setTimeout(() => {
-    try {
-      window.game = new Game({ network: netMgr, playerName: auth.user?.nickname || '你', onlineMode: !localOnly });
-      window.game.selectedMap = window._selectedMap || 'classic';
-      if (selectedMode === 'secret_killer') {
-        window.game.selectedMap = 'secret_killer';
+  // 延迟一帧，让加载遮罩先渲染
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      try {
+        // --- 清理旧游戏 ---
+        if (window.game) {
+          try {
+            if (window.game._rafId) cancelAnimationFrame(window.game._rafId);
+            if (window.game.engine?.renderer) {
+              window.game.engine.renderer.domElement?.remove();
+              window.game.engine.renderer.dispose();
+            }
+          } catch (_) {}
+          window.game = null;
+        }
+        document.getElementById('gameCanvas')?.querySelectorAll('canvas').forEach(c => c.remove());
+
+        // --- WebGL 检测 ---
+        const probe = document.createElement('canvas');
+        const hasGL = !!(probe.getContext('webgl2') || probe.getContext('webgl'));
+        probe.remove();
+        if (!hasGL) throw new Error('你的浏览器不支持 WebGL，无法运行3D游戏。\n请尝试：更新浏览器 / 启用硬件加速 / 使用 Chrome/Edge');
+
+        // --- 创建并初始化游戏 ---
+        const game = new Game({ network: netMgr, playerName, onlineMode: !localOnly });
+        game.selectedMap = mapKey;
+        window.game = game;
+
+        game.init();
+
+        // --- 按模式启动 ---
+        game.start(teamKey, 'FOX', mode);
+
+        // --- 启动成功，清理遮罩 ---
+        overlay.remove();
+
+        // --- 网络状态 ---
+        if (!localOnly && netMgr?.isHost) {
+          try { netMgr.roomNet.setRoomStatus('playing'); } catch (_) {}
+          try { netMgr.roomNet.sendEvent('game_start', { team: teamKey, role: 'PENDING' }); } catch (_) {}
+        }
+        const badge = document.getElementById('netBadge');
+        if (badge) {
+          badge.style.display = 'block';
+          badge.innerHTML = localOnly
+            ? '联机状态：<span class="online">本地试玩</span>'
+            : '联机状态：<span class="online">在线</span>｜<span class="host">' + (netMgr?.isHost ? '主房主' : '副房主') + '</span>';
+        }
+      } catch (err) {
+        console.error('[Game] 启动失败:', err);
+        overlay.remove();
+        window.game = null;
+
+        // 清理可能残留的 canvas
+        document.getElementById('gameCanvas')?.querySelectorAll('canvas').forEach(c => c.remove());
+
+        // 恢复 UI
+        const mainMenu = document.getElementById('mainMenu');
+        if (mainMenu) mainMenu.style.display = '';
+        const hud = document.getElementById('hud');
+        if (hud) hud.style.display = 'none';
+        const rolePanel = document.getElementById('startRolePanel');
+        if (rolePanel) rolePanel.style.display = 'none';
+
+        // 显示错误弹窗
+        const errBox = document.createElement('div');
+        errBox.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,30,0.95);display:flex;align-items:center;justify-content:center;';
+        errBox.innerHTML = `
+          <div style="background:#1a1a2e;border:1px solid #ff4444;border-radius:12px;padding:24px 28px;max-width:90vw;max-height:70vh;overflow-y:auto;color:#ff6666;">
+            <div style="font-size:18px;font-weight:bold;color:#ff4444;margin-bottom:12px;">游戏启动失败</div>
+            <div style="font-size:13px;color:#ccc;white-space:pre-wrap;word-break:break-all;">${(err.message || '未知错误')}\n\n${(err.stack || '').split('\n').slice(0,4).join('\n')}</div>
+            <button onclick="this.closest('div[style]').parentElement.remove();document.getElementById('mainMenu').style.display='';"
+              style="margin-top:16px;padding:8px 24px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">返回主菜单</button>
+          </div>`;
+        document.body.appendChild(errBox);
       }
-      window.game.init();
-      window.game.start(selectedTeam, 'FOX', selectedMode);
-      // 成功启动，移除加载提示
-      loadingTip.remove();
-    } catch (err) {
-      console.error('游戏启动失败:', err);
-      loadingTip.remove();
-      // 清理可能已部分创建的Game对象
-      if (window.game?.engine) {
-        try { window.game.engine.renderer?.domElement?.remove?.(); } catch(_) {}
-        try { window.game.engine.renderer?.dispose?.(); } catch(_) {}
-      }
-      window.game = null;
-      // 在页面上显示详细错误
-      const errMsg = document.createElement('div');
-      errMsg.id = '_errMsg';
-      errMsg.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:rgba(40,10,10,0.97);color:#ff6666;padding:24px 32px;border-radius:12px;font-size:14px;max-width:90vw;max-height:70vh;overflow-y:auto;border:1px solid #ff4444;white-space:pre-wrap;word-break:break-all;';
-      errMsg.innerHTML = '<b style="font-size:18px;color:#ff4444;">游戏启动失败</b>\n\n' + 
-        (err.message || '未知错误') + '\n\n' + 
-        (err.stack || '').split('\n').slice(0, 5).join('\n') +
-        '\n\n<button onclick="this.parentElement.remove();document.getElementById(\'mainMenu\').style.display=\'\';" style="margin-top:12px;padding:8px 20px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">返回主菜单</button>';
-      document.body.appendChild(errMsg);
-      // 恢复UI
-      document.getElementById('mainMenu').style.display = '';
-      document.getElementById('hud').style.display = 'none';
-      document.getElementById('startRolePanel').style.display = 'none';
-      return;
-    }
-    if (!localOnly && netMgr?.isHost) {
-      netMgr.roomNet.setRoomStatus('playing').catch(console.warn);
-      netMgr.roomNet.sendEvent('game_start', { team: selectedTeam, role: 'PENDING' }).catch(console.warn);
-    }
-    const badge = document.getElementById('netBadge');
-    badge.style.display = 'block';
-    badge.innerHTML = localOnly
-      ? '联机状态：<span class="online">本地试玩</span>'
-      : `联机状态：<span class="online">在线</span>｜<span class="host">${netMgr?.isHost ? '主房主' : '副房主'}</span>`;
-  }, 50); // 50ms 延迟让加载提示先渲染
+    }, 80);
+  });
 });
 
 document.getElementById('dissolveRoomBtn').addEventListener('click', async () => {
