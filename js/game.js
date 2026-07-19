@@ -1456,7 +1456,7 @@ class Game {
     }
 
     window.hudLayoutManager?.init?.();
-    this._ensureMobileControls();
+    this.input._ensureMobileControls();
 
     // Show skill info
     const skillBtn = document.getElementById('skillBtn');
