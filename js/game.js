@@ -1332,7 +1332,7 @@ class Game {
       document.getElementById('teamInfo').style.display = 'none';
       document.getElementById('crosshair').style.display = 'block';
       window.hudLayoutManager?.init?.();
-      this._ensureMobileControls();
+      this.input._ensureMobileControls();
 
       // Show secret killer HUD
       const skHud = document.getElementById('secretKillerHud');
@@ -1363,7 +1363,7 @@ class Game {
       // 显示校园HUD
       document.getElementById('campusHud').style.display = 'block';
       
-      this._ensureMobileControls();
+      this.input._ensureMobileControls();
       
       // 显示校园职业选择面板
       this._showCampusCareerSelection();
@@ -2134,14 +2134,16 @@ class Game {
     }
     this.addKillFeed(msg);
     // Kill replay log
-    this.network?.roomNet?.client?.from('kill_replay_events').insert({
-      room_id: this.network?.roomNet?.room?.id || 'local',
-      match_tick: Math.floor(this.gameTime),
-      event_type: 'player_killed',
-      actor_id: killer?.playerId || null,
-      target_id: victim.playerId,
-      details: { victimHp: victim.hp, victimArmor: victim.armor, killerWeapon: killer?.equipped?.weapon || null }
-    }).catch(()=>{});
+    try {
+      this.network?.roomNet?.client?.from('kill_replay_events')?.insert?.({
+        room_id: this.network?.roomNet?.room?.id || 'local',
+        match_tick: Math.floor(this.gameTime),
+        event_type: 'player_killed',
+        actor_id: killer?.playerId || null,
+        target_id: victim.playerId,
+        details: { victimHp: victim.hp, victimArmor: victim.armor, killerWeapon: killer?.equipped?.weapon || null }
+      })?.catch?.(() => {});
+    } catch(_) {}
     if (this.network?.sendPlayerKilled) {
       this.network.sendPlayerKilled(victim.playerId || victim.name, killer?.playerId || killer?.name || null);
     }
