@@ -618,6 +618,25 @@ updateOrientationGate();
 <!-- ========== 3D Canvas ========== -->
 <div id="gameCanvas"></div>
 
+<!-- 安全的 localStorage 包装（防止 Tracking Prevention 阻止访问导致崩溃） -->
+<script>
+(function() {
+  let _blocked = false;
+  const _origGet = localStorage.getItem.bind(localStorage);
+  const _origSet = localStorage.setItem.bind(localStorage);
+  const _origRemove = localStorage.removeItem.bind(localStorage);
+  // 测试是否可用
+  try { localStorage.setItem('__test', '1'); localStorage.removeItem('__test'); } catch(e) { _blocked = true; }
+  if (_blocked) {
+    // 创建内存后备
+    const _mem = {};
+    localStorage.getItem = function(k) { try { return _origGet(k); } catch(e) { return _mem[k] ?? null; } };
+    localStorage.setItem = function(k, v) { try { _origSet(k, v); } catch(e) { _mem[k] = String(v); } };
+    localStorage.removeItem = function(k) { try { _origRemove(k); } catch(e) { delete _mem[k]; } };
+    console.warn('[Storage] localStorage 被浏览器阻止，已降级到内存存储。关闭页面后数据不保留。');
+  }
+})();
+</script>
 <script defer src="js/config.js"></script>
 <script defer src="js/network.js"></script>
 <script defer src="js/growth.js"></script>
