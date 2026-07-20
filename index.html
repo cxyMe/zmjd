@@ -240,15 +240,16 @@ document.addEventListener('DOMContentLoaded',()=>{
   $('roomStartBtn')?.addEventListener('click',()=>{
     if(!auth||!auth.user){closeAllLobbyPanels();$('profilePanel').style.display='';return;}
     const mode=window._selectedMode||'classic',mapCard=document.querySelector('.map-card.selected'),mapKey=mapCard?.dataset.map||'classic';
-    const playerName=auth.user.user_metadata?.nickname||auth.user.email||'玩家';
+    const playerName=auth.user.nickname||auth.user.username||'玩家';
     closeAllLobbyPanels();const hud=$('hud');if(hud)hud.style.display='none';const mm=$('mainMenu');if(mm)mm.style.display='none';
     const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.5rem;z-index:9999';
     ov.textContent='正在加载地图...';document.body.appendChild(ov);
     requestAnimationFrame(()=>{setTimeout(async()=>{
       try{if(window.game?.destroy)game.destroy();const c=document.createElement('canvas'),gl=c.getContext('webgl2')||c.getContext('webgl');
       if(!gl){ov.textContent='浏览器不支持 WebGL';return;}
-      window.game=new Game();game.init({team:selectedTeam,mode,map:mapKey,playerName,localOnly,aiSlots:lobbyAiSlots,netMgr});
-      game.start();ov.remove();if(hud)hud.style.display='';const nb=$('netBadge');if(nb)nb.style.display=(netMgr&&!localOnly)?'':'none';
+      window.game=new Game({network:netMgr,playerName,onlineMode:!localOnly,localOnly,aiSlots:lobbyAiSlots});
+      game.selectedMap=mapKey;game.init();
+      game.start(selectedTeam,undefined,mode);ov.remove();if(hud)hud.style.display='';const nb=$('netBadge');if(nb)nb.style.display=(netMgr&&!localOnly)?'':'none';
       }catch(e){console.error(e);ov.textContent='加载失败: '+(e.message||e);setTimeout(()=>{ov.remove();if(mm)mm.style.display='';},2500);}
     },80);});
   });
@@ -262,11 +263,39 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(isMobile)document.addEventListener('touchstart',e=>window.game?.handleTouch?.(e),{passive:false});
   /* 面板关闭 */
   document.querySelectorAll('.panel-close-btn').forEach(btn=>{btn.addEventListener('click',()=>{const p=btn.closest('.overlay-panel');if(p)p.style.display='none';});});
-  /* 登录/注册 */
-  $('loginBtn')?.addEventListener('click',async()=>{const u=$('loginUser'),p=$('loginPass'),st=$('profileLoginStatus');if(!u||!p)return;try{if(window.SupabaseClient){const{data,error}=await window.SupabaseClient.auth.signInWithPassword({email:u.value,password:p.value});if(error)throw error;auth=data;setAuthStatus('已登录: '+(data.user?.email||''));updateStartBtn();refreshRoomUI();if(st)st.textContent='登录成功';}}catch(e){if(st)st.textContent='登录失败: '+(e.message||e);}});
-  $('registerBtn')?.addEventListener('click',async()=>{const u=$('loginUser'),p=$('loginPass'),st=$('profileLoginStatus');if(!u||!p)return;try{if(window.SupabaseClient){const{error}=await window.SupabaseClient.auth.signUp({email:u.value,password:p.value});if(error)throw error;if(st)st.textContent='注册成功，请查收验证邮件';}}catch(e){if(st)st.textContent='注册失败: '+(e.message||e);}});
-  /* 认证状态监听 */
-  window.addEventListener('auth-changed',e=>{auth=e.detail;if(auth?.user)setAuthStatus('已登录: '+(auth.user.email||''));else{setAuthStatus('请先登录');auth=null;}updateStartBtn();refreshRoomUI();});
+  /* 认证管理器 */
+  const config = window.BEDWARS_CONFIG || {};
+  auth = new AuthManager(config);
+  window.lobbyAuth = auth;
+  if (auth.user) { setAuthStatus('已登录: ' + (auth.user.nickname || auth.user.username || '')); updateStartBtn(); }
+  /* 登录 */
+  $('loginBtn')?.addEventListener('click', async () => {
+    const u = $('loginUser'), p = $('loginPass'), st = $('profileLoginStatus');
+    if (!u || !p) return;
+    const username = u.value.trim(), password = p.value;
+    if (!username || !password) { if (st) st.textContent = '请输入用户名和密码'; return; }
+    try {
+      const result = await auth.login(username, password);
+      setAuthStatus('已登录: ' + (result.user.nickname || result.user.username || ''));
+      updateStartBtn(); refreshRoomUI();
+      if (st) st.textContent = '登录成功';
+      const nickEl = $('profileNick'); if (nickEl) nickEl.textContent = result.user.nickname || result.user.username;
+    } catch (e) { if (st) st.textContent = '登录失败: ' + (e.message || e); }
+  });
+  /* 注册 */
+  $('registerBtn')?.addEventListener('click', async () => {
+    const u = $('loginUser'), p = $('loginPass'), st = $('profileLoginStatus');
+    if (!u || !p) return;
+    const username = u.value.trim(), password = p.value;
+    if (!username || !password) { if (st) st.textContent = '请输入用户名和密码'; return; }
+    try {
+      const result = await auth.register(username, password);
+      setAuthStatus('已登录: ' + (result.user.nickname || result.user.username || ''));
+      updateStartBtn(); refreshRoomUI();
+      if (st) st.textContent = '注册成功，已自动登录';
+      const nickEl = $('profileNick'); if (nickEl) nickEl.textContent = result.user.nickname || result.user.username;
+    } catch (e) { if (st) st.textContent = '注册失败: ' + (e.message || e); }
+  });
   /* 工坊按钮 */
   $('newMapBtn')?.addEventListener('click',()=>window.game?.editorNewMap?.());
   $('loadMapBtn')?.addEventListener('click',()=>window.game?.editorLoadMap?.());
@@ -277,7 +306,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   function openLocalModePanel(){localOnly=true;closeAllLobbyPanels();$('roomPanel')&&($('roomPanel').style.display='block');$('mainMenu')&&($('mainMenu').style.display='none');updateRoomMembers();updateStartBtn();}
   function updateAiButton(){const b=$('addAiBtn');if(b)b.textContent='添加AI替补（'+lobbyAiSlots+'/4）';}
   function openRoomPanel(){closeAllLobbyPanels();$('roomPanel')&&($('roomPanel').style.display='block');$('mainMenu')&&($('mainMenu').style.display='none');updateRoomMembers();}
-  function updateRoomMembers(){const el=$('roomMembers');if(!el)return;if(netMgr?.members){el.innerHTML=netMgr.members.map(m=>'<div>'+escapeHtml(m.name||m)+'</div>').join('');}else{const n=auth?.user?(auth.user.user_metadata?.nickname||auth.user.email||'玩家'):'游客';el.innerHTML='<div>'+escapeHtml(n)+'</div>';}}
+  function updateRoomMembers(){const el=$('roomMembers');if(!el)return;if(netMgr?.members){el.innerHTML=netMgr.members.map(m=>'<div>'+escapeHtml(m.name||m)+'</div>').join('');}else{const n=auth?.user?(auth.user.nickname||auth.user.username||'玩家'):'游客';el.innerHTML='<div>'+escapeHtml(n)+'</div>';}}
   function refreshRoomUI(){updateRoomMembers();updateAiButton();updateStartBtn();}
   window.setRoomStatus=setRoomStatus;window.closePanel=closePanel;window.closeAllLobbyPanels=closeAllLobbyPanels;
   window.escapeHtml=escapeHtml;window.setAuthStatus=setAuthStatus;window.updateStartBtn=updateStartBtn;
