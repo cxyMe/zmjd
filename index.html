@@ -148,14 +148,6 @@ updateOrientationGate();
 
 <!-- ========== HUD ========== -->
 <div id="hud">
-  <!-- Secret Killer Mode HUD -->
-  <div id="secretKillerHud" style="display:none; position:absolute; top:10px; left:10px; z-index:100;">
-    <div id="skCountdown" style="font-size:48px; color:#ffdd00; text-align:center; width:100vw; position:absolute; top:30vh; left:0; text-shadow:0 0 20px rgba(255,221,0,0.5);"></div>
-    <div id="skRoleText" style="font-size:18px; font-weight:bold; color:#fff; background:rgba(0,0,0,0.6); padding:8px 12px; border-radius:6px; margin-bottom:8px;"></div>
-    <div style="font-size:14px; color:#ffdd00; background:rgba(0,0,0,0.6); padding:6px 10px; border-radius:6px;">
-      碎片: <span id="skFragmentCount">0/10</span> | 时间: <span id="skTimeDisplay">5:00</span>
-    </div>
-  </div>
   <!-- Resources -->
   <div id="resourceBar">
     <div class="res-item res-copper"><div class="res-icon"></div><span id="resCopper">0</span></div>
@@ -426,7 +418,6 @@ updateOrientationGate();
         <h3>模式选择</h3>
         <div class="mode-select" id="roomModeSelect">
           <div class="mode-card selected" data-mode="classic">经典模式</div>
-          <div class="mode-card" data-mode="secret_killer">密室杀手</div>
           <div class="play-option campus-option" data-mode="campus" onclick="selectMode('campus')">
             <div class="mode-icon">🏛️</div>
             <div class="mode-info">
@@ -436,7 +427,7 @@ updateOrientationGate();
           </div>
         </div>
       </div>
-      <div class="room-panel-section">
+      <div class="room-panel-section" id="teamSection">
         <h3>队伍选择</h3>
         <button class="small-btn ai-fill-btn" id="addAiBtn">添加AI替补（0/4）</button>
         <div class="team-select">
@@ -650,6 +641,31 @@ updateOrientationGate();
 <script defer src="js/season-pass.js?v=8"></script>
 <script defer src="js/menu-features.js?v=8"></script>
 <script>
+// 全局模式选择函数（供HTML onclick调用）
+function selectMode(mode) {
+  window._selectedMode = mode;
+  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+  const match = document.querySelector(`.mode-card[data-mode="${mode}"]`);
+  if (match) match.classList.add('selected');
+  document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
+  const campusOpt = document.querySelector('.campus-option[data-mode="campus"]');
+  if (campusOpt && mode === 'campus') campusOpt.classList.add('selected');
+
+  // 校园寻宝模式：隐藏队伍选择和AI替补，直接显示开始游戏按钮
+  const teamSection = document.getElementById('teamSection');
+  const aiBtn = document.getElementById('addAiBtn');
+  const startBtn = document.getElementById('roomStartBtn');
+  if (mode === 'campus') {
+    if (teamSection) teamSection.style.display = 'none';
+    if (aiBtn) aiBtn.style.display = 'none';
+    if (startBtn) startBtn.style.display = 'inline-block';
+  } else {
+    if (teamSection) teamSection.style.display = '';
+    if (aiBtn) aiBtn.style.display = '';
+    if (startBtn) startBtn.style.display = 'none';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 // ============================================
 // Menu Logic
@@ -700,21 +716,19 @@ document.querySelectorAll('.map-card').forEach(card => {
 });
 
 // Mode selection
-function selectMode(mode) {
-  window._selectedMode = mode;
-  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
-  const match = document.querySelector(`.mode-card[data-mode="${mode}"]`);
-  if (match) match.classList.add('selected');
-  document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
-  const campusOpt = document.querySelector('.campus-option[data-mode="campus"]');
-  if (campusOpt && mode === 'campus') campusOpt.classList.add('selected');
-}
 document.querySelectorAll('.mode-card').forEach(card => {
   card.addEventListener('click', () => {
     document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
     document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
     card.classList.add('selected');
     window._selectedMode = card.dataset.mode;
+    // 切换回经典模式时恢复队伍选择
+    const teamSection = document.getElementById('teamSection');
+    const aiBtn = document.getElementById('addAiBtn');
+    const startBtn = document.getElementById('roomStartBtn');
+    if (teamSection) teamSection.style.display = '';
+    if (aiBtn) aiBtn.style.display = '';
+    if (startBtn) startBtn.style.display = 'none';
   });
 });
 
@@ -804,10 +818,10 @@ function renderRoom() {
     if (dissolveRoomBtn) {
       dissolveRoomBtn.style.display = (isMainHost && !localOnly) ? 'block' : 'none';
     }
-    const isSecretKiller = window._selectedMode === 'secret_killer';
+    const isCampus = window._selectedMode === 'campus';
     const roomMapSelect = document.getElementById('roomMapSelect');
     if (roomMapSelect) {
-      roomMapSelect.style.display = isSecretKiller ? 'none' : '';
+      roomMapSelect.style.display = isCampus ? 'none' : '';
       roomMapSelect.querySelectorAll('.map-card').forEach(c => {
         c.style.pointerEvents = isMainHost ? 'auto' : 'none';
         c.style.opacity = isMainHost ? '1' : '0.6';
@@ -821,11 +835,11 @@ function renderRoom() {
       });
     }
     const addAiBtn = document.getElementById('addAiBtn');
-    if (addAiBtn) addAiBtn.style.display = isSecretKiller ? 'none' : '';
+    if (addAiBtn) addAiBtn.style.display = isCampus ? 'none' : '';
     const teamSelect = document.querySelector('.team-select');
-    if (teamSelect) teamSelect.style.display = isSecretKiller ? 'none' : '';
+    if (teamSelect) teamSelect.style.display = isCampus ? 'none' : '';
     const teamSelectSection = teamSelect?.closest('.room-panel-section');
-    if (teamSelectSection) teamSelectSection.style.display = isSecretKiller ? 'none' : '';
+    if (teamSelectSection) teamSelectSection.style.display = isCampus ? 'none' : '';
     if (roomPanelMembers) {
       roomPanelMembers.innerHTML = '';
       for (const m of members) {
@@ -1060,8 +1074,6 @@ document.getElementById('ruleSaveBtn').addEventListener('click', () => {
       jade: parseInt(document.getElementById('ruleJadeRate').value) || 42,
     },
     enableAdvancedResources: document.getElementById('ruleEnableAdvancedRes').checked,
-    skTimeLimit: parseInt(document.getElementById('ruleSKTimeLimit').value) || 300,
-    skFragmentCount: parseInt(document.getElementById('ruleSKFragments').value) || 5,
   };
   if (typeof saveCustomRules === 'function') {
     saveCustomRules(rules);
@@ -1179,8 +1191,6 @@ function loadRuleUI() {
   document.getElementById('ruleGoldRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.gold) || 15;
   document.getElementById('ruleJadeRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.jade) || 42;
   document.getElementById('ruleEnableAdvancedRes').checked = rules.enableAdvancedResources !== false;
-  document.getElementById('ruleSKTimeLimit').value = rules.skTimeLimit || 300;
-  document.getElementById('ruleSKFragments').value = rules.skFragmentCount || 5;
   document.getElementById('ruleScoreTargetRow').style.display = (rules.winCondition === 'score_target') ? 'flex' : 'none';
 }
 
@@ -1369,7 +1379,7 @@ function openLocalModePanel() {
   if (netMgr?.inRoom) { netMgr.leaveRoom().catch(() => {}); netMgr = null; }
   localOnly = true;
   const selectedMode = window._selectedMode || 'classic';
-  window.lobbyAiSlots = selectedMode === 'secret_killer' ? 9 : Math.max(window.lobbyAiSlots || 0, 4);
+  window.lobbyAiSlots = Math.max(window.lobbyAiSlots || 0, 4);
   setAuthStatus('已进入本地试玩模式，不连接 Supabase。');
   setRoomStatus('本地试玩模式：将与 AI 对战，直接点开始游戏。');
   closePanel('playOptionsPanel');
@@ -1521,7 +1531,7 @@ document.getElementById('roomStartBtn').addEventListener('click', () => {
 
   const teamKey = selectedTeam;
   const mode = window._selectedMode || 'classic';
-  const mapKey = mode === 'secret_killer' ? 'secret_killer' : (window._selectedMap || 'classic');
+  const mapKey = window._selectedMap || 'classic';
   const playerName = auth.user.nickname || '你';
 
   // === 关闭所有大厅面板 ===
@@ -1725,18 +1735,6 @@ document.getElementById('dissolveRoomBtn').addEventListener('click', async () =>
           </div>
           <div class="rule-row">
             <label><input type="checkbox" id="ruleEnableAdvancedRes" checked> 启用高级资源（金/玉佩）</label>
-          </div>
-        </div>
-        
-        <div class="rule-group">
-          <h3>密室杀手</h3>
-          <div class="rule-row">
-            <label>时间限制（秒）</label>
-            <input type="number" id="ruleSKTimeLimit" value="300" min="60" max="600">
-          </div>
-          <div class="rule-row">
-            <label>碎片数量</label>
-            <input type="number" id="ruleSKFragments" value="5" min="3" max="15">
           </div>
         </div>
         
