@@ -121,11 +121,6 @@ const DEFAULT_GAME_RULES = {
   enableAutoUpgrade: true, // 自动升级方块
   blockUpgradeChain: ['wood_plank','stone_plate','iron_plate','titanium'],
 
-  // 密室杀手专用
-  skTimeLimit: 300,
-  skFragmentCount: 5,
-  skKillerRatio: 0.25,
-
   // 其他
   enableGrowth: true,
   growthSpeed: 1.0,
@@ -249,9 +244,7 @@ const ITEM_DB = {
   speed_potion: { name: '极速药水',type:'special',cost: { gold: 3 },         desc: '移动速度增加25%，持续3秒', stack: 8 },
   burst_potion: { name: '爆发药水',type:'special',cost: { gold: 4 },         desc: '造成伤害增加45%，持续3秒', stack: 8 },
   detector:     { name: '探测仪',type:'special',cost: { silver: 5 },         durability: 20, desc: '手持检测附近10格敌人数量，每秒消耗1耐久', stack: 1 },
-  killer_knife:    { name: '杀手之刃',type:'weapon',cost: {},                   dmg: 1000, durability: 999, desc: '杀手专属武器，近战/可投掷，一击必杀', stack: 1, throwable: true, throwDmg: 1000 },
-  detective_bow:   { name: '侦探之弓',type:'weapon',cost: {},                   dmg: 1000, durability: 999, desc: '侦探专属弓，无限箭矢，8秒CD，一击必杀', ranged: true, stack: 1, detectiveBow: true, bowCd: 8 },
-  fragment:        { name: '碎片',  type: 'special',cost: {},                    desc: '收集10碎片可获得一把弓', stack: 64, isFragment: true }
+
 };
 
 // ============================================
@@ -1515,8 +1508,6 @@ class Engine {
       for (const ent of this.entities) {
         if (ent === proj.owner) continue;
         if (ent.isDead) continue;
-        // 密室杀手：同阵营不伤害
-        if (window.game?.isSecretKiller && proj.owner?.skRole && ent.skRole === proj.owner.skRole) continue;
         const dist = proj.mesh.position.distanceTo(ent.mesh.position);
         if (dist < (ent.radius || 0.5) + 0.2) {
           const key = ent.playerId || ent.name;
@@ -1606,10 +1597,7 @@ const MAPS = {
     id: 'twilight_forest', name: '暮色森林', desc: '树冠基地、地面黑雾迷雾，视线封锁，幻影爪痕持续伤害',
     thumbnail: 'forest'
   },
-  secret_killer: {
-    id: 'secret_killer', name: '密室杀手', desc: '10人局：1杀手、1侦探、8平民，收集碎片、找出杀手',
-    thumbnail: 'default'
-  }
+
 };
 
 // ============================================
@@ -1618,7 +1606,6 @@ const MAPS = {
 function generateWorld(engine, mapId = 'classic') {
   engine.mapId = mapId;
   if (mapId === 'twilight_forest') return generateTwilightForest(engine);
-  if (mapId === 'secret_killer') return generateSecretKillerMap(engine);
   const geo = new THREE.BoxGeometry(1, 1, 1);
   engine.tidalIslands = [];
   engine.temporaryGens = [];
@@ -2026,438 +2013,8 @@ function generateTwilightForest(engine) {
   return gens;
 }
 
-// ============================================
-// 密室杀手地图系统：3个地图 + 随机选择
-// ============================================
 
-const SECRET_KILLER_MAPS = [
-  {
-    id: 'sk_abandoned_mansion',
-    name: '废弃庄园',
-    generate: generateSKMap_AbandonedMansion
-  },
-  {
-    id: 'sk_underground_lab',
-    name: '地下实验室',
-    generate: generateSKMap_UndergroundLab
-  },
-  {
-    id: 'sk_cursed_temple',
-    name: '诅咒神殿',
-    generate: generateSKMap_CursedTemple
-  }
-];
 
-function generateSecretKillerMap(engine, mapIndex) {
-  // mapIndex 可选，不传则随机选择
-  let idx = mapIndex;
-  if (idx === undefined || idx === null) {
-    idx = Math.floor(Math.random() * SECRET_KILLER_MAPS.length);
-  }
-  const mapDef = SECRET_KILLER_MAPS[idx];
-  engine.skMapIndex = idx;
-  engine.skMapId = mapDef.id;
-  engine.skMapName = mapDef.name;
-  return mapDef.generate(engine);
-}
-
-// ============================================
-// 地图1：废弃庄园（64x64，双层建筑，多个房间）
-// ============================================
-function generateSKMap_AbandonedMansion(engine) {
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  engine.tidalIslands = [];
-  engine.temporaryGens = [];
-
-  const wallColor = 0x5c4033;
-  const floorColor1 = 0x8B7355;
-  const floorColor2 = 0x6B5B45;
-  const carpetColor = 0x8B0000;
-  const stairsColor = 0x654321;
-  const crateColor = 0x8B6914;
-  const pillarColor = 0x4a3728;
-
-  const fragmentPoints = [
-    { x: -25, y: 1, z: -25 }, { x: 25, y: 1, z: -25 },
-    { x: -25, y: 1, z: 25 },  { x: 25, y: 1, z: 25 },
-    { x: 0, y: 1, z: 0 },
-    { x: -20, y: 5, z: 0 },  { x: 20, y: 5, z: 0 }
-  ];
-
-  engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
-  engine.skSpawn = new THREE.Vector3(0, 3, 0);
-
-  function pb(x, y, z, color, type = 'ground') {
-    const mat = new THREE.MeshLambertMaterial({ color });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y, z);
-    if (type === 'ground') mesh.receiveShadow = true;
-    else mesh.castShadow = true;
-    engine.scene.add(mesh);
-    engine.blocks.set(engine.getBlockKey(x, y, z), { mesh, type, hp: 9999, maxHp: 9999 });
-  }
-
-  // 一楼地面：-30到30
-  for (let x = -30; x <= 30; x++) {
-    for (let z = -30; z <= 30; z++) {
-      pb(x, 0, z, (Math.abs(x + z) % 2 === 0) ? floorColor1 : floorColor2);
-    }
-  }
-
-  // 外墙
-  for (let y = 0; y <= 8; y++) {
-    for (let i = -30; i <= 30; i++) {
-      pb(i, y, -30, wallColor); pb(i, y, 30, wallColor);
-      pb(-30, y, i, wallColor); pb(30, y, i, wallColor);
-    }
-  }
-
-  // 内墙分割房间 - 十字走廊（留4格宽通道）
-  // X方向内墙：z=-10和z=10（留走廊x=-4到4）
-  for (let y = 1; y <= 6; y++) {
-    for (let x = -30; x <= 30; x++) {
-      if (x >= -4 && x <= 4) continue; // 走廊
-      // 门洞：每隔8格留2格
-      if ((Math.abs(x) % 10 < 2)) continue;
-      pb(x, y, -10, wallColor); pb(x, y, 10, wallColor);
-    }
-  }
-  // Z方向内墙：x=-10和x=10（留走廊z=-4到4）
-  for (let y = 1; y <= 6; y++) {
-    for (let z = -30; z <= 30; z++) {
-      if (z >= -4 && z <= 4) continue;
-      if ((Math.abs(z) % 10 < 2)) continue;
-      pb(-10, y, z, wallColor); pb(10, y, z, wallColor);
-    }
-  }
-
-  // 二楼平台（中央区域 x=-15..15, z=-15..15）
-  for (let x = -15; x <= 15; x++) {
-    for (let z = -15; z <= 15; z++) {
-      pb(x, 4, z, floorColor2);
-    }
-  }
-
-  // 二楼外墙
-  for (let y = 5; y <= 8; y++) {
-    for (let i = -15; i <= 15; i++) {
-      pb(i, y, -15, wallColor); pb(i, y, 15, wallColor);
-      pb(-15, y, i, wallColor); pb(15, y, i, wallColor);
-    }
-  }
-  // 二楼门洞
-  for (let x = -2; x <= 2; x++) { pb(x, 5, -15, 0); pb(x, 6, -15, 0); pb(x, 7, -15, 0); pb(x, 8, -15, 0); }
-  for (let x = -2; x <= 2; x++) { pb(x, 5, 15, 0); pb(x, 6, 15, 0); pb(x, 7, 15, 0); pb(x, 8, 15, 0); }
-  for (let z = -2; z <= 2; z++) { pb(-15, 5, z, 0); pb(-15, 6, z, 0); pb(-15, 7, z, 0); pb(-15, 8, z, 0); }
-  for (let z = -2; z <= 2; z++) { pb(15, 5, z, 0); pb(15, 6, z, 0); pb(15, 7, z, 0); pb(15, 8, z, 0); }
-
-  // 楼梯（四角各一个）
-  const stairPositions = [{ x: -14, z: -14 }, { x: 14, z: -14 }, { x: -14, z: 14 }, { x: 14, z: 14 }];
-  for (const sp of stairPositions) {
-    for (let i = 0; i < 4; i++) {
-      pb(sp.x, 1 + i, sp.z, stairsColor);
-    }
-  }
-
-  // 装饰：箱子
-  const crates = [
-    { x: -25, z: -25 }, { x: -22, z: -20 }, { x: 22, z: -25 }, { x: 25, z: -20 },
-    { x: -25, z: 22 }, { x: -20, z: 25 }, { x: 25, z: 22 }, { x: 20, z: 25 },
-    { x: -8, z: -8 }, { x: 8, z: -8 }, { x: -8, z: 8 }, { x: 8, z: 8 }
-  ];
-  for (const c of crates) {
-    for (let dx = 0; dx < 2; dx++) for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) {
-      pb(c.x + dx, 1 + dy, c.z + dz, crateColor);
-    }
-  }
-
-  // 地毯（中央大厅）
-  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) pb(x, 0.01, z, carpetColor);
-
-  // 碎片标记
-  const diamondGeo = new THREE.OctahedronGeometry(0.6, 0);
-  for (const fp of fragmentPoints) {
-    const mat = new THREE.MeshLambertMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 });
-    const marker = new THREE.Mesh(diamondGeo, mat);
-    marker.position.set(fp.x, fp.y + 1.5, fp.z);
-    engine.scene.add(marker);
-    const light = new THREE.PointLight(0x00ffff, 1.2, 10);
-    light.position.set(fp.x, fp.y + 2, fp.z);
-    engine.scene.add(light);
-  }
-
-  // 灯光
-  const amb = new THREE.AmbientLight(0x302518, 0.8);
-  engine.scene.add(amb);
-  const lights = [
-    { x: -20, z: -20, c: 0xff6633 }, { x: 20, z: -20, c: 0x3366ff },
-    { x: -20, z: 20, c: 0x33ff66 }, { x: 20, z: 20, c: 0xffcc33 },
-    { x: 0, z: 0, c: 0xff9944 }, { x: -12, z: 0, c: 0xcc66ff }, { x: 12, z: 0, c: 0x66ccff }
-  ];
-  for (const l of lights) {
-    const pl = new THREE.PointLight(l.c, 1.8, 22);
-    pl.position.set(l.x, 5, l.z);
-    engine.scene.add(pl);
-  }
-
-  engine.triggerDreamTide = function(gensRef) {};
-  return [];
-}
-
-// ============================================
-// 地图2：地下实验室（48x48，走廊+实验舱）
-// ============================================
-function generateSKMap_UndergroundLab(engine) {
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  engine.tidalIslands = [];
-  engine.temporaryGens = [];
-
-  const wallColor = 0x3a3a4a;
-  const floorColor = 0x2a2a35;
-  const tileColor = 0x3a4a5a;
-  const labColor = 0x2a4a3a;
-  const pipeColor = 0x555566;
-  const glassColor = 0x4488aa;
-
-  const fragmentPoints = [
-    { x: -18, y: 1, z: -18 }, { x: 18, y: 1, z: -18 },
-    { x: -18, y: 1, z: 18 },  { x: 18, y: 1, z: 18 },
-    { x: 0, y: 1, z: 0 },
-    { x: -12, y: 1, z: 0 },  { x: 12, y: 1, z: 0 }
-  ];
-
-  engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
-  engine.skSpawn = new THREE.Vector3(0, 3, 0);
-
-  function pb(x, y, z, color, type = 'ground') {
-    const mat = new THREE.MeshLambertMaterial({ color });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y, z);
-    if (type === 'ground') mesh.receiveShadow = true;
-    else mesh.castShadow = true;
-    engine.scene.add(mesh);
-    engine.blocks.set(engine.getBlockKey(x, y, z), { mesh, type, hp: 9999, maxHp: 9999 });
-  }
-
-  // 地面
-  for (let x = -22; x <= 22; x++) {
-    for (let z = -22; z <= 22; z++) {
-      pb(x, 0, z, (x + z) % 3 === 0 ? tileColor : floorColor);
-    }
-  }
-
-  // 外墙
-  for (let y = 0; y <= 7; y++) {
-    for (let i = -22; i <= 22; i++) {
-      pb(i, y, -22, wallColor); pb(i, y, 22, wallColor);
-      pb(-22, y, i, wallColor); pb(22, y, i, wallColor);
-    }
-  }
-
-  // H型走廊结构
-  // 主走廊：x方向 z=-2..2
-  for (let z = -2; z <= 2; z++) for (let x = -22; x <= 22; x++) pb(x, 0, z, tileColor);
-  // 主走廊：z方向 x=-2..2
-  for (let x = -2; x <= 2; x++) for (let z = -22; z <= 22; z++) pb(x, 0, z, tileColor);
-
-  // 实验舱（6个）: 8x8房间
-  const rooms = [
-    { cx: -14, cz: -14 }, { cx: 14, cz: -14 },
-    { cx: -14, cz: 14 },  { cx: 14, cz: 14 },
-    { cx: -14, cz: 0 },   { cx: 14, cz: 0 }
-  ];
-  for (const r of rooms) {
-    // 房间地板
-    for (let x = r.cx - 4; x <= r.cx + 4; x++) {
-      for (let z = r.cz - 4; z <= r.cz + 4; z++) {
-        pb(x, 0, z, labColor);
-      }
-    }
-    // 房间墙壁（留门洞朝走廊）
-    for (let y = 1; y <= 5; y++) {
-      for (let d = -4; d <= 4; d++) {
-        if (Math.abs(d) <= 1) continue; // 门洞
-        if (r.cx < 0) { pb(r.cx + 4, y, r.cz + d, wallColor); } // 右墙
-        else { pb(r.cx - 4, y, r.cz + d, wallColor); } // 左墙
-        // 上下墙
-        if (r.cz < 0) { pb(r.cx + d, y, r.cz + 4, wallColor); }
-        else if (r.cz > 0) { pb(r.cx + d, y, r.cz - 4, wallColor); }
-      }
-    }
-  }
-
-  // 管道装饰（天花板上）
-  for (let i = -20; i <= 20; i += 5) {
-    pb(i, 6, -3, pipeColor); pb(i, 6, 3, pipeColor);
-    pb(-3, 6, i, pipeColor); pb(3, 6, i, pipeColor);
-  }
-
-  // 碎片标记
-  const diamondGeo = new THREE.OctahedronGeometry(0.6, 0);
-  for (const fp of fragmentPoints) {
-    const mat = new THREE.MeshLambertMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 });
-    const marker = new THREE.Mesh(diamondGeo, mat);
-    marker.position.set(fp.x, fp.y + 1.5, fp.z);
-    engine.scene.add(marker);
-    const light = new THREE.PointLight(0x00ff88, 1.2, 10);
-    light.position.set(fp.x, fp.y + 2, fp.z);
-    engine.scene.add(light);
-  }
-
-  // 冷色灯光
-  engine.scene.add(new THREE.AmbientLight(0x1a1a2e, 0.7));
-  const labLights = [
-    { x: -14, z: -14, c: 0x00ffcc }, { x: 14, z: -14, c: 0x00ccff },
-    { x: -14, z: 14, c: 0xcc00ff }, { x: 14, z: 14, c: 0xffcc00 },
-    { x: 0, z: 0, c: 0x4488ff }, { x: -14, z: 0, c: 0x00ff88 }, { x: 14, z: 0, c: 0xff4488 }
-  ];
-  for (const l of labLights) {
-    const pl = new THREE.PointLight(l.c, 1.5, 18);
-    pl.position.set(l.x, 4, l.z);
-    engine.scene.add(pl);
-  }
-
-  engine.triggerDreamTide = function(gensRef) {};
-  return [];
-}
-
-// ============================================
-// 地图3：诅咒神殿（80x80，露天+神殿内部）
-// ============================================
-function generateSKMap_CursedTemple(engine) {
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  engine.tidalIslands = [];
-  engine.temporaryGens = [];
-
-  const stoneColor = 0x555555;
-  const stoneDark = 0x3a3a3a;
-  const sandColor = 0xc2b280;
-  const grassColor = 0x4a6b3a;
-  const waterColor = 0x2244aa;
-  const goldColor = 0xdaa520;
-  const pillarColor = 0x666666;
-
-  const fragmentPoints = [
-    { x: -30, y: 1, z: -30 }, { x: 30, y: 1, z: -30 },
-    { x: -30, y: 1, z: 30 },  { x: 30, y: 1, z: 30 },
-    { x: 0, y: 1, z: 0 },
-    { x: -20, y: 1, z: 0 },  { x: 20, y: 1, z: 0 },
-    { x: 0, y: 1, z: -20 }, { x: 0, y: 1, z: 20 }
-  ];
-
-  engine.mapFeatures = { fragmentPoints: fragmentPoints.map(p => new THREE.Vector3(p.x, p.y, p.z)) };
-  engine.skSpawn = new THREE.Vector3(0, 3, 0);
-
-  function pb(x, y, z, color, type = 'ground') {
-    const mat = new THREE.MeshLambertMaterial({ color });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y, z);
-    if (type === 'ground') mesh.receiveShadow = true;
-    else mesh.castShadow = true;
-    engine.scene.add(mesh);
-    engine.blocks.set(engine.getBlockKey(x, y, z), { mesh, type, hp: 9999, maxHp: 9999 });
-  }
-
-  // 地面：80x80 草地+沙地
-  for (let x = -38; x <= 38; x++) {
-    for (let z = -38; z <= 38; z++) {
-      const dist = Math.sqrt(x * x + z * z);
-      if (dist > 38) continue; // 圆形边界
-      const color = dist < 15 ? sandColor : (dist < 25 ? grassColor : (Math.random() > 0.5 ? grassColor : sandColor));
-      pb(x, 0, z, color);
-    }
-  }
-
-  // 护城河（环形水）
-  for (let x = -38; x <= 38; x++) {
-    for (let z = -38; z <= 38; z++) {
-      const dist = Math.sqrt(x * x + z * z);
-      if (dist >= 14 && dist <= 16) {
-        pb(x, -1, z, waterColor);
-      }
-    }
-  }
-
-  // 中央神殿 (12x12)
-  for (let x = -10; x <= 10; x++) {
-    for (let z = -10; z <= 10; z++) {
-      pb(x, 1, z, stoneColor); // 神殿地面抬高
-    }
-  }
-
-  // 神殿柱子（12根圆柱，4格高）
-  const templePillars = [
-    { x: -9, z: -9 }, { x: -3, z: -9 }, { x: 3, z: -9 }, { x: 9, z: -9 },
-    { x: -9, z: 9 },  { x: -3, z: 9 },  { x: 3, z: 9 },  { x: 9, z: 9 },
-    { x: -9, z: 0 },  { x: 9, z: 0 }
-  ];
-  for (const pp of templePillars) {
-    for (let y = 2; y <= 6; y++) {
-      pb(pp.x, y, pp.z, pillarColor);
-    }
-  }
-
-  // 神殿内部圣坛
-  for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) pb(x, 2, z, goldColor);
-
-  // 外围废墟墙（断壁残垣）
-  const ruins = [
-    { x: -25, z: -25, w: 8, h: 4 }, { x: 20, z: -20, w: 6, h: 3 },
-    { x: -22, z: 20, w: 10, h: 5 }, { x: 25, z: 25, w: 7, h: 3 },
-    { x: -30, z: 0, w: 5, h: 3 }, { x: 30, z: 0, w: 5, h: 4 }
-  ];
-  for (const r of ruins) {
-    for (let y = 1; y <= r.h; y++) {
-      for (let d = 0; d < r.w; d++) {
-        if (Math.random() > 0.7) continue; // 随机缺口
-        pb(r.x + d, y, r.z, stoneDark);
-      }
-    }
-  }
-
-  // 外围边界墙
-  for (let y = 0; y <= 6; y++) {
-    for (let a = 0; a < 360; a += 1) {
-      const rad = a * Math.PI / 180;
-      const px = Math.round(Math.cos(rad) * 38);
-      const pz = Math.round(Math.sin(rad) * 38);
-      if (y === 0 || Math.random() > 0.3) { // 顶部稀疏
-        pb(px, y, pz, stoneDark);
-      }
-    }
-  }
-
-  // 碎片标记
-  const diamondGeo = new THREE.OctahedronGeometry(0.7, 0);
-  for (const fp of fragmentPoints) {
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 0.9, transparent: true, opacity: 0.85 });
-    const marker = new THREE.Mesh(diamondGeo, mat);
-    marker.position.set(fp.x, fp.y + 2, fp.z);
-    engine.scene.add(marker);
-    const light = new THREE.PointLight(0xffaa00, 1.5, 12);
-    light.position.set(fp.x, fp.y + 3, fp.z);
-    engine.scene.add(light);
-  }
-
-  // 灯光：月光效果
-  engine.scene.add(new THREE.AmbientLight(0x1a1a30, 0.6));
-  engine.scene.add(new THREE.DirectionalLight(0x8888ff, 0.5).translateY(50));
-  const templeLights = [
-    { x: 0, z: 0, c: 0xffcc44 }, { x: -25, z: -25, c: 0xff6644 },
-    { x: 25, z: -25, c: 0x44aaff }, { x: -25, z: 25, c: 0x44ff88 },
-    { x: 25, z: 25, c: 0xff88cc }
-  ];
-  for (const l of templeLights) {
-    const pl = new THREE.PointLight(l.c, 1.5, 25);
-    pl.position.set(l.x, 6, l.z);
-    engine.scene.add(pl);
-  }
-
-  engine.triggerDreamTide = function(gensRef) {};
-  return [];
-}
-
-// ============================================
 // Player Entity (带背包系统)
 // ============================================
 class PlayerEntity {
@@ -2544,8 +2101,6 @@ class PlayerEntity {
     this.bowCharge = 0;
     this.speedPotionTimer = 0;
     this.burstPotionTimer = 0;
-    this.skFragments = 0;
-    this.skRole = null;
     this.bowCdTimer = 0;
     this.jetpackTimer = 0;       // 高能人悬浮剩余时间
     this.jetpackMaxTime = 22;    // 高能人悬浮最大时间
@@ -3684,11 +3239,6 @@ class PlayerEntity {
         life: type === 'smoke' ? 2.1 : type === 'boomerang' ? 2.8 : 3
       });
       window.game?.showMessage?.(`${weaponInfo.name}已使用`, '#8be9fd');
-    } else if (weaponInfo?.detectiveBow) {
-      // 侦探弓：无限箭矢，8秒冷却
-      if ((this.bowCdTimer || 0) > 0) return;
-      this.bowCdTimer = weaponInfo.bowCd || 8;
-      this.fireArrow(0);
     } else if (isRanged && this.arrowCount > 0) {
       if (this.isAI) {
         this.fireArrow(0);
@@ -3701,11 +3251,9 @@ class PlayerEntity {
       this.engine.spawnParticles(hitPos, 0xffffff, 3);
 
       let hitAny = false;
-      const isSK = window.game?.isSecretKiller;
       for (const ent of this.engine.entities) {
         if (ent === this || ent.isDead) continue;
-        if (!isSK && ent.team === this.team) continue; // 密室杀手不检查队伍
-        if (isSK && ent.skRole === this.skRole) continue; // 同阵营不伤害
+        if (ent.team === this.team) continue;
         const dist = ent.pos.distanceTo(this.pos);
         if (dist < 2) {
           let finalDmg = dmg;
@@ -4243,11 +3791,6 @@ class PlayerEntity {
         window.game?.showMessage?.(`${this.name} 的复活金牌抵挡了致命伤害！`, '#ffd700');
         return;
       }
-      // 密室杀手：侦探杀了好人（且不是同角色误杀）则自己也会死
-      if (window.game?.isSecretKiller && attacker && attacker.skRole === 'detective' && this.skRole !== 'killer' && this.skRole !== attacker.skRole) {
-        window.game?.showMessage?.(`侦探误杀了好人，自己也倒下了！`, '#ff4444');
-        attacker.die(null);
-      }
       this.die(attacker);
     }
   }
@@ -4280,22 +3823,6 @@ class PlayerEntity {
     this.respawnTimer = Math.min(GAME_RULES.respawnMaxTime, GAME_RULES.respawnBaseTime + (this.deathCount - 1) * GAME_RULES.respawnIncrement);
     this.pendingElimination = !this.teamInfo?.bedAlive;
     this.engine.spawnParticles(this.pos, this.teamInfo.color, 15);
-
-    // 密室杀手：侦探死亡时掉落弓，杀手死亡不掉落刀
-    if (window.game?.isSecretKiller && this.skRole === 'detective') {
-      this.engine.spawnDropItem(this.pos.clone(), 'detective_bow', 1);
-      // 从掉落列表中移除弓（防止重复）
-      this.equipped.weapon = null;
-      for (let i = 0; i < this.hotbar.length; i++) {
-        if (this.hotbar[i]?.key === 'detective_bow') this.hotbar[i] = null;
-      }
-      window.game?.showMessage?.('侦探阵亡，弓掉落在地！', '#ff4444');
-    }
-    if (window.game?.isSecretKiller) {
-      this.pendingElimination = true; // 密室杀手没有重生
-      this.respawnTimer = 999999;
-      window.game?.checkSecretKillerWin?.();
-    }
 
     if (isVoidDeath) {
       // 虚空死亡：清空所有装备和物品

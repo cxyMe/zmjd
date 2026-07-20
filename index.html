@@ -3,1806 +3,287 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>3D 起床战争 - Bed Wars 3D</title>
-  <link rel="stylesheet" href="css/style.css?v=8">
-  <script defer src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>筑梦激斗</title>
+  <link rel="stylesheet" href="css/style.css?v=10">
+  <script>(function(){try{localStorage.setItem('_t','1');localStorage.removeItem('_t');}catch(e){const m={};window.localStorage={getItem(k){return m[k]??null;},setItem(k,v){m[k]=String(v);},removeItem(k){delete m[k];},clear(){for(const k in m)delete m[k];},get length(){return Object.keys(m).length;},key(i){return Object.keys(m)[i]??null;}};}})();</script>
 </head>
 <body>
-
-<!-- ========== Orientation Gate ========== -->
-<div id="orientationGate">
-  <div class="rotate-card">
-    <div class="rotate-icon">↻</div>
-    <h2>请横屏进入筑梦激斗</h2>
-    <p>为了保证操作视野、快捷栏和战斗按钮不遮挡，请将手机旋转为横屏模式。</p>
-  </div>
-</div>
-<script>
-function updateOrientationGate() {
-  const gate = document.getElementById('orientationGate');
-  if (!gate) return;
-  const vv = window.visualViewport;
-  const width = vv?.width || window.innerWidth || document.documentElement.clientWidth || 0;
-  const height = vv?.height || window.innerHeight || document.documentElement.clientHeight || 0;
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || navigator.maxTouchPoints > 0;
-  const screenAngle = window.screen?.orientation?.angle;
-  const legacyAngle = typeof window.orientation === 'number' ? window.orientation : null;
-  const angle = typeof screenAngle === 'number' ? screenAngle : legacyAngle;
-  const angleLandscape = Math.abs(angle || 0) === 90;
-  const viewportLandscape = width >= height;
-  const smallTouchDevice = coarsePointer && Math.min(width, height) <= 900;
-  const shouldShow = smallTouchDevice && !viewportLandscape && !angleLandscape;
-  gate.classList.toggle('show', shouldShow);
-}
-window.addEventListener('resize', updateOrientationGate);
-window.addEventListener('orientationchange', () => setTimeout(updateOrientationGate, 120));
-window.visualViewport?.addEventListener?.('resize', updateOrientationGate);
-document.addEventListener('DOMContentLoaded', updateOrientationGate);
-updateOrientationGate();
-</script>
-
-<!-- ========== Loading Screen ========== -->
-<div id="loadingScreen">
-  <h1>3D 起床战争</h1>
-  <div class="progress"><div class="progress-bar" id="loadBar"></div></div>
-  <div class="tip" id="loadTip">正在加载 3D 引擎...</div>
-</div>
-
-<!-- ========== Main Menu ========== -->
-<div id="mainMenu" style="display:none;">
-  <div class="menu-bg-orb orb-a"></div>
-  <div class="menu-bg-orb orb-b"></div>
-  <div class="lobby-shell redesigned">
-    <button class="lobby-profile-card" id="profileCardBtn">
-      <div class="profile-avatar">梦</div>
-      <div class="profile-meta">
-        <b id="profileNameText">游客玩家</b>
-        <span id="profileRankText">沉睡梦游者 · Lv.1</span>
-      </div>
-    </button>
-
-    <div class="lobby-top-actions">
-      <button class="lobby-icon-btn" id="lobbySettingsBtn">设置</button>
-      <button class="pass-crystal-btn compact" id="seasonPassBtn" style="display:none"><span>通行证</span><small id="passCrystalText">Lv.1 · 0%</small></button>
-      <div class="lobby-mini-row">
-        <button class="menu-feature-btn" id="menuSeasonBtn" style="display:none">赛季</button>
-        <button class="menu-feature-btn" id="menuTasksBtn" style="display:none">任务</button>
-        <button class="menu-feature-btn" id="menuSkinShopBtn">外观商店</button>
-      </div>
-    </div>
-
-    <section class="lobby-center">
-      <div class="brand-block lobby-title">
-        <h1>筑梦激斗</h1>
-      </div>
-      <div class="lobby-platform"></div>
-      <div class="lobby-character">
-        <div class="hero-glow"></div>
-        <div class="hero-head"></div>
-        <div class="hero-body"></div>
-        <div class="hero-arm left"></div>
-        <div class="hero-arm right"></div>
-        <div class="hero-leg left"></div>
-        <div class="hero-leg right"></div>
-        <div class="hero-weapon"></div>
-      </div>
-    </section>
-
-    <aside class="lobby-start-dock">
-      <button class="small-btn secondary wide" id="openPlayOptionsBtn">选择模式 / 房间</button>
-      <button class="menu-btn primary" id="workshopBtn">创作工坊</button>
-      <div class="status-text" id="roomStatus">未进入房间；点击选择模式创建、加入或本地试玩。</div>
-      <div class="room-members" id="roomMembers"></div>
-    </aside>
-  </div>
-</div>
-
-<div id="profilePanel" class="lobby-float-panel">
-  <div class="lobby-float-card">
-    <button class="float-close" data-close-panel="profilePanel">&times;</button>
-    <h2>玩家资料</h2>
-    <div class="profile-detail-row"><span>昵称</span><b id="profileDetailName">游客玩家</b></div>
-    <div class="profile-detail-row"><span>段位</span><b id="profileDetailRank">沉睡梦游者</b></div>
-    <div class="profile-detail-row"><span>通行证</span><b id="profileDetailPass">Lv.1</b></div>
-    <div class="auth-panel embedded">
-      <h3>账号登录</h3>
-      <div id="authGuestBox">
-        <div class="form-row">
-          <input id="loginUsername" placeholder="用户名（2-16位）">
-          <input id="loginPassword" type="password" placeholder="密码（至少6位）">
-        </div>
-        <div class="form-row">
-          <button class="small-btn" id="loginBtn">登录</button>
-          <button class="small-btn secondary" id="registerBtn">注册</button>
-        </div>
-      </div>
-      <div id="authUserBox" style="display:none;">
-        <div class="status-text">已登录：<span id="authUserName">--</span></div>
-        <div class="form-row" style="margin-top:8px;">
-          <button class="small-btn secondary" id="logoutBtn">退出登录</button>
-        </div>
-      </div>
-      <div class="status-text" id="authStatus">登录后可创建或加入 Supabase 联机房间。</div>
-    </div>
-  </div>
-</div>
-
-<div id="playOptionsPanel" class="lobby-float-panel">
-  <div class="lobby-float-card play-card">
-    <button class="float-close" data-close-panel="playOptionsPanel">&times;</button>
-    <h2>选择开战方式</h2>
-    <button class="play-option primary" id="createRoomBtn">创建房间</button>
-    <div class="join-row">
-      <input id="joinRoomCode" maxlength="6" placeholder="输入房间码">
-      <button class="play-option" id="joinRoomBtn">加入房间</button>
-    </div>
-    <button class="play-option" id="localModeBtn">本地试玩（需登录）</button>
-    <button class="play-option secondary" id="reconnectBtn">断线重连</button>
-    <div class="role-select menu-role-hint">
-      <h3>角色选择规则</h3>
-      <div class="role-desc" id="roleDesc">点击开始后会进入 10 秒角色选择阶段；超时未选将默认使用「狐狸」。</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== HUD ========== -->
-<div id="hud">
-  <!-- Resources -->
-  <div id="resourceBar">
-    <div class="res-item res-copper"><div class="res-icon"></div><span id="resCopper">0</span></div>
-    <div class="res-item res-silver"><div class="res-icon"></div><span id="resSilver">0</span></div>
-    <div class="res-item res-gold"><div class="res-icon"></div><span id="resGold">0</span></div>
-    <div class="res-item res-jade"><div class="res-icon"></div><span id="resJade">0</span></div>
-  </div>
-
-  <!-- Timer -->
-  <div id="gameTimer">0:00</div>
-
-  <!-- Team Info -->
-  <div id="teamInfo">
-    <div class="team-name" id="teamName">--</div>
-    <div class="bed-status" id="bedStatus">--</div>
-    <div class="players">队友存活: --</div>
-  </div>
-
-  <div id="teamDetailPanel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;background:rgba(15,15,35,0.95);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px;min-width:300px;max-width:400px;color:#e2e8f0;flex-direction:column;gap:12px;">
-  </div>
-
-  <!-- Minimap -->
-  <div id="minimap"><canvas id="minimapCanvas" width="160" height="160"></canvas></div>
-
-  <!-- Big Map -->
-  <div id="bigMapPanel" style="display:none;">
-    <div class="big-map-container">
-      <div class="big-map-header">
-        <h2>战场地图</h2>
-        <button id="bigMapCloseBtn">&times;</button>
-      </div>
-      <canvas id="bigMapCanvas" width="600" height="600"></canvas>
-    </div>
-  </div>
-
-  <!-- Player Status -->
-  <div id="playerStatus">
-    <div class="status-bar">
-      <span class="status-label">生命</span>
-      <div class="status-track"><div class="status-fill hp-fill" id="hpFill" style="width:100%"></div></div>
-      <span id="hpText" style="color:#fff;font-size:12px;">100/100</span>
-    </div>
-    <div class="status-bar">
-      <span class="status-label">护甲</span>
-      <div class="status-track"><div class="status-fill armor-fill" id="armorFill" style="width:0%"></div></div>
-      <span id="armorText" style="color:#fff;font-size:12px;">0</span>
-    </div>
-    <div class="status-bar growth-status">
-      <span class="status-label">等级</span>
-      <div class="status-track"><div class="status-fill xp-fill" id="xpFill" style="width:0%"></div></div>
-      <span id="xpText" style="color:#fff;font-size:12px;">Lv.1</span>
-    </div>
-  </div>
-
-  <!-- Hotbar -->
-  <div id="hotbar">
-    <div class="hotbar-slot active" id="slot0"><span class="slot-key">1</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot1"><span class="slot-key">2</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot2"><span class="slot-key">3</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot3"><span class="slot-key">4</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot4"><span class="slot-key">5</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot5"><span class="slot-key">6</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot6"><span class="slot-key">7</span><span class="slot-name"></span><span class="slot-count"></span></div>
-    <div class="hotbar-slot" id="slot7"><span class="slot-key">8</span><span class="slot-name"></span><span class="slot-count"></span></div>
-  </div>
-
-  <!-- Slot Context Menu -->
-  <div id="slotContextMenu" style="display:none;">
-    <button id="ctxDrop">丢弃</button>
-    <button id="ctxSplit">拆分</button>
-    <button id="ctxCancel">取消</button>
-  </div>
-
-  <!-- Shop Button -->
-  <div id="shopBtn">商店</div>
-  <div id="layoutBtn">布局</div>
-
-  <button id="rescueBtn" style="display:none;">救援</button>
-
-  <!-- Skill Button -->
-  <div id="skillBtn" style="display:none;"><span>技能</span><span class="skill-cd">就绪</span></div>
-
-  <!-- Teleport Charge Indicator -->
-  <div id="teleportCharge" style="display:none;"></div>
-
-  <!-- Bow Charge Indicator -->
-  <div id="bowCharge" style="display:none;"></div>
-
-  <!-- Detector HUD -->
-  <div id="detectorHud" style="display:none;"></div>
-
-  <!-- Status Effects Bar -->
-  <div id="statusEffects" style="display:none;"></div>
-  <div id="camoOverlay">隐身 <span id="camoTime">0.0</span>s</div>
-  <div id="jetpackOverlay" style="display:none;">超能喷气 <span id="jetpackTime">0.0</span>s</div>
-  <div id="frostOverlay" style="display:none;">被冰冻 <span id="frostTime">0.0</span>s</div>
-  <div id="timedAction" style="display:none;"></div>
-
-  <div id="buildPanel" style="display:none;">
-    <div class="bp-title">建筑</div>
-    <div id="buildHpText">0/0</div>
-    <div class="bp-actions">
-      <button id="buildUpgradeBtn">升级</button>
-      <button id="buildDestroyBtn">拆毁</button>
-      <button id="buildMoveBtn">重新移动</button>
-      <button id="buildCancelBtn">取消</button>
-    </div>
-  </div>
-
-  <!-- Crosshair -->
-  <div id="crosshair" style="display:none;"></div>
-
-  <!-- Messages -->
-  <div id="gameMessages"></div>
-  <div id="killFeed"></div>
-  <div class="net-badge" id="netBadge" style="display:none;">联机状态：<span class="online">本地</span></div>
-
-  <!-- Campus Treasure Hunt HUD -->
-  <div id="campusHud" style="display:none;">
-    <div id="campusTimer" style="position:fixed;top:12px;left:50%;transform:translateX(-50%);color:#00ffaa;font-size:20px;font-weight:bold;text-shadow:0 0 8px rgba(0,255,170,0.5);z-index:200;"></div>
-    <div id="campusStatus" style="position:fixed;top:40px;left:12px;color:#e2e8f0;font-size:12px;z-index:200;"></div>
-    <div id="campusWeight" style="position:fixed;top:12px;right:12px;color:#e2e8f0;font-size:12px;z-index:200;"></div>
-    <div id="campusEvent" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff4444;font-size:48px;font-weight:bold;text-shadow:0 0 20px rgba(255,0,0,0.8);z-index:250;display:none;pointer-events:none;"></div>
-    <div id="campusBackpack" style="display:none;position:fixed;right:10px;top:50%;transform:translateY(-50%);z-index:210;background:rgba(15,15,35,0.9);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;width:280px;max-height:70vh;overflow-y:auto;color:#e2e8f0;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-        <span style="font-weight:bold;">背包</span>
-        <span id="campusBpCount" style="color:#94a3b8;font-size:11px;"></span>
-      </div>
-      <div id="campusBpGrid" style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;"></div>
-    </div>
-  </div>
-
-  <!-- Mobile Controls -->
-  <div id="mobileControls">
-    <div id="joystickZone">
-      <div id="joystickBase"></div>
-      <div id="joystickKnob"></div>
-    </div>
-    <div id="jumpBtnMobile">跳跃</div>
-    <div id="actionBtnMobile">攻击</div>
-    <div id="zoomSlider" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); width:6px; height:100px; background:rgba(255,255,255,0.15); border-radius:3px;">
-      <div id="zoomThumb" style="position:absolute; width:20px; height:20px; background:rgba(255,255,255,0.5); border-radius:50%; left:50%; top:50%; transform:translate(-50%,-50%);"></div>
-    </div>
-  </div>
-
-  <div id="deathOverlay">
-    <div class="death-card">
-      <h2>等待复活</h2>
-      <p id="respawnCountdown">还剩 3 秒复活</p>
-      <span id="respawnHint">床仍存在，正在寻找安全复活点</span>
-    </div>
-  </div>
-</div>
-
-<!-- ========== Season Pass Manual ========== -->
-<div id="seasonPassPanel" style="display:none">
-  <div class="pass-container">
-    <div class="pass-header">
-      <div>
-        <h2>赛季手册 · 梦域远征</h2>
-        <p>3个月赛季｜100级双轨奖励｜只产出外观、消耗品和赛季券，不提供数值属性</p>
-      </div>
-      <button class="pass-close" id="passCloseBtn">&times;</button>
-    </div>
-    <div class="pass-topbar">
-      <div class="pass-level-card">
-        <b id="passLevelText">Lv.1</b>
-        <span id="passXpText">0 / 1000 EXP</span>
-        <div class="pass-progress"><div id="passXpFill"></div></div>
-      </div>
-      <div class="pass-currency-card">赛季券 <b id="seasonCouponText">0</b></div>
-      <div class="pass-tier-card" id="passTierText">免费版</div>
-      <button class="pass-primary" id="claimAllPassBtn">一键领取</button>
-      <button class="pass-gold" id="sponsorDevBtn">赞助开发者</button>
-      <button class="pass-gold" id="upgradePassBtn">打赏领取高级版</button>
-    </div>
-    <div class="pass-tabs">
-      <button class="pass-tab active" data-pass-tab="rewards">奖励轨道</button>
-      <button class="pass-tab" data-pass-tab="tasks">任务体系</button>
-    </div>
-    <div id="seasonPassBody" class="pass-body"></div>
-  </div>
-</div>
-
-<div id="passPayPanel" style="display:none">
-  <div class="pass-pay-card">
-    <button class="pass-close mini" id="passPayCloseBtn">&times;</button>
-    <h2>赞助开发者</h2>
-    <div class="pay-options">
-      <button data-buy-pass="advanced">打赏 24元 · 解锁进阶版</button>
-      <button data-buy-pass="premium">打赏 48元 · 解锁典藏版并直升25级</button>
-    </div>
-    <div class="pay-qrcode">
-      <img id="payQrImage" alt="开发者收款码">
-      <div id="payQrFallback">后台暂未上传收款码，请联系开发者。</div>
-    </div>
-    <p>本项目为个人独立开发，您的打赏将用于服务器和维护开支。扫码后点击“我已打赏”提交记录。</p>
-    <input id="payContactInput" placeholder="填写手机号/昵称，便于开发者核对">
-    <button class="pass-primary" id="paidConfirmBtn">我已打赏，提交记录</button>
-  </div>
-</div>
-
-<!-- ========== Main Menu Season / Tasks ========== -->
-<div id="menuGrowthPanel" style="display:none">
-  <div class="growth-container">
-    <div class="growth-header">
-      <h2 id="menuGrowthTitle">赛季任务</h2>
-      <button class="growth-close" onclick="window.menuGrowthUI?.close()">&times;</button>
-    </div>
-    <div class="growth-tabs">
-      <button class="growth-tab active" data-menu-growth-tab="season">赛季</button>
-      <button class="growth-tab" data-menu-growth-tab="tasks">任务</button>
-      <button class="growth-tab" data-menu-growth-tab="rewards">奖励</button>
-
-    </div>
-    <div id="menuGrowthBody" class="growth-body"></div>
-  </div>
-</div>
-
-<!-- ========== Skin Shop Panel ========== -->
-<div id="skinShopPanel">
-  <div class="pass-container">
-    <div class="pass-header">
-      <div>
-        <h2>外观商店</h2>
-        <p>使用赛季券购买个性化外观，不提供数值属性</p>
-      </div>
-      <button class="pass-close" id="skinShopCloseBtn">&times;</button>
-    </div>
-    <div class="pass-topbar">
-      <div class="pass-currency-card">赛季券 <b id="skinShopCouponText">0</b></div>
-    </div>
-    <div id="skinShopBody" class="pass-body"></div>
-  </div>
-</div>
-
-<!-- ========== Room Panel ========== -->
-<div id="roomPanel">
-  <div class="room-panel-container">
-    <div class="room-panel-header">
-      <div>
-        <h2 id="roomPanelTitle">房间</h2>
-        <p>房间码：<span id="roomPanelCode" class="room-code">----</span></p>
-      </div>
-      <button class="pass-close" id="roomPanelCloseBtn">&times;</button>
-    </div>
-    <div class="room-panel-body">
-      <div class="room-panel-section">
-        <h3>玩家列表</h3>
-        <div id="roomPanelMembers" class="room-panel-members"></div>
-      </div>
-      <div class="room-panel-section">
-        <h3>地图选择</h3>
-        <div class="map-select" id="roomMapSelect">
-          <div class="map-card selected" data-map="classic">
-            <div class="map-thumb default"></div>
-            <b>经典方块</b>
-            <span>四队基地环绕中心岛</span>
-          </div>
-          <div class="map-card" data-map="twilight_forest">
-            <div class="map-thumb forest"></div>
-            <b>暮色森林</b>
-            <span>树冠基地·迷雾封锁</span>
-          </div>
-        </div>
-      </div>
-      <div class="room-panel-section">
-        <h3>模式选择</h3>
-        <div class="mode-select" id="roomModeSelect">
-          <div class="mode-card selected" data-mode="classic">经典模式</div>
-          <div class="play-option campus-option" data-mode="campus" onclick="selectMode('campus')">
-            <div class="mode-icon">🏛️</div>
-            <div class="mode-info">
-              <h3>校园寻宝</h3>
-              <p>潜入校园，搜集秘宝，安全撤离</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="room-panel-section" id="teamSection">
-        <h3>队伍选择</h3>
-        <button class="small-btn ai-fill-btn" id="addAiBtn">添加AI替补（0/4）</button>
-        <div class="team-select">
-          <div class="team-btn red" data-team="RED">红队</div>
-          <div class="team-btn blue" data-team="BLUE">蓝队</div>
-          <div class="team-btn green" data-team="GREEN">绿队</div>
-          <div class="team-btn yellow" data-team="YELLOW">黄队</div>
-        </div>
-      </div>
-      <div class="room-actions-row" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
-        <button class="start-btn hero-start" id="roomStartBtn" style="display:none;">开始游戏</button>
-        <button class="start-btn" id="dissolveRoomBtn" style="display:none;background:#c44;">解散房间</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== HUD Layout Editor ========== -->
-<div id="layoutPanel">
-  <div class="layout-container">
-    <div class="layout-header">
-      <h2>自定义界面布局</h2>
-      <button id="layoutCloseBtn">&times;</button>
-    </div>
-    <div class="layout-body">
-      <p>开启编辑后，可拖动HUD组件位置。支持保存3套布局，也可一键复原默认布局。</p>
-      <div class="layout-actions">
-        <button id="layoutEditBtn">开启编辑</button>
-        <button data-save-layout="1">保存布局1</button>
-        <button data-save-layout="2">保存布局2</button>
-        <button data-save-layout="3">保存布局3</button>
-        <button data-load-layout="1">读取1</button>
-        <button data-load-layout="2">读取2</button>
-        <button data-load-layout="3">读取3</button>
-        <button class="danger" id="layoutResetBtn">一键复原</button>
-      </div>
-      <div id="layoutStatus" class="layout-status">当前使用默认布局。</div>
-      <div class="sensitivity-row">
-        <label>触控灵敏度：<span id="sensVal">1.8</span></label>
-        <input type="range" id="sensSlider" min="0.5" max="4" step="0.1" value="1.8">
-      </div>
-      <div class="sensitivity-row">
-        <label>摇杆大小：<span id="joystickSizeVal">100</span>%</label>
-        <input type="range" id="joystickSizeSlider" min="50" max="150" step="5" value="100">
-      </div>
-      <div class="sensitivity-row">
-        <label>按钮大小：<span id="btnSizeVal">100</span>%</label>
-        <input type="range" id="btnSizeSlider" min="50" max="150" step="5" value="100">
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== Start Role Selection ========== -->
-<div id="startRolePanel">
-  <div class="start-role-shell">
-    <div class="start-role-head">
-      <div>
-        <div class="panel-kicker">开局角色部署</div>
-        <h2>选择你的本局角色</h2>
-        <p>你有 <span id="roleCountdown">10</span> 秒完成选择，角色只影响本局战斗风格。</p>
-      </div>
-      <div class="countdown-ring"><span id="roleCountdownBig">10</span></div>
-    </div>
-    <div id="startRoleCards" class="start-role-cards"></div>
-    <div class="start-role-foot">提示：角色选择期间你会被短暂保护，选择后立即解除。</div>
-  </div>
-</div>
-
-<!-- ========== Growth Center ========== -->
-<div id="growthPanel">
-  <div class="growth-container">
-    <div class="growth-header">
-      <h2>成长中心</h2>
-      <button class="growth-close" onclick="window.game?.toggleGrowthPanel()">&times;</button>
-    </div>
-    <div class="growth-tabs">
-      <button class="growth-tab active" data-growth-tab="mastery">勋章墙</button>
-      <button class="growth-tab" data-growth-tab="season" style="display:none">赛季征程</button>
-    </div>
-    <div id="growthBody" class="growth-body"></div>
-  </div>
-</div>
-
-<!-- ========== Dream Mark Wheel ========== -->
-<div id="markWheel">
-  <div class="social-container small">
-    <div class="social-header">
-      <h2>梦之印记</h2>
-      <button onclick="document.getElementById('markWheel').style.display='none'">&times;</button>
-    </div>
-    <div id="markOptions" class="mark-options"></div>
-  </div>
-</div>
-
-<!-- ========== Team Chest ========== -->
-<div id="teamChestPanel">
-  <div class="social-container small">
-    <div class="social-header">
-      <h2>团队保险箱</h2>
-      <button onclick="document.getElementById('teamChestPanel').style.display='none'">&times;</button>
-    </div>
-    <div id="teamChestBody" class="social-body"></div>
-  </div>
-</div>
-
-<!-- ========== Social Panel ========== -->
-<div id="socialPanel">
-  <div class="social-container">
-    <div class="social-header">
-      <h2>社交与安全</h2>
-      <button onclick="document.getElementById('socialPanel').style.display='none'">&times;</button>
-    </div>
-    <div id="socialBody" class="social-body"></div>
-  </div>
-</div>
-
-<!-- ========== Post Match Gallery ========== -->
-<div id="postMatchGallery">
-  <div class="social-container">
-    <div class="social-header">
-      <h2>赛后荣耀海报</h2>
-      <button onclick="document.getElementById('postMatchGallery').style.display='none'">&times;</button>
-    </div>
-    <div id="postMatchBody" class="poster-grid"></div>
-  </div>
-</div>
-
-<!-- ========== Shop Panel ========== -->
-<div id="shopPanel">
-  <div class="shop-container">
-    <div class="shop-header">
-      <h2>商店</h2>
-      <button class="shop-close">&times;</button>
-    </div>
-    <div class="shop-tabs">
-      <button class="shop-tab active" data-tab="blocks">建筑</button>
-      <button class="shop-tab" data-tab="weapons">武器</button>
-      <button class="shop-tab" data-tab="armor">防具</button>
-      <button class="shop-tab" data-tab="specials">特殊</button>
-    </div>
-    <div class="shop-body" id="shopBody"></div>
-  </div>
-</div>
-
-<!-- ========== Backpack Panel ========== -->
-<div id="backpackPanel">
-  <div class="bp-container">
-    <div class="bp-header">
-      <h2>背包</h2>
-      <button class="bp-close" onclick="window.game?.toggleBackpack()">&times;</button>
-    </div>
-    <div class="bp-body" id="backpackGrid"></div>
-    <div class="bp-footer">
-      <div style="color:#aaa;font-size:12px;">操作提示：G键丢弃当前物品 | 滚轮切换快捷栏 | Tab打开背包</div>
-    </div>
-  </div>
-</div>
-
-<!-- ========== Game Over ========== -->
-<div id="gameOverScreen">
-  <h1>游戏结束</h1>
-  <div class="winner">--</div>
-  <div class="mvp-section" id="mvpSection" style="display:none;">
-    <h3>本场MVP</h3>
-    <div class="mvp-name" id="mvpName">--</div>
-    <div class="mvp-stats" id="mvpStats">--</div>
-  </div>
-  <div class="ally-stats-section" id="allyStatsSection" style="display:none;">
-    <h3>友方对战数据</h3>
-    <div class="ally-stats-list" id="allyStatsList"></div>
-  </div>
-  <div class="rank-change" id="rankChange" style="display:none;"></div>
-  <div class="stats"></div>
-  <button class="restart-btn" onclick="location.reload()">再来一局</button>
-  <button class="exit-btn" id="earlyExitBtn" style="display:none;" onclick="location.reload()">提前退出</button>
-</div>
-
-<!-- ========== 3D Canvas ========== -->
 <div id="gameCanvas"></div>
-
-<!-- 安全的 localStorage 包装（防止 Tracking Prevention 阻止访问导致崩溃） -->
-<script>
-(function() {
-  let _blocked = false;
-  const _origGet = localStorage.getItem.bind(localStorage);
-  const _origSet = localStorage.setItem.bind(localStorage);
-  const _origRemove = localStorage.removeItem.bind(localStorage);
-  // 测试是否可用
-  try { localStorage.setItem('__test', '1'); localStorage.removeItem('__test'); } catch(e) { _blocked = true; }
-  if (_blocked) {
-    // 创建内存后备
-    const _mem = {};
-    localStorage.getItem = function(k) { try { return _origGet(k); } catch(e) { return _mem[k] ?? null; } };
-    localStorage.setItem = function(k, v) { try { _origSet(k, v); } catch(e) { _mem[k] = String(v); } };
-    localStorage.removeItem = function(k) { try { _origRemove(k); } catch(e) { delete _mem[k]; } };
-    console.warn('[Storage] localStorage 被浏览器阻止，已降级到内存存储。关闭页面后数据不保留。');
-  }
-})();
-</script>
-<script defer src="js/config.js?v=8"></script>
-<script defer src="js/network.js?v=8"></script>
-<script defer src="js/growth.js?v=8"></script>
-<script defer src="js/social.js?v=8"></script>
-<script defer src="js/chibi-models.js?v=8"></script>
-<script defer src="js/campus-mode.js?v=8"></script>
-<script defer src="js/campus-map.js?v=8"></script>
-<script defer src="js/engine.js?v=8"></script>
-<script defer src="js/ai-controller.js?v=8"></script>
-<script defer src="js/game.js?v=8"></script>
-<script defer src="js/season-pass.js?v=8"></script>
-<script defer src="js/menu-features.js?v=8"></script>
-<script>
-// 全局模式选择函数（供HTML onclick调用）
-function selectMode(mode) {
-  window._selectedMode = mode;
-  document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
-  const match = document.querySelector(`.mode-card[data-mode="${mode}"]`);
-  if (match) match.classList.add('selected');
-  document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
-  const campusOpt = document.querySelector('.campus-option[data-mode="campus"]');
-  if (campusOpt && mode === 'campus') campusOpt.classList.add('selected');
-
-  // 校园寻宝模式：隐藏队伍选择和AI替补，直接显示开始游戏按钮
-  const teamSection = document.getElementById('teamSection');
-  const aiBtn = document.getElementById('addAiBtn');
-  const startBtn = document.getElementById('roomStartBtn');
-  if (mode === 'campus') {
-    if (teamSection) teamSection.style.display = 'none';
-    if (aiBtn) aiBtn.style.display = 'none';
-    if (startBtn) startBtn.style.display = 'inline-block';
-  } else {
-    if (teamSection) teamSection.style.display = '';
-    if (aiBtn) aiBtn.style.display = '';
-    if (startBtn) startBtn.style.display = 'none';
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-// ============================================
-// Menu Logic
-// ============================================
-let selectedTeam = 'RED';
-const config = window.BEDWARS_CONFIG;
-const auth = new AuthManager(config);
-window.lobbyAuth = auth;
-let netMgr = null;
-let localOnly = false;
-window.lobbyAiSlots = 0;
-
-const roleDescriptions = {
-  FOX: '狐狸 - 伪装隐身12秒 | 残血增伤',
-  PORK_DOCTOR: '猪排博士 - 额外生命膨胀 | 周期回血',
-  HURRICANE: '飓风 - 位移6格 | 远程透视标记',
-  DRIFTWOOD: '浮木 - 操控导弹 | 命中回收护盾',
-  STEEL_BONE: '钢骨 - 玻璃桥 | 建筑加固',
-  WAIWAI: '歪歪 - 1血miss体质 | 骨头阵持续伤害'
-};
-
-// Team selection
-document.querySelectorAll('.team-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    selectedTeam = btn.dataset.team;
-    if (!localOnly && netMgr?.inRoom) {
-      try {
-        await netMgr.setMyTeam(selectedTeam);
-        setRoomStatus(`已选择 ${TEAMS[selectedTeam].name}，房间成员列表已同步。`);
-      } catch (err) {
-        setRoomStatus(err.message || '同步队伍失败', true);
-      }
-    }
-    updateStartBtn();
-  });
-});
-
-// Map selection
-document.querySelectorAll('.map-card').forEach(card => {
-  card.addEventListener('click', () => {
-    document.querySelectorAll('.map-card').forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
-    if (window.game) window.game.selectedMap = card.dataset.map;
-    else window._selectedMap = card.dataset.map;
-  });
-});
-
-// Mode selection
-document.querySelectorAll('.mode-card').forEach(card => {
-  card.addEventListener('click', () => {
-    document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
-    document.querySelectorAll('.campus-option').forEach(c => c.classList.remove('selected'));
-    card.classList.add('selected');
-    window._selectedMode = card.dataset.mode;
-    // 切换回经典模式时恢复队伍选择
-    const teamSection = document.getElementById('teamSection');
-    const aiBtn = document.getElementById('addAiBtn');
-    const startBtn = document.getElementById('roomStartBtn');
-    if (teamSection) teamSection.style.display = '';
-    if (aiBtn) aiBtn.style.display = '';
-    if (startBtn) startBtn.style.display = 'none';
-  });
-});
-
-function updateStartBtn() {
-  const btn = document.getElementById('roomStartBtn');
-  if (!btn) return;
-  const hasRoom = localOnly || !!netMgr?.inRoom;
-  if (!auth.user) {
-    btn.disabled = false;
-    btn.textContent = '请先登录';
-    btn.classList.remove('ready');
-    return;
-  }
-  btn.disabled = false;
-  btn.textContent = '开始游戏';
-  btn.classList.toggle('ready', !!selectedTeam && hasRoom);
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function setAuthStatus(text, isError = false) {
-  const el = document.getElementById('authStatus');
-  el.textContent = text;
-  el.style.color = isError ? '#ff6666' : '#aaa';
-}
-
-function setRoomStatus(text, isError = false) {
-  const el = document.getElementById('roomStatus');
-  el.textContent = text;
-  el.style.color = isError ? '#ff6666' : '#aaa';
-}
-
-function renderAuth() {
-  const loggedIn = !!auth.user;
-  document.getElementById('authGuestBox').style.display = loggedIn ? 'none' : 'block';
-  document.getElementById('authUserBox').style.display = loggedIn ? 'block' : 'none';
-  document.getElementById('authUserName').textContent = auth.user?.nickname || auth.user?.username || '--';
-  const name = auth.user?.nickname || auth.user?.username || '游客玩家';
-  document.getElementById('profileNameText').textContent = name;
-  document.getElementById('profileDetailName').textContent = name;
-  let profile = { rankScore: 0, seasonXp: 0 };
-  try { profile = JSON.parse(localStorage.getItem('bedwars_growth_profile') || '{"rankScore":0,"seasonXp":0}'); } catch (_) {}
-  let rankName = '沉睡梦游者';
-  if (typeof GROWTH_CONFIG !== 'undefined') {
-    for (const r of GROWTH_CONFIG.ranks) if ((profile.rankScore || 0) >= r.min) rankName = r.name;
-  }
-  let passState = { xp: 0 };
-  try { passState = JSON.parse(localStorage.getItem('bedwars_season_pass') || '{"xp":0}'); } catch (_) {}
-  const passLv = Math.min(100, Math.floor((passState.xp || 0) / 1000) + 1);
-  document.getElementById('profileRankText').textContent = `${rankName} · 通行证Lv.${passLv}`;
-  document.getElementById('profileDetailRank').textContent = rankName;
-  document.getElementById('profileDetailPass').textContent = `Lv.${passLv}`;
-  if (loggedIn) setAuthStatus('登录成功，可创建或加入房间。');
-  updateStartBtn();
-}
-
-function renderRoom() {
-  const room = netMgr?.roomNet?.room;
-  const members = netMgr?.members || [];
-  const isMainHost = netMgr?.isHost;
-  const myId = auth.user?.id;
-  const code = room?.code ? `<span class="room-code">${escapeHtml(room.code)}</span>` : '';
-  const hostText = isMainHost ? '你是主房主，负责保存权威游戏状态。' : '你是副房主/玩家，主房主掉线后会自动接管。';
-  const teamCount = ['RED','BLUE','GREEN','YELLOW'].map(k => `${TEAMS[k].name}${members.filter(m => m.team === k).length}/3`).join(' ｜ ');
-  const statusEl = document.getElementById('roomStatus');
-  if (statusEl) statusEl.innerHTML = `当前房间 ${code} ${escapeHtml(hostText)}<br><span class="team-count-line">${escapeHtml(teamCount)}</span>`;
-
-  // Update roomPanel
-  const roomPanel = document.getElementById('roomPanel');
-  const roomPanelMembers = document.getElementById('roomPanelMembers');
-  const roomPanelCode = document.getElementById('roomPanelCode');
-  const roomPanelTitle = document.getElementById('roomPanelTitle');
-  const roomStartBtn = document.getElementById('roomStartBtn');
-  if (netMgr?.inRoom && roomPanel) {
-    // 房间面板显示由用户操作控制，不再在网络回调中强制打开
-    if (roomPanelCode) roomPanelCode.textContent = room?.code || '----';
-    if (roomPanelTitle) roomPanelTitle.textContent = isMainHost ? '我的房间' : '房间';
-    if (roomStartBtn) {
-      roomStartBtn.style.display = (localOnly || isMainHost) ? 'block' : 'none';
-      roomStartBtn.disabled = !(localOnly || isMainHost);
-    }
-    const dissolveRoomBtn = document.getElementById('dissolveRoomBtn');
-    if (dissolveRoomBtn) {
-      dissolveRoomBtn.style.display = (isMainHost && !localOnly) ? 'block' : 'none';
-    }
-    const isCampus = window._selectedMode === 'campus';
-    const roomMapSelect = document.getElementById('roomMapSelect');
-    if (roomMapSelect) {
-      roomMapSelect.style.display = isCampus ? 'none' : '';
-      roomMapSelect.querySelectorAll('.map-card').forEach(c => {
-        c.style.pointerEvents = isMainHost ? 'auto' : 'none';
-        c.style.opacity = isMainHost ? '1' : '0.6';
-      });
-    }
-    const roomModeSelect = document.getElementById('roomModeSelect');
-    if (roomModeSelect) {
-      roomModeSelect.querySelectorAll('.mode-card').forEach(c => {
-        c.style.pointerEvents = isMainHost ? 'auto' : 'none';
-        c.style.opacity = isMainHost ? '1' : '0.6';
-      });
-    }
-    const addAiBtn = document.getElementById('addAiBtn');
-    if (addAiBtn) addAiBtn.style.display = isCampus ? 'none' : '';
-    const teamSelect = document.querySelector('.team-select');
-    if (teamSelect) teamSelect.style.display = isCampus ? 'none' : '';
-    const teamSelectSection = teamSelect?.closest('.room-panel-section');
-    if (teamSelectSection) teamSelectSection.style.display = isCampus ? 'none' : '';
-    if (roomPanelMembers) {
-      roomPanelMembers.innerHTML = '';
-      for (const m of members) {
-        const div = document.createElement('div');
-        div.className = 'room-member-line';
-        const isHost = room?.host_id === m.player_id;
-        const hostBadge = isHost ? '<span class="host-badge">房主</span>' : '';
-        const name = escapeHtml(m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4)));
-        const teamName = escapeHtml(m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队');
-        div.innerHTML = `<span>${name} ${hostBadge}</span><span class="member-team-label">${teamName}</span>`;
-        roomPanelMembers.appendChild(div);
-      }
-    }
-  }
-
-  const list = document.getElementById('roomMembers');
-  list.innerHTML = '';
-  if (netMgr?.inRoom && myId && !members.some(m => m.player_id === myId)) {
-    handleRoomKick('你已被房主移出房间');
-    return;
-  }
-  const myMember = members.find(m => m.player_id === myId);
-  if (myMember?.team && myMember.team !== selectedTeam) {
-    selectedTeam = myMember.team;
-    document.querySelectorAll('.team-btn').forEach(b => b.classList.toggle('selected', b.dataset.team === selectedTeam));
-  }
-  for (const m of members) {
-    const div = document.createElement('div');
-    div.className = 'member-line';
-    const isHost = room?.host_id === m.player_id;
-    const hostBadge = isHost ? '<span class="host-badge">主房主</span>' : (m.role === 'host' ? '<span>副房主</span>' : '<span>玩家</span>');
-    const state = m.is_online ? '<span>在线</span>' : '<span class="offline">离线</span>';
-    const name = escapeHtml(m.player_id === myId ? (auth.user?.nickname || '我') : ('玩家 ' + m.player_id.slice(0, 4)));
-    const teamName = escapeHtml(m.team && TEAMS[m.team] ? TEAMS[m.team].name : '未选队');
-    const teamSelect = `
-      <select class="member-team-select" data-player-id="${escapeHtml(m.player_id)}" ${isMainHost ? '' : 'disabled'}>
-        <option value="">未选队</option>
-        <option value="RED" ${m.team === 'RED' ? 'selected' : ''}>红队</option>
-        <option value="BLUE" ${m.team === 'BLUE' ? 'selected' : ''}>蓝队</option>
-        <option value="GREEN" ${m.team === 'GREEN' ? 'selected' : ''}>绿队</option>
-        <option value="YELLOW" ${m.team === 'YELLOW' ? 'selected' : ''}>黄队</option>
-      </select>`;
-    const kickBtn = isMainHost && m.player_id !== myId
-      ? `<button class="member-kick-btn" data-player-id="${escapeHtml(m.player_id)}">踢出</button>`
-      : '';
-    div.innerHTML = `
-      <div class="member-main">
-        <span>${name} ${hostBadge}</span>
-        <span class="member-team-label">${teamName}</span>
-      </div>
-      <div class="member-actions">${state}${teamSelect}${kickBtn}</div>`;
-    list.appendChild(div);
-  }
-  list.querySelectorAll('.member-team-select').forEach(sel => {
-    sel.addEventListener('change', async () => {
-      try {
-        await netMgr.hostSetPlayerTeam(sel.dataset.playerId, sel.value || null);
-        if (sel.dataset.playerId === myId) {
-          selectedTeam = sel.value || null;
-          document.querySelectorAll('.team-btn').forEach(b => b.classList.toggle('selected', b.dataset.team === selectedTeam));
-        }
-      } catch (err) {
-        setRoomStatus(err.message || '变更队伍失败', true);
-      }
-    });
-  });
-  list.querySelectorAll('.member-kick-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      try {
-        await netMgr.hostKickPlayer(btn.dataset.playerId, '房主移出房间');
-        setRoomStatus('已踢出该用户。');
-      } catch (err) {
-        setRoomStatus(err.message || '踢出失败', true);
-      }
-    });
-  });
-  // 进入游戏按钮
-  let enterBtn = document.getElementById('enterGameBtn');
-  if (!enterBtn) {
-    enterBtn = document.createElement('button');
-    enterBtn.id = 'enterGameBtn';
-    enterBtn.className = 'small-btn primary wide';
-    enterBtn.style.cssText = 'margin-top:10px;padding:10px;font-size:15px;';
-    enterBtn.textContent = '进入游戏';
-    enterBtn.addEventListener('click', () => {
-      const startBtn = document.getElementById('roomStartBtn');
-      if (startBtn && !startBtn.disabled) startBtn.click();
-    });
-    const statusEl = document.getElementById('roomStatus');
-    if (statusEl && statusEl.parentNode) {
-      statusEl.parentNode.insertBefore(enterBtn, statusEl.nextSibling);
-    }
-  }
-  updateStartBtn();
-  updateAiButton();
-  
-  // 性能信息
-  let perfEl = document.getElementById('roomPerfInfo');
-  if (!perfEl) {
-    perfEl = document.createElement('div');
-    perfEl.id = 'roomPerfInfo';
-    perfEl.style.cssText = 'font-size:11px;color:#64748b;text-align:center;margin-top:6px;';
-    const roomInfo = document.querySelector('.room-info') || document.getElementById('roomPanel');
-    if (roomInfo) roomInfo.appendChild(perfEl);
-  }
-  if (perfEl) {
-    const fps = typeof window._fpsCounter !== 'undefined' ? Math.round(window._fpsCounter) : '--';
-    const pktLoss = window.game?.network?.packetLoss || 0;
-    perfEl.textContent = 'FPS: ' + fps + ' | \u4E22\u5305\u7387: ' + pktLoss + '%';
-  }
-}
-
-async function handleRoomKick(reason = '你已离开房间') {
-  try { await netMgr?.leaveRoom?.(); } catch (_) {}
-  netMgr = null;
-  localOnly = false;
-  selectedTeam = null;
-  document.querySelectorAll('.team-btn').forEach(b => b.classList.remove('selected'));
-  document.getElementById('roomMembers').innerHTML = '';
-  const roomPanel = document.getElementById('roomPanel');
-  if (roomPanel) roomPanel.style.display = 'none';
-  document.getElementById('mainMenu').style.display = 'flex';
-  setRoomStatus(reason, true);
-  updateStartBtn();
-}
-
-function bindNetEvents() {
-  if (!netMgr) return;
-  netMgr.roomNet.onRoomUpdate = (...args) => { try { renderRoom(...args); } catch (e) { console.error('onRoomUpdate error', e); } };
-  netMgr.roomNet.onMembersChanged = (...args) => { try { renderRoom(...args); } catch (e) { console.error('onMembersChanged error', e); } };
-  netMgr.roomNet.onHostChanged = (hostId) => {
-    try {
-      renderRoom();
-      const badge = document.getElementById('netBadge');
-      if (badge && badge.style.display !== 'none') {
-        const isHost = hostId === auth.user?.id;
-        badge.innerHTML = `联机状态：<span class="online">在线</span>｜<span class="host">${isHost ? '主房主' : '副房主'}</span>`;
-      }
-    } catch (e) { console.error('onHostChanged error', e); }
-  };
-  netMgr.roomNet.onEvent = (evt) => {
-    try {
-      if (evt.event_type === 'game_start' && !window.game?.gameActive) {
-        setRoomStatus('房主已开始游戏，请选择队伍后进入，角色将在开局后选择。');
-      } else if (evt.event_type === 'room_kick' && evt.event_data?.playerId === auth.user?.id) {
-        handleRoomKick(evt.event_data?.reason || '你已被房主移出房间');
-      } else if (evt.event_type === 'room_dissolved') {
-        handleRoomKick(evt.event_data?.reason || '房间已解散');
-      } else if (evt.event_type === 'room_team_changed') {
-        renderRoom();
-      }
-    } catch (e) { console.error('onEvent error', e); }
-  };
-}
-
-renderAuth();
-document.querySelector('.team-btn.red')?.classList.add('selected');
-updateStartBtn();
-
-function openPanel(id) { document.getElementById(id)?.classList.add('open'); }
-function closePanel(id) { document.getElementById(id)?.classList.remove('open'); }
-function closeAllLobbyPanels() {
-  document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
-  ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel','skinShopPanel','roomPanel','workshopPanel'].forEach(id => {
-    const panel = document.getElementById(id);
-    if (panel) panel.style.display = 'none';
-  });
-  if (window.hudLayoutManager?.editing) window.hudLayoutManager.toggleEdit();
-}
-function updateAiButton() {
-  const btn = document.getElementById('addAiBtn');
-  if (!btn) return;
-  btn.textContent = `添加AI替补（${window.lobbyAiSlots}/4）`;
-  btn.disabled = window.lobbyAiSlots >= 4;
-}
-
-document.getElementById('profileCardBtn').addEventListener('click', () => openPanel('profilePanel'));
-document.getElementById('openPlayOptionsBtn').addEventListener('click', () => openPanel('playOptionsPanel'));
-
-  // 创作工坊按钮
-document.getElementById('workshopBtn').addEventListener('click', () => {
-  document.getElementById('workshopPanel').style.display = 'flex';
-  loadRuleUI();
-});
-document.getElementById('workshopClose').addEventListener('click', () => {
-  document.getElementById('workshopPanel').style.display = 'none';
-  if (window.game?.engine?.mapEditor?.active) {
-    window.game.engine.mapEditor.deactivate();
-    const mt = document.getElementById('mapEditorTools');
-    if (mt) mt.style.display = 'none';
-  }
-});
-
-// 创作工坊标签切换
-document.querySelectorAll('.workshop-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.workshop-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    document.querySelectorAll('.workshop-section').forEach(s => s.classList.remove('active'));
-    document.getElementById('workshop' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)).classList.add('active');
-  });
-});
-
-// 规则滑块实时显示值
-document.getElementById('ruleShrinkSpeed').addEventListener('input', (e) => {
-  document.getElementById('ruleShrinkSpeedVal').textContent = e.target.value;
-});
-
-// 胜利条件切换显示积分目标
-document.getElementById('ruleWinCondition').addEventListener('change', (e) => {
-  document.getElementById('ruleScoreTargetRow').style.display = e.target.value === 'score_target' ? 'flex' : 'none';
-});
-
-// 保存规则
-document.getElementById('ruleSaveBtn').addEventListener('click', () => {
-  const rules = {
-    winCondition: document.getElementById('ruleWinCondition').value,
-    scoreTarget: parseInt(document.getElementById('ruleScoreTarget').value) || 50,
-    gameDuration: (parseInt(document.getElementById('ruleGameDuration').value) || 30) * 60,
-    enableShrink: document.getElementById('ruleEnableShrink').checked,
-    shrinkStartTime: (parseInt(document.getElementById('ruleShrinkStart').value) || 25) * 60,
-    shrinkSpeed: parseFloat(document.getElementById('ruleShrinkSpeed').value) || 0.203,
-    shrinkDamage: parseInt(document.getElementById('ruleShrinkDamage').value) || 10,
-    respawnBaseTime: parseInt(document.getElementById('ruleRespawnBase').value) || 3,
-    respawnMaxTime: parseInt(document.getElementById('ruleRespawnMax').value) || 30,
-    respawnIncrement: parseInt(document.getElementById('ruleRespawnInc').value) || 2,
-    respawnInvulnTime: parseFloat(document.getElementById('ruleRespawnInvuln').value) || 1.5,
-    resourceSpawnRates: {
-      copper: parseInt(document.getElementById('ruleCopperRate').value) || 2,
-      silver: parseInt(document.getElementById('ruleSilverRate').value) || 6,
-      gold: parseInt(document.getElementById('ruleGoldRate').value) || 15,
-      jade: parseInt(document.getElementById('ruleJadeRate').value) || 42,
-    },
-    enableAdvancedResources: document.getElementById('ruleEnableAdvancedRes').checked,
-  };
-  if (typeof saveCustomRules === 'function') {
-    saveCustomRules(rules);
-    setAuthStatus('规则已保存，下次对局生效！');
-  } else {
-    localStorage.setItem('bedwars_custom_rules', JSON.stringify(rules));
-    setAuthStatus('规则已保存（本地），下次对局生效！');
-  }
-});
-
-// 恢复默认
-document.getElementById('ruleResetBtn').addEventListener('click', () => {
-  if (typeof resetRules === 'function') resetRules();
-  else localStorage.removeItem('bedwars_custom_rules');
-  loadRuleUI();
-  setAuthStatus('已恢复默认规则');
-});
-
-// 本地试玩
-document.getElementById('ruleTestBtn').addEventListener('click', () => {
-  document.getElementById('workshopPanel').style.display = 'none';
-  const pop = document.getElementById('playOptionsPanel');
-  if (pop) { pop.classList.add('open'); pop.style.display = ''; }
-});
-
-// 角色配置
-function renderRoleConfig() {
-  const list = document.getElementById('roleConfigList');
-  if (!list || typeof ROLES === 'undefined') return;
-  const overrides = {};
-  try { Object.assign(overrides, JSON.parse(localStorage.getItem('bedwars_role_overrides') || '{}')); } catch (_) {}
-  
-  list.innerHTML = '';
-  for (const [key, role] of Object.entries(ROLES)) {
-    const ov = overrides[key] || {};
-    const div = document.createElement('div');
-    div.className = 'role-config-item';
-    div.innerHTML = `
-      <div class="role-config-header">
-        <span class="role-config-name">${escapeHtml(role.name)}</span>
-        <span class="role-config-info">${escapeHtml(role.category || '通用')} · ${escapeHtml(role.passive?.name || '')} / ${escapeHtml(role.active?.name || '')}</span>
-      </div>
-      <div class="role-config-fields">
-        <div class="rule-row">
-          <label>生命上限</label>
-          <input type="number" data-role="${key}" data-field="hp" value="${ov.hp !== undefined ? ov.hp : role.hp}" min="20" max="200">
-        </div>
-        <div class="rule-row">
-          <label>技能冷却（秒）</label>
-          <input type="number" data-role="${key}" data-field="skillCd" value="${ov.skillCd !== undefined ? ov.skillCd : (role.active?.cd || 30)}" min="1" max="120">
-        </div>
-        <div class="rule-row">
-          <label>启用</label>
-          <input type="checkbox" data-role="${key}" data-field="enabled" ${ov.enabled !== false ? 'checked' : ''}>
-        </div>
-      </div>
-    `;
-    list.appendChild(div);
-  }
-}
-
-document.getElementById('roleConfigSaveBtn')?.addEventListener('click', () => {
-  const overrides = {};
-  document.querySelectorAll('#roleConfigList input').forEach(input => {
-    const rk = input.dataset.role;
-    const field = input.dataset.field;
-    if (!rk || !field) return;
-    if (!overrides[rk]) overrides[rk] = {};
-    if (field === 'enabled') {
-      overrides[rk][field] = input.checked;
-    } else {
-      overrides[rk][field] = parseFloat(input.value);
-    }
-  });
-  if (typeof saveRoleOverrides === 'function') {
-    saveRoleOverrides(overrides);
-  } else {
-    localStorage.setItem('bedwars_role_overrides', JSON.stringify(overrides));
-  }
-  setAuthStatus('角色配置已保存！');
-});
-
-document.getElementById('roleConfigResetBtn')?.addEventListener('click', () => {
-  localStorage.removeItem('bedwars_role_overrides');
-  GAME_RULES.roleOverrides = {};
-  renderRoleConfig();
-  setAuthStatus('角色配置已恢复默认');
-});
-
-// 标签页切换时渲染角色配置
-document.querySelectorAll('.workshop-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    if (tab.dataset.tab === 'roles') renderRoleConfig();
-  });
-});
-
-// 加载规则UI
-function loadRuleUI() {
-  let rules = (typeof GAME_RULES !== 'undefined') ? { ...GAME_RULES } : {};
-  try { Object.assign(rules, JSON.parse(localStorage.getItem('bedwars_custom_rules') || '{}')); } catch (_) {}
-  document.getElementById('ruleWinCondition').value = rules.winCondition || 'last_team_standing';
-  document.getElementById('ruleScoreTarget').value = rules.scoreTarget || 50;
-  document.getElementById('ruleGameDuration').value = Math.floor((rules.gameDuration || 1800) / 60);
-  document.getElementById('ruleEnableShrink').checked = rules.enableShrink !== false;
-  document.getElementById('ruleShrinkStart').value = Math.floor((rules.shrinkStartTime || 1500) / 60);
-  document.getElementById('ruleShrinkSpeed').value = rules.shrinkSpeed || 0.203;
-  document.getElementById('ruleShrinkSpeedVal').textContent = rules.shrinkSpeed || 0.203;
-  document.getElementById('ruleShrinkDamage').value = rules.shrinkDamage || 10;
-  document.getElementById('ruleRespawnBase').value = rules.respawnBaseTime || 3;
-  document.getElementById('ruleRespawnMax').value = rules.respawnMaxTime || 30;
-  document.getElementById('ruleRespawnInc').value = rules.respawnIncrement || 2;
-  document.getElementById('ruleRespawnInvuln').value = rules.respawnInvulnTime || 1.5;
-  document.getElementById('ruleCopperRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.copper) || 2;
-  document.getElementById('ruleSilverRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.silver) || 6;
-  document.getElementById('ruleGoldRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.gold) || 15;
-  document.getElementById('ruleJadeRate').value = (rules.resourceSpawnRates && rules.resourceSpawnRates.jade) || 42;
-  document.getElementById('ruleEnableAdvancedRes').checked = rules.enableAdvancedResources !== false;
-  document.getElementById('ruleScoreTargetRow').style.display = (rules.winCondition === 'score_target') ? 'flex' : 'none';
-}
-
-  // 地图编辑器
-  const mapEditorNewBtn = document.getElementById('mapEditorNewBtn');
-  const mapEditorLoadBtn = document.getElementById('mapEditorLoadBtn');
-  const mapEditorSaveBtn = document.getElementById('mapEditorSaveBtn');
-  const mapEditorTools = document.getElementById('mapEditorTools');
-  const editorToolSelect = document.getElementById('editorToolSelect');
-  const editorBlockSelect = document.getElementById('editorBlockSelect');
-  const editorFlySpeed = document.getElementById('editorFlySpeed');
-
-  function refreshMapList() {
-    const list = document.getElementById('mapEditorList');
-    if (!list) return;
-    const maps = [];
-    try {
-      const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
-      maps.push(...raw);
-    } catch (_) {}
-    list.innerHTML = maps.length === 0
-      ? '<p style="color:#888; font-size:12px;">暂无自定义地图</p>'
-      : maps.map((m, i) => `<div class="map-list-item" data-idx="${i}"><span>${escapeHtml(m.name || '未命名')}</span><button class="map-del-btn" data-idx="${i}">删除</button></div>`).join('');
-    list.querySelectorAll('.map-list-item').forEach(el => {
-      el.addEventListener('click', (e) => {
-        if (e.target.closest?.('.map-del-btn')) return;
-        const idx = parseInt(el.dataset.idx);
-        const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
-        if (raw[idx]) {
-          if (window.game?.engine?.mapEditor) {
-            window.game.engine.mapEditor.importMap(raw[idx]);
-            window.game.engine.mapEditor.activate();
-            mapEditorTools.style.display = 'block';
-            document.getElementById('workshopPanel').style.display = 'none';
-            document.getElementById('hud').style.display = 'block';
-            setAuthStatus('地图已加载，进入编辑模式');
-          }
-        }
-      });
-    });
-    list.querySelectorAll('.map-del-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.idx);
-        const raw = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
-        raw.splice(idx, 1);
-        localStorage.setItem('bedwars_custom_maps', JSON.stringify(raw));
-        refreshMapList();
-      });
-    });
-  }
-
-  if (mapEditorNewBtn) {
-    mapEditorNewBtn.addEventListener('click', () => {
-      if (window.game?.engine?.mapEditor) {
-        window.game.engine.mapEditor.activate();
-        mapEditorTools.style.display = 'block';
-        document.getElementById('workshopPanel').style.display = 'none';
-        document.getElementById('hud').style.display = 'block';
-        setAuthStatus('进入地图编辑模式：WASD飞行，左键放置，右键擦除');
-      }
-    });
-  }
-  if (mapEditorSaveBtn) {
-    mapEditorSaveBtn.addEventListener('click', () => {
-      if (!window.game?.engine?.mapEditor) return;
-      const data = window.game.engine.mapEditor.exportMap();
-      data.name = (prompt('地图名称：', data.name) || data.name).slice(0, 50);
-      const maps = JSON.parse(localStorage.getItem('bedwars_custom_maps') || '[]');
-      maps.push(data);
-      try {
-        localStorage.setItem('bedwars_custom_maps', JSON.stringify(maps));
-        refreshMapList();
-        setAuthStatus('地图已保存！');
-      } catch (e) {
-        if (e.name === 'QuotaExceededError' || e.code === 22) {
-          setAuthStatus('存储空间不足，请删除部分地图后重试', true);
-        } else {
-          setAuthStatus('保存失败：' + e.message, true);
-        }
-      }
-    });
-  }
-  if (mapEditorLoadBtn) {
-    mapEditorLoadBtn.addEventListener('click', () => {
-      refreshMapList();
-    });
-  }
-  if (editorToolSelect) {
-    editorToolSelect.addEventListener('change', (e) => {
-      if (window.game?.engine?.mapEditor) {
-        window.game.engine.mapEditor.tool = e.target.value;
-      }
-      document.getElementById('editorBlockRow').style.display = e.target.value === 'place' ? 'flex' : 'none';
-    });
-  }
-  if (editorBlockSelect) {
-    editorBlockSelect.addEventListener('change', (e) => {
-      if (window.game?.engine?.mapEditor) {
-        window.game.engine.mapEditor.selectedBlock = e.target.value;
-      }
-    });
-  }
-  if (editorFlySpeed) {
-    editorFlySpeed.addEventListener('input', (e) => {
-      document.getElementById('editorFlySpeedVal').textContent = e.target.value;
-      if (window.game?.engine?.mapEditor) {
-        window.game.engine.mapEditor.flySpeed = parseInt(e.target.value);
-      }
-    });
-  }
-
-document.getElementById('lobbySettingsBtn').addEventListener('click', () => window.hudLayoutManager?.open?.());
-  const sensSlider = document.getElementById('sensSlider');
-  const sensVal = document.getElementById('sensVal');
-  if (sensSlider) {
-    sensSlider.value = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
-    sensVal.textContent = sensSlider.value;
-    sensSlider.addEventListener('input', () => {
-      const v = parseFloat(sensSlider.value);
-      sensVal.textContent = v.toFixed(1);
-      localStorage.setItem('bedwars_look_sensitivity', v);
-      if (window.game?.input) window.game.input.lookSensitivity = v;
-    });
-  }
-document.getElementById('seasonPassBtn')?.addEventListener('click', () => window.seasonPass?.open?.('rewards'));
-document.getElementById('menuSkinShopBtn')?.addEventListener('click', () => window.seasonPass?.openSkinShop?.());
-document.getElementById('skinShopCloseBtn')?.addEventListener('click', () => document.getElementById('skinShopPanel').style.display = 'none');
-document.getElementById('roomPanelCloseBtn')?.addEventListener('click', () => handleRoomKick('已退出房间'));
-document.querySelectorAll('[data-close-panel]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closePanel(btn.dataset.closePanel);
-  });
-});
-document.getElementById('addAiBtn').addEventListener('click', () => {
-  window.lobbyAiSlots = Math.min(4, (window.lobbyAiSlots || 0) + 1);
-  setRoomStatus(`已添加 ${window.lobbyAiSlots} 个 AI 替补，开始游戏后生效。`);
-  updateAiButton();
-});
-
-document.getElementById('loginBtn').addEventListener('click', async () => {
-  const username = document.getElementById('loginUsername').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  try {
-    setAuthStatus('正在登录...');
-    await auth.login(username, password);
-    localOnly = false;
-    renderAuth();
-    setAuthStatus('登录成功');
-  } catch (err) {
-    setAuthStatus(err.message || '登录失败', true);
-  }
-});
-
-document.getElementById('registerBtn').addEventListener('click', async () => {
-  const username = document.getElementById('loginUsername').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  try {
-    setAuthStatus('正在注册...');
-    await auth.register(username, password);
-    localOnly = false;
-    renderAuth();
-    setAuthStatus('注册并登录成功');
-  } catch (err) {
-    setAuthStatus(err.message || '注册失败', true);
-  }
-});
-
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
-  netMgr = null;
-  auth.logout();
-  localOnly = false;
-  renderAuth();
-  setAuthStatus('已退出登录。');
-  setRoomStatus('未进入房间；请先登录后再创建房间、加入房间或本地试玩。');
-  document.getElementById('roomMembers').innerHTML = '';
-  updateStartBtn();
-});
-
-function openLocalModePanel() {
-  if (!auth.user) {
-    setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
-    return;
-  }
-  if (netMgr?.inRoom) { netMgr.leaveRoom().catch(() => {}); netMgr = null; }
-  localOnly = true;
-  const selectedMode = window._selectedMode || 'classic';
-  window.lobbyAiSlots = Math.max(window.lobbyAiSlots || 0, 4);
-  setAuthStatus('已进入本地试玩模式，不连接 Supabase。');
-  setRoomStatus('本地试玩模式：将与 AI 对战，直接点开始游戏。');
-  closePanel('playOptionsPanel');
-  updateAiButton();
-  updateStartBtn();
-  const roomPanel = document.getElementById('roomPanel');
-  const roomPanelTitle = document.getElementById('roomPanelTitle');
-  const roomPanelCode = document.getElementById('roomPanelCode');
-  const roomStartBtn = document.getElementById('roomStartBtn');
-  const roomPanelMembers = document.getElementById('roomPanelMembers');
-  if (roomPanel) {
-    closeAllLobbyPanels();
-    document.getElementById('mainMenu').style.display = 'none';
-    roomPanel.style.display = 'flex';
-    if (roomPanelTitle) roomPanelTitle.textContent = '本地试玩';
-    if (roomPanelCode) roomPanelCode.textContent = '--';
-    if (roomStartBtn) {
-      roomStartBtn.style.display = 'block';
-      roomStartBtn.disabled = false;
-    }
-    if (roomPanelMembers) roomPanelMembers.innerHTML = '<div class="room-member-line"><span>我（本地）</span></div>';
-  }
-}
-document.getElementById('localModeBtn').addEventListener('click', openLocalModePanel);
-document.getElementById('localModeBtn').addEventListener('touchstart', (e) => { e.preventDefault(); openLocalModePanel(); }, { passive: false });
-
-async function doCreateRoom() {
-  if (!auth.user) {
-    setAuthStatus('请先登录后再创建房间。', true);
-    return;
-  }
-  if (window._isConnecting) return;
-  window._isConnecting = true;
-  try {
-    localOnly = false;
-    if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
-    netMgr = null;
-    netMgr = new NetworkManager(config);
-    bindNetEvents();
-    setRoomStatus('正在创建房间...');
-    const room = await netMgr.createRoom();
-    renderRoom();
-    closeAllLobbyPanels();
-    document.getElementById('mainMenu').style.display = 'none';
-    document.getElementById('roomPanel').style.display = 'flex';
-    closePanel('playOptionsPanel');
-  } catch (err) {
-    setRoomStatus(err.message || '创建房间失败', true);
-  } finally {
-    window._isConnecting = false;
-  }
-}
-document.getElementById('createRoomBtn').addEventListener('click', doCreateRoom);
-document.getElementById('createRoomBtn').addEventListener('touchstart', (e) => { e.preventDefault(); doCreateRoom(); }, { passive: false });
-
-async function doJoinRoom() {
-  if (!auth.user) {
-    setAuthStatus('请先登录后再加入房间。', true);
-    return;
-  }
-  if (window._isConnecting) return;
-  window._isConnecting = true;
-  try {
-    localOnly = false;
-    if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
-    netMgr = null;
-    netMgr = new NetworkManager(config);
-    bindNetEvents();
-    const code = document.getElementById('joinRoomCode').value.trim();
-    setRoomStatus('正在加入房间...');
-    await netMgr.joinRoom(code);
-    renderRoom();
-    closeAllLobbyPanels();
-    document.getElementById('mainMenu').style.display = 'none';
-    document.getElementById('roomPanel').style.display = 'flex';
-    closePanel('playOptionsPanel');
-  } catch (err) {
-    setRoomStatus(err.message || '加入房间失败', true);
-  } finally {
-    window._isConnecting = false;
-  }
-}
-document.getElementById('joinRoomBtn').addEventListener('click', doJoinRoom);
-document.getElementById('joinRoomBtn').addEventListener('touchstart', (e) => { e.preventDefault(); doJoinRoom(); }, { passive: false });
-
-async function doReconnect() {
-  if (!auth.user) {
-    setAuthStatus('请先登录后再断线重连。', true);
-    return;
-  }
-  if (window._isConnecting) return;
-  window._isConnecting = true;
-  try {
-    localOnly = false;
-    if (netMgr?.inRoom) { try { await netMgr.leaveRoom(); } catch (_) {} }
-    netMgr = null;
-    netMgr = new NetworkManager(config);
-    bindNetEvents();
-    setRoomStatus('正在重连上次房间...');
-    await netMgr.reconnect();
-    renderRoom();
-    closeAllLobbyPanels();
-    document.getElementById('mainMenu').style.display = 'none';
-    document.getElementById('roomPanel').style.display = 'flex';
-    closePanel('playOptionsPanel');
-  } catch (err) {
-    setRoomStatus(err.message || '断线重连失败', true);
-  } finally {
-    window._isConnecting = false;
-  }
-}
-document.getElementById('reconnectBtn').addEventListener('click', doReconnect);
-
-// Loading simulation
-let loadProgress = 0;
-const loadInterval = setInterval(() => {
-  loadProgress = Math.min(loadProgress + 10, 100);
-  document.getElementById('loadBar').style.width = loadProgress + '%';
-  if (loadProgress >= 30) document.getElementById('loadTip').textContent = '正在生成地图...';
-  if (loadProgress >= 70) document.getElementById('loadTip').textContent = '正在初始化AI...';
-  if (loadProgress >= 100) {
-    clearInterval(loadInterval);
-    setTimeout(() => {
-      document.getElementById('loadingScreen').style.opacity = '0';
-      setTimeout(() => {
-        document.getElementById('loadingScreen').style.display = 'none';
-        document.getElementById('mainMenu').style.display = 'flex';
-        if (!auth.user) {
-          openPanel('profilePanel');
-          setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
-        }
-      }, 500);
-    }, 300);
-  }
-}, 80);
-
-// Start game
-document.getElementById('roomStartBtn').addEventListener('click', () => {
-  // === 前置检查 ===
-  if (!auth.user) {
-    openPanel('profilePanel');
-    return setAuthStatus('请先登录，未登录无法开始游戏或领取奖励。', true);
-  }
-  if (!selectedTeam) selectedTeam = 'RED';
-  if (!localOnly && !netMgr?.inRoom) {
-    openPanel('playOptionsPanel');
-    return setRoomStatus('请选择创建房间、加入房间，或本地试玩。', true);
-  }
-
-  const teamKey = selectedTeam;
-  const mode = window._selectedMode || 'classic';
-  const mapKey = window._selectedMap || 'classic';
-  const playerName = auth.user.nickname || '你';
-
-  // === 关闭所有大厅面板 ===
-  closeAllLobbyPanels();
-  const teamNameEl = document.getElementById('teamName');
-  if (teamNameEl && TEAMS[teamKey]) teamNameEl.textContent = TEAMS[teamKey].name;
-
-  // === 显示加载遮罩 ===
-  const overlay = document.createElement('div');
-  overlay.id = '_loadingOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,30,0.95);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
-  overlay.innerHTML = '<div style="color:#e2e8f0;font-size:18px;">正在加载游戏...</div><div style="color:#64748b;font-size:13px;">首次加载可能需要几秒</div>';
-  document.body.appendChild(overlay);
-
-  // 延迟一帧，让加载遮罩先渲染
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      try {
-        // --- 清理旧游戏 ---
-        if (window.game) {
-          try {
-            if (window.game._rafId) cancelAnimationFrame(window.game._rafId);
-            if (window.game.engine?.renderer) {
-              window.game.engine.renderer.domElement?.remove();
-              window.game.engine.renderer.dispose();
-            }
-          } catch (_) {}
-          window.game = null;
-        }
-        document.getElementById('gameCanvas')?.querySelectorAll('canvas').forEach(c => c.remove());
-
-        // --- WebGL 检测 ---
-        const probe = document.createElement('canvas');
-        const hasGL = !!(probe.getContext('webgl2') || probe.getContext('webgl'));
-        probe.remove();
-        if (!hasGL) throw new Error('你的浏览器不支持 WebGL，无法运行3D游戏。\n请尝试：更新浏览器 / 启用硬件加速 / 使用 Chrome/Edge');
-
-        // --- 创建并初始化游戏 ---
-        const game = new Game({ network: netMgr, playerName, onlineMode: !localOnly });
-        game.selectedMap = mapKey;
-        window.game = game;
-
-        game.init();
-
-        // --- 按模式启动 ---
-        game.start(teamKey, 'FOX', mode);
-
-        // --- 启动成功，清理遮罩 ---
-        overlay.remove();
-
-        // --- 网络状态 ---
-        if (!localOnly && netMgr?.isHost) {
-          try { netMgr.roomNet.setRoomStatus('playing'); } catch (_) {}
-          try { netMgr.roomNet.sendEvent('game_start', { team: teamKey, role: 'PENDING' }); } catch (_) {}
-        }
-        const badge = document.getElementById('netBadge');
-        if (badge) {
-          badge.style.display = 'block';
-          badge.innerHTML = localOnly
-            ? '联机状态：<span class="online">本地试玩</span>'
-            : '联机状态：<span class="online">在线</span>｜<span class="host">' + (netMgr?.isHost ? '主房主' : '副房主') + '</span>';
-        }
-      } catch (err) {
-        console.error('[Game] 启动失败:', err);
-        overlay.remove();
-        window.game = null;
-
-        // 清理可能残留的 canvas
-        document.getElementById('gameCanvas')?.querySelectorAll('canvas').forEach(c => c.remove());
-
-        // 恢复 UI
-        const mainMenu = document.getElementById('mainMenu');
-        if (mainMenu) mainMenu.style.display = '';
-        const hud = document.getElementById('hud');
-        if (hud) hud.style.display = 'none';
-        const rolePanel = document.getElementById('startRolePanel');
-        if (rolePanel) rolePanel.style.display = 'none';
-
-        // 显示错误弹窗
-        const errBox = document.createElement('div');
-        errBox.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(10,10,30,0.95);display:flex;align-items:center;justify-content:center;';
-        errBox.innerHTML = `
-          <div style="background:#1a1a2e;border:1px solid #ff4444;border-radius:12px;padding:24px 28px;max-width:90vw;max-height:70vh;overflow-y:auto;color:#ff6666;">
-            <div style="font-size:18px;font-weight:bold;color:#ff4444;margin-bottom:12px;">游戏启动失败</div>
-            <div style="font-size:13px;color:#ccc;white-space:pre-wrap;word-break:break-all;">${(err.message || '未知错误')}\n\n${(err.stack || '').split('\n').slice(0,4).join('\n')}</div>
-            <button onclick="this.closest('div[style]').parentElement.remove();document.getElementById('mainMenu').style.display='';"
-              style="margin-top:16px;padding:8px 24px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">返回主菜单</button>
-          </div>`;
-        document.body.appendChild(errBox);
-      }
-    }, 80);
-  });
-});
-
-document.getElementById('dissolveRoomBtn').addEventListener('click', async () => {
-  if (!netMgr?.isHost || localOnly) return;
-  if (typeof netMgr?.roomNet?.dissolveRoom === 'function') {
-    try {
-      await netMgr.roomNet.dissolveRoom();
-      setRoomStatus('房间已解散。');
-    } catch (err) {
-      setRoomStatus(err.message || '解散房间失败', true);
-    }
-  } else {
-    setRoomStatus('解散房间功能尚未实现。');
-  }
-});
-});
-</script>
-
-  <!-- 创作工坊面板 -->
-  <div id="workshopPanel" class="lobby-float-panel" style="display:none;">
-    <div class="panel-header">
-      <h2>创作工坊</h2>
-      <button class="panel-close" id="workshopClose">×</button>
-    </div>
-    <div class="panel-body">
-      <div class="workshop-tabs">
-        <button class="workshop-tab active" data-tab="rules">规则配置</button>
-        <button class="workshop-tab" data-tab="maps">地图工坊</button>
-        <button class="workshop-tab" data-tab="roles">角色配置</button>
-      </div>
-      
-      <!-- 规则配置 -->
-      <div class="workshop-section active" id="workshopRules">
-        <div class="rule-group">
-          <h3>胜利条件</h3>
-          <select id="ruleWinCondition">
-            <option value="last_team_standing">最后存活队伍</option>
-            <option value="destroy_all_beds">摧毁所有床</option>
-            <option value="elimination">歼灭模式</option>
-            <option value="score_target">积分目标</option>
-          </select>
-          <div class="rule-row" id="ruleScoreTargetRow" style="display:none;">
-            <label>目标积分</label>
-            <input type="number" id="ruleScoreTarget" value="50" min="10" max="500">
-          </div>
-        </div>
-        
-        <div class="rule-group">
-          <h3>游戏时长</h3>
-          <div class="rule-row">
-            <label>总时长（分钟）</label>
-            <input type="number" id="ruleGameDuration" value="30" min="5" max="120">
-          </div>
-          <div class="rule-row">
-            <label><input type="checkbox" id="ruleEnableShrink" checked> 启用死亡边界</label>
-          </div>
-          <div class="rule-row">
-            <label>缩圈开始时间（分钟）</label>
-            <input type="number" id="ruleShrinkStart" value="25" min="1" max="60">
-          </div>
-          <div class="rule-row">
-            <label>缩圈速度</label>
-            <input type="range" id="ruleShrinkSpeed" min="0.05" max="1" step="0.01" value="0.203">
-            <span id="ruleShrinkSpeedVal">0.203</span>
-          </div>
-          <div class="rule-row">
-            <label>缩圈外伤害/秒</label>
-            <input type="number" id="ruleShrinkDamage" value="10" min="1" max="100">
-          </div>
-        </div>
-        
-        <div class="rule-group">
-          <h3>复活机制</h3>
-          <div class="rule-row">
-            <label>基础复活时间（秒）</label>
-            <input type="number" id="ruleRespawnBase" value="3" min="0" max="30">
-          </div>
-          <div class="rule-row">
-            <label>最大复活时间（秒）</label>
-            <input type="number" id="ruleRespawnMax" value="30" min="5" max="60">
-          </div>
-          <div class="rule-row">
-            <label>死亡递增惩罚（秒）</label>
-            <input type="number" id="ruleRespawnInc" value="2" min="0" max="10">
-          </div>
-          <div class="rule-row">
-            <label>复活无敌时间（秒）</label>
-            <input type="number" id="ruleRespawnInvuln" value="1.5" min="0" max="5" step="0.5">
-          </div>
-        </div>
-        
-        <div class="rule-group">
-          <h3>资源生成</h3>
-          <div class="rule-row">
-            <label>铜币间隔（秒）</label>
-            <input type="number" id="ruleCopperRate" value="2" min="1" max="30">
-          </div>
-          <div class="rule-row">
-            <label>银币间隔（秒）</label>
-            <input type="number" id="ruleSilverRate" value="6" min="1" max="60">
-          </div>
-          <div class="rule-row">
-            <label>金币间隔（秒）</label>
-            <input type="number" id="ruleGoldRate" value="15" min="1" max="120">
-          </div>
-          <div class="rule-row">
-            <label>玉佩间隔（秒）</label>
-            <input type="number" id="ruleJadeRate" value="42" min="1" max="300">
-          </div>
-          <div class="rule-row">
-            <label><input type="checkbox" id="ruleEnableAdvancedRes" checked> 启用高级资源（金/玉佩）</label>
-          </div>
-        </div>
-        
-        <div class="workshop-actions">
-          <button class="small-btn" id="ruleSaveBtn">保存规则</button>
-          <button class="small-btn secondary" id="ruleResetBtn">恢复默认</button>
-          <button class="small-btn" id="ruleTestBtn">本地试玩</button>
-        </div>
-      </div>
-      
-      <div class="workshop-section" id="workshopMaps" style="display:none;">
-        <div class="map-editor-intro">
-          <h3>地图工坊</h3>
-          <p>创建自定义地图：自由放置方块、设置出生点和资源生成器。</p>
-          <div class="map-editor-actions">
-            <button class="small-btn" id="mapEditorNewBtn">新建地图</button>
-            <button class="small-btn" id="mapEditorLoadBtn">加载地图</button>
-            <button class="small-btn" id="mapEditorSaveBtn">保存地图</button>
-          </div>
-          <div id="mapEditorList" class="map-list"></div>
-          <div id="mapEditorTools" style="display:none; margin-top:12px;">
-            <div class="editor-tool-row">
-              <label>工具：</label>
-              <select id="editorToolSelect">
-                <option value="place">放置方块</option>
-                <option value="erase">擦除方块</option>
-                <option value="spawn">标记出生点</option>
-                <option value="bed">标记床</option>
-                <option value="generator">标记资源生成器</option>
-              </select>
-            </div>
-            <div class="editor-tool-row" id="editorBlockRow">
-              <label>方块类型：</label>
-              <select id="editorBlockSelect">
-                <option value="wood_plank">木板</option>
-                <option value="stone_plate">石板</option>
-                <option value="iron_plate">铁板</option>
-                <option value="titanium">钛板</option>
-                <option value="blast_glass">防爆玻璃</option>
-              </select>
-            </div>
-            <div class="editor-tool-row">
-              <label>飞行速度：</label>
-              <input type="range" id="editorFlySpeed" min="5" max="50" value="15">
-              <span id="editorFlySpeedVal">15</span>
-            </div>
-            <div class="editor-hint">
-              <p>WASD 移动 | Q上升 E下降 | 左键放置/标记 | 右键擦除 | Z撤销 | Y重做</p>
-              <p>按 ESC 退出编辑器</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 角色配置占位 -->
-      <div class="workshop-section" id="workshopRoles" style="display:none;">
-        <div class="role-config-intro">
-          <h3>角色配置</h3>
-          <p>调整角色的生命值和技能冷却时间。</p>
-          <div id="roleConfigList" class="role-config-list"></div>
-          <div class="workshop-actions">
-            <button class="small-btn" id="roleConfigSaveBtn">保存配置</button>
-            <button class="small-btn secondary" id="roleConfigResetBtn">恢复默认</button>
-          </div>
-        </div>
-      </div>
+<!-- 主菜单 -->
+<div id="mainMenu">
+  <h1 class="menu-title">筑梦激斗</h1>
+  <div class="menu-subtitle">3D 起床战争</div>
+  <button class="menu-btn" id="profileBtn">玩家资料</button>
+  <button class="menu-btn" id="playBtn">选择模式 / 房间</button>
+  <button class="menu-btn" id="workshopBtn">创作工坊</button>
+  <div id="authStatus">请先登录</div>
+  <div id="roomStatus"></div>
+</div>
+<!-- 玩家资料 -->
+<div id="profilePanel" class="overlay-panel" style="display:none">
+  <button class="panel-close-btn">&times;</button>
+  <h2>玩家资料</h2>
+  <div id="profileInfo"><span id="profileNick">游客</span> / <span id="profileRank">未定级</span> / <span id="profilePass">通行证 Lv.0</span></div>
+  <div id="loginForm">
+    <input type="text" id="loginUser" placeholder="用户名">
+    <input type="password" id="loginPass" placeholder="密码">
+    <button id="loginBtn">登录</button><button id="registerBtn">注册</button>
+  </div>
+  <div id="profileLoginStatus"></div>
+</div>
+<!-- 模式选择 -->
+<div id="playOptionsPanel" class="overlay-panel" style="display:none">
+  <button class="panel-close-btn">&times;</button>
+  <h2>选择开战方式</h2>
+  <button id="createRoomBtn">创建房间</button>
+  <div style="margin:8px 0"><input id="roomCodeInput" placeholder="输入房间码"><button id="joinRoomBtn">加入房间</button></div>
+  <button id="localPlayBtn">本地试玩（需登录）</button>
+  <button id="reconnectBtn">断线重连</button>
+</div>
+<!-- 房间面板 -->
+<div id="roomPanel" class="overlay-panel" style="display:none;position:fixed;left:0;top:0;bottom:0;width:320px;overflow-y:auto;z-index:100">
+  <div class="room-panel-header">
+    <h2 id="roomPanelTitle">我的房间</h2><span id="roomPanelCode"></span><button class="panel-close-btn">&times;</button>
+  </div>
+  <div class="room-panel-section"><h3>玩家列表</h3><div id="roomMembers"></div></div>
+  <div class="room-panel-section"><h3>地图选择</h3>
+    <div id="roomMapSelect">
+      <div class="map-card selected" data-map="classic"><b>经典方块</b><p>四队基地环绕中心岛</p></div>
+      <div class="map-card" data-map="twilight"><b>暮色森林</b><p>树冠基地 / 迷雾封锁</p></div>
     </div>
   </div>
-
+  <div class="room-panel-section"><h3>模式选择</h3>
+    <div id="roomModeSelect">
+      <div class="mode-card selected" data-mode="classic">经典模式</div>
+      <div class="campus-option" data-mode="campus" onclick="selectMode('campus')">校园寻宝<p>潜入校园，搜集秘宝，安全撤离</p></div>
+    </div>
+  </div>
+  <div class="room-panel-section" id="teamSection"><h3>队伍选择</h3>
+    <button id="addAiBtn">添加AI替补（0/4）</button>
+    <div class="team-select">
+      <div class="team-btn" data-team="RED">红队</div><div class="team-btn" data-team="BLUE">蓝队</div>
+      <div class="team-btn" data-team="GREEN">绿队</div><div class="team-btn" data-team="YELLOW">黄队</div>
+    </div>
+  </div>
+  <div class="room-actions-row">
+    <button class="start-btn" id="roomStartBtn" style="display:none">请先登录</button>
+    <button class="start-btn" id="dissolveRoomBtn" style="display:none;background:#c44">解散房间</button>
+  </div>
+</div>
+<!-- 游戏HUD -->
+<div id="hud" style="display:none">
+  <div id="crosshair"></div><div id="teamInfo"></div>
+  <div id="hpBarOuter"><div id="hpBarInner"></div><span id="hpText">20/20</span></div>
+  <div id="armorBarOuter"><div id="armorBarInner"></div><span id="armorText">0/0</span></div>
+  <div id="resourceBar">
+    <span class="resource-item" id="res_copper">铜 0</span><span class="resource-item" id="res_silver">银 0</span>
+    <span class="resource-item" id="res_gold">金 0</span><span class="resource-item" id="res_jade">玉 0</span>
+  </div>
+  <div id="hotbar">
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+    <div class="hotbar-slot"><span class="item-icon"></span><span class="item-count"></span></div>
+  </div>
+  <canvas id="minimapCanvas" width="120" height="120"></canvas>
+  <button id="shopBtn">商店</button><button id="skillBtn">技能</button>
+  <button id="backpackBtn">背包</button><button id="growthBtn">成长</button>
+  <div id="gameMessages"></div><div id="killFeed"></div><div id="fpsCounter"></div>
+</div>
+<!-- 角色选择 -->
+<div id="startRolePanel" class="overlay-panel" style="display:none">
+  <h2>选择你的角色</h2><p>10秒内选择，超时默认狐狸</p>
+  <div id="startRoleCards"></div><div id="roleCatBar"></div>
+</div>
+<!-- 商店 -->
+<div id="shopPanel" style="display:none">
+  <div class="shop-header"><h3>商店</h3><button class="shop-close">&times;</button></div>
+  <div class="shop-tabs">
+    <button class="shop-tab" data-tab="build">建筑</button><button class="shop-tab" data-tab="weapon">武器</button>
+    <button class="shop-tab" data-tab="armor">防具</button><button class="shop-tab" data-tab="special">特殊</button>
+  </div>
+  <div id="shopGrid" class="shop-grid"></div>
+</div>
+<!-- 背包 -->
+<div id="backpackPanel" style="display:none">
+  <h3>背包</h3><button class="panel-close-btn">&times;</button><div id="backpackGrid"></div>
+</div>
+<!-- 建造面板 -->
+<div id="buildPanel" style="display:none">
+  <span id="buildHpText"></span>
+  <button id="upgradeBuildBtn">升级</button><button id="destroyBuildBtn">拆毁</button><button id="moveBuildBtn">移动</button>
+</div>
+<!-- 成长面板 -->
+<div id="growthPanel" style="display:none">
+  <h3>成长中心</h3><button class="panel-close-btn">&times;</button><div id="growthContent"></div>
+</div>
+<!-- 游戏结束 -->
+<div id="gameOverScreen" style="display:none">
+  <h1 class="result-title">游戏结束！</h1><p class="winner"></p>
+  <div class="stats"></div><div id="mvpSection"></div><div id="allyStatsSection"></div><div id="rankChange"></div>
+  <button onclick="location.reload()">返回主菜单</button>
+  <button id="earlyExitBtn" style="display:none">提前退出</button>
+</div>
+<!-- 快捷栏右键菜单 -->
+<div id="slotContextMenu" style="display:none">
+  <button data-action="split">拆分</button><button data-action="drop">丢弃</button>
+</div>
+<!-- 校园寻宝HUD -->
+<div id="campusHud" style="display:none">
+  <div id="campusTimer"></div><div id="campusStatus"></div><div id="campusWeight"></div><div id="campusEvent"></div>
+  <div id="campusBackpack"><h4>搜刮背包</h4><span id="campusBpCount">0/10</span><div id="campusBpGrid"></div></div>
+</div>
+<!-- 大地图 -->
+<div id="bigMapPanel" class="overlay-panel" style="display:none">
+  <canvas id="bigMapCanvas" width="400" height="400"></canvas>
+  <button class="panel-close-btn">&times;</button>
+</div>
+<!-- 移动端控制 -->
+<div id="mobileControls" style="display:none">
+  <div class="joystick-area" id="joystickArea"></div>
+  <div class="mobile-btn-group">
+    <button class="mobile-btn" id="mobileJumpBtn">跳</button><button class="mobile-btn" id="mobileAtkBtn">攻</button>
+    <button class="mobile-btn" id="mobileBuildBtn">建</button><button class="mobile-btn" id="mobileSkillBtn">技</button>
+  </div>
+</div>
+<!-- 联机状态 -->
+<div id="netBadge" style="display:none"></div>
+<!-- 创作工坊 -->
+<div id="workshopPanel" class="overlay-panel" style="display:none">
+  <button class="panel-close-btn">&times;</button>
+  <h2>创作工坊</h2>
+  <div><button id="newMapBtn">新建地图</button><button id="loadMapBtn">加载地图</button></div>
+  <div id="mapEditorTools"></div>
+  <div>
+    <label>铜生成速率 <input type="number" id="ruleCopper" value="1" min="0" step="0.5"></label><br>
+    <label>银生成速率 <input type="number" id="ruleSilver" value="0.5" min="0" step="0.5"></label><br>
+    <label>金生成速率 <input type="number" id="ruleGold" value="0.2" min="0" step="0.1"></label><br>
+    <label>玉生成速率 <input type="number" id="ruleJade" value="0.05" min="0" step="0.01"></label><br>
+    <label><input type="checkbox" id="ruleAdvRes" checked> 启用高级资源</label><br>
+    <button id="saveRuleBtn">保存</button><button id="resetRuleBtn">恢复默认</button><button id="testMapBtn">本地试玩</button>
+  </div>
+</div>
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="js/config.js?v=9"></script>
+<script defer src="js/network.js?v=9"></script>
+<script defer src="js/growth.js?v=9"></script>
+<script defer src="js/social.js?v=9"></script>
+<script defer src="js/chibi-models.js?v=9"></script>
+<script defer src="js/campus-mode.js?v=9"></script>
+<script defer src="js/campus-map.js?v=9"></script>
+<script defer src="js/engine.js?v=9"></script>
+<script defer src="js/ai-controller.js?v=9"></script>
+<script defer src="js/input.js?v=9"></script>
+<script defer src="js/ui.js?v=9"></script>
+<script defer src="js/game.js?v=9"></script>
+<script defer src="js/season-pass.js?v=9"></script>
+<script defer src="js/menu-features.js?v=9"></script>
+<script>
+/* 全局模式选择 */
+function selectMode(mode){
+  window._selectedMode=mode;
+  document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('selected'));
+  const m=document.querySelector('.mode-card[data-mode="'+mode+'"]');
+  if(m)m.classList.add('selected');
+  document.querySelectorAll('.campus-option').forEach(c=>c.classList.remove('selected'));
+  const co=document.querySelector('.campus-option[data-mode="campus"]');
+  if(co&&mode==='campus')co.classList.add('selected');
+  const ts=document.getElementById('teamSection'),ai=document.getElementById('addAiBtn'),sb=document.getElementById('roomStartBtn');
+  if(mode==='campus'){if(ts)ts.style.display='none';if(ai)ai.style.display='none';if(sb)sb.style.display='inline-block';}
+  else{if(ts)ts.style.display='';if(ai)ai.style.display='';if(sb)sb.style.display='none';}
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  let selectedTeam='RED',auth=null,netMgr=null,localOnly=false,lobbyAiSlots=0;
+  const $=id=>document.getElementById(id);
+  function updateStartBtn(){const b=$('roomStartBtn');if(!b)return;if(!auth||!auth.user){b.textContent='请先登录';b.style.display='none';return;}const m=window._selectedMode||'classic';b.textContent=m==='campus'?'开始寻宝':'开始游戏';b.style.display=localOnly?'inline-block':'none';}
+  function escapeHtml(s){if(!s)return '';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function setAuthStatus(t){const e=$('authStatus');if(e)e.textContent=t;}
+  function setRoomStatus(t){const e=$('roomStatus');if(e)e.textContent=t;}
+  function closePanel(id){const e=$(id);if(e)e.style.display='none';}
+  function closeAllLobbyPanels(){['profilePanel','playOptionsPanel','workshopPanel','roomPanel'].forEach(closePanel);}
+  function togglePanel(id){const e=$(id);if(e)e.style.display=e.style.display==='none'?'flex':'none';}
+  /* 队伍选择 */
+  document.querySelectorAll('.team-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.team-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');selectedTeam=btn.dataset.team;updateStartBtn();});});
+  /* 地图选择 */
+  document.querySelectorAll('.map-card').forEach(card=>{card.addEventListener('click',()=>{document.querySelectorAll('.map-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');});});
+  /* 模式卡片点击 */
+  document.querySelectorAll('.mode-card').forEach(card=>{card.addEventListener('click',()=>selectMode(card.dataset.mode));});
+  /* 主菜单按钮 */
+  $('profileBtn')?.addEventListener('click',()=>togglePanel('profilePanel'));
+  $('playBtn')?.addEventListener('click',()=>togglePanel('playOptionsPanel'));
+  $('workshopBtn')?.addEventListener('click',()=>togglePanel('workshopPanel'));
+  /* 创建房间 */
+  $('createRoomBtn')?.addEventListener('click',async()=>{if(!auth||!auth.user){closePanel('playOptionsPanel');$('profilePanel').style.display='';return;}try{if(netMgr?.createRoom){const r=await netMgr.createRoom();setRoomStatus('房间 '+(r.code||''));openRoomPanel();}}catch(e){setRoomStatus('创建失败: '+(e.message||e));}});
+  /* 加入房间 */
+  $('joinRoomBtn')?.addEventListener('click',async()=>{const c=$('roomCodeInput')?.value.trim();if(!c)return;if(!auth||!auth.user){closePanel('playOptionsPanel');$('profilePanel').style.display='';return;}try{if(netMgr?.joinRoom){await netMgr.joinRoom(c);openRoomPanel();}}catch(e){setRoomStatus('加入失败: '+(e.message||e));}});
+  /* 本地试玩 */
+  $('localPlayBtn')?.addEventListener('click',openLocalModePanel);
+  /* 断线重连 */
+  $('reconnectBtn')?.addEventListener('click',async()=>{try{if(netMgr?.reconnect){await netMgr.reconnect();setRoomStatus('重连成功');}}catch(e){setRoomStatus('重连失败: '+(e.message||e));}});
+  /* 游戏内按钮 */
+  document.querySelector('.shop-close')?.addEventListener('click',()=>window.game?.toggleShop?.());
+  $('shopBtn')?.addEventListener('click',()=>window.game?.toggleShop?.());
+  $('backpackBtn')?.addEventListener('click',()=>window.game?.toggleBackpack?.());
+  $('growthBtn')?.addEventListener('click',()=>window.game?.toggleGrowthPanel?.());
+  $('skillBtn')?.addEventListener('click',()=>window.game?.toggleSkill?.());
+  /* 解散房间 */
+  $('dissolveRoomBtn')?.addEventListener('click',async()=>{try{if(netMgr?.dissolveRoom)await netMgr.dissolveRoom();setRoomStatus('房间已解散');closePanel('roomPanel');$('mainMenu').style.display='';}catch(e){setRoomStatus('解散失败');}});
+  /* AI替补 */
+  $('addAiBtn')?.addEventListener('click',()=>{if(lobbyAiSlots<4){lobbyAiSlots++;updateAiButton();updateRoomMembers();}});
+  /* 开始游戏 */
+  $('roomStartBtn')?.addEventListener('click',()=>{
+    if(!auth||!auth.user){closeAllLobbyPanels();$('profilePanel').style.display='';return;}
+    const mode=window._selectedMode||'classic',mapCard=document.querySelector('.map-card.selected'),mapKey=mapCard?.dataset.map||'classic';
+    const playerName=auth.user.user_metadata?.nickname||auth.user.email||'玩家';
+    closeAllLobbyPanels();const hud=$('hud');if(hud)hud.style.display='none';const mm=$('mainMenu');if(mm)mm.style.display='none';
+    const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.5rem;z-index:9999';
+    ov.textContent='正在加载地图...';document.body.appendChild(ov);
+    requestAnimationFrame(()=>{setTimeout(async()=>{
+      try{if(window.game?.destroy)game.destroy();const c=document.createElement('canvas'),gl=c.getContext('webgl2')||c.getContext('webgl');
+      if(!gl){ov.textContent='浏览器不支持 WebGL';return;}
+      window.game=new Game();game.init({team:selectedTeam,mode,map:mapKey,playerName,localOnly,aiSlots:lobbyAiSlots,netMgr});
+      game.start();ov.remove();if(hud)hud.style.display='';const nb=$('netBadge');if(nb)nb.style.display=(netMgr&&!localOnly)?'':'none';
+      }catch(e){console.error(e);ov.textContent='加载失败: '+(e.message||e);setTimeout(()=>{ov.remove();if(mm)mm.style.display='';},2500);}
+    },80);});
+  });
+  /* 快捷栏右键菜单 */
+  const slotCtx=$('slotContextMenu');
+  document.addEventListener('contextmenu',e=>{if(e.target.closest?.('.hotbar-slot')){e.preventDefault();if(slotCtx){slotCtx.style.display='block';slotCtx.style.left=e.clientX+'px';slotCtx.style.top=e.clientY+'px';}}else if(slotCtx)slotCtx.style.display='none';});
+  document.addEventListener('click',e=>{if(slotCtx&&!slotCtx.contains(e.target))slotCtx.style.display='none';});
+  /* 准心点击 / 触摸 */
+  const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
+  if(!isMobile)document.addEventListener('mousedown',e=>window.game?.handlePointerAction?.(e.button));
+  if(isMobile)document.addEventListener('touchstart',e=>window.game?.handleTouch?.(e),{passive:false});
+  /* 面板关闭 */
+  document.querySelectorAll('.panel-close-btn').forEach(btn=>{btn.addEventListener('click',()=>{const p=btn.closest('.overlay-panel');if(p)p.style.display='none';});});
+  /* 登录/注册 */
+  $('loginBtn')?.addEventListener('click',async()=>{const u=$('loginUser'),p=$('loginPass'),st=$('profileLoginStatus');if(!u||!p)return;try{if(window.SupabaseClient){const{data,error}=await window.SupabaseClient.auth.signInWithPassword({email:u.value,password:p.value});if(error)throw error;auth=data;setAuthStatus('已登录: '+(data.user?.email||''));updateStartBtn();refreshRoomUI();if(st)st.textContent='登录成功';}}catch(e){if(st)st.textContent='登录失败: '+(e.message||e);}});
+  $('registerBtn')?.addEventListener('click',async()=>{const u=$('loginUser'),p=$('loginPass'),st=$('profileLoginStatus');if(!u||!p)return;try{if(window.SupabaseClient){const{error}=await window.SupabaseClient.auth.signUp({email:u.value,password:p.value});if(error)throw error;if(st)st.textContent='注册成功，请查收验证邮件';}}catch(e){if(st)st.textContent='注册失败: '+(e.message||e);}});
+  /* 认证状态监听 */
+  window.addEventListener('auth-changed',e=>{auth=e.detail;if(auth?.user)setAuthStatus('已登录: '+(auth.user.email||''));else{setAuthStatus('请先登录');auth=null;}updateStartBtn();refreshRoomUI();});
+  /* 工坊按钮 */
+  $('newMapBtn')?.addEventListener('click',()=>window.game?.editorNewMap?.());
+  $('loadMapBtn')?.addEventListener('click',()=>window.game?.editorLoadMap?.());
+  $('saveRuleBtn')?.addEventListener('click',()=>window.game?.saveRules?.());
+  $('resetRuleBtn')?.addEventListener('click',()=>window.game?.resetRules?.());
+  $('testMapBtn')?.addEventListener('click',()=>window.game?.testMap?.());
+  /* 遗留函数定义 */
+  function openLocalModePanel(){localOnly=true;closeAllLobbyPanels();$('roomPanel')&&($('roomPanel').style.display='block');$('mainMenu')&&($('mainMenu').style.display='none');updateRoomMembers();updateStartBtn();}
+  function updateAiButton(){const b=$('addAiBtn');if(b)b.textContent='添加AI替补（'+lobbyAiSlots+'/4）';}
+  function openRoomPanel(){closeAllLobbyPanels();$('roomPanel')&&($('roomPanel').style.display='block');$('mainMenu')&&($('mainMenu').style.display='none');updateRoomMembers();}
+  function updateRoomMembers(){const el=$('roomMembers');if(!el)return;if(netMgr?.members){el.innerHTML=netMgr.members.map(m=>'<div>'+escapeHtml(m.name||m)+'</div>').join('');}else{const n=auth?.user?(auth.user.user_metadata?.nickname||auth.user.email||'玩家'):'游客';el.innerHTML='<div>'+escapeHtml(n)+'</div>';}}
+  function refreshRoomUI(){updateRoomMembers();updateAiButton();updateStartBtn();}
+  window.setRoomStatus=setRoomStatus;window.closePanel=closePanel;window.closeAllLobbyPanels=closeAllLobbyPanels;
+  window.escapeHtml=escapeHtml;window.setAuthStatus=setAuthStatus;window.updateStartBtn=updateStartBtn;
+  window.updateAiButton=updateAiButton;window.openLocalModePanel=openLocalModePanel;
+  window.openRoomPanel=openRoomPanel;window.updateRoomMembers=updateRoomMembers;window.refreshRoomUI=refreshRoomUI;
+});
+</script>
 </body>
 </html>

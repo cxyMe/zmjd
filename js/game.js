@@ -1,1050 +1,8 @@
 // ============================================
-// 3D BED WARS GAME - Logic, AI, UI, Input
+// 筑梦激斗（3D起床战争）- Game 核心类
+// 输入管理器已提取到 input.js，UI管理器已提取到 ui.js
 // ============================================
 
-class InputManager {
-  constructor() {
-    this.keys = {};
-    this.mouse = { dx: 0, dy: 0, locked: false };
-    this.buildPointer = null;
-    this.touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
-    this.joystick = { active: false, dx: 0, dy: 0 };
-    this.buttons = { jump: false, attack: false, attackHeld: false, build: false, skill: false, skillHeld: false, action: false, actionHeld: false };
-    this.lookSensitivity = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
-    this.lastTouchAction = { x: 0, y: 0 };
-    this._handlers = [];
-
-    // Keyboard
-    const onKeyDown = e => {
-      this.keys[e.code] = true;
-      if (['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','Tab'].includes(e.code)) e.preventDefault();
-      // 地图编辑器快捷键
-      if (window.game?.engine?.mapEditor?.active) {
-        if (e.code === 'Escape') {
-          window.game.engine.mapEditor.deactivate();
-          document.getElementById('workshopPanel').style.display = 'flex';
-          document.getElementById('hud').style.display = 'none';
-          const mapEditorTools = document.getElementById('mapEditorTools');
-          if (mapEditorTools) mapEditorTools.style.display = 'none';
-          e.preventDefault();
-        }
-        if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) {
-          window.game.engine.mapEditor.undo();
-          e.preventDefault();
-        }
-        if (e.code === 'KeyY' && (e.ctrlKey || e.metaKey)) {
-          window.game.engine.mapEditor.redo();
-          e.preventDefault();
-        }
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    this._handlers.push({ target: document, type: 'keydown', fn: onKeyDown });
-
-    const onKeyUp = e => {
-      this.keys[e.code] = false;
-      if (e.code === 'KeyQ') this.buttons.skill = true;
-    };
-    document.addEventListener('keyup', onKeyUp);
-    this._handlers.push({ target: document, type: 'keyup', fn: onKeyUp });
-
-    // Mouse
-    const onMouseMove = e => {
-      if (document.pointerLockElement) {
-        this.mouse.dx += e.movementX;
-        this.mouse.dy += e.movementY;
-      }
-    };
-    document.addEventListener('mousemove', onMouseMove);
-    this._handlers.push({ target: document, type: 'mousemove', fn: onMouseMove });
-
-    const onMouseDown = e => {
-      if (e.target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel, #buildPanel, #timedAction')) return;
-      // 地图编辑器模式下，点击传递给编辑器
-      if (window.game?.engine?.mapEditor?.active) {
-        window.game.engine.mapEditor.onClick(e.clientX, e.clientY, e.button === 2);
-        e.preventDefault();
-        return;
-      }
-      if (e.button === 0) { this.buttons.attack = true; this.buttons.attackHeld = true; }
-      if (e.button === 2) {
-        this.buttons.build = true;
-        this.buildPointer = document.pointerLockElement
-          ? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
-          : { x: e.clientX, y: e.clientY };
-      }
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    this._handlers.push({ target: document, type: 'mousedown', fn: onMouseDown });
-
-    const onMouseUp = e => {
-      if (e.button === 0) { this.buttons.attack = false; this.buttons.attackHeld = false; }
-      if (e.button === 2) this.buttons.build = false;
-    };
-    document.addEventListener('mouseup', onMouseUp);
-    this._handlers.push({ target: document, type: 'mouseup', fn: onMouseUp });
-
-    const onCtxMenu = e => e.preventDefault();
-    document.addEventListener('contextmenu', onCtxMenu);
-    this._handlers.push({ target: document, type: 'contextmenu', fn: onCtxMenu });
-
-    // Mouse wheel for hotbar
-    const onWheel = e => {
-      this.mouse.scroll = Math.sign(e.deltaY);
-    };
-    document.addEventListener('wheel', onWheel, { passive: true });
-    this._handlers.push({ target: document, type: 'wheel', fn: onWheel, opts: { passive: true } });
-
-    // Lock pointer on click
-    const canvas = document.getElementById('gameCanvas');
-    if (canvas) {
-      const onCanvasClick = () => {
-        if (window.game?.gameActive && !this.isMobile()) {
-          canvas.requestPointerLock();
-        }
-      };
-      canvas.addEventListener('click', onCanvasClick);
-      this._handlers.push({ target: canvas, type: 'click', fn: onCanvasClick });
-    }
-
-    const onPointerLockChange = () => {
-      this.mouse.locked = !!document.pointerLockElement;
-    };
-    document.addEventListener('pointerlockchange', onPointerLockChange);
-    this._handlers.push({ target: document, type: 'pointerlockchange', fn: onPointerLockChange });
-
-    const isGameUiTarget = (target) => target.closest?.('#mobileControls, #shopBtn, #layoutBtn, #skillBtn, #rescueBtn, #hotbar, #resourceBar, #playerStatus, #teamInfo, #minimap, #shopPanel, #backpackPanel, #growthPanel, #layoutPanel, #socialPanel, #markWheel, #teamChestPanel, #startRolePanel');
-    const onTouchStart = e => {
-      if (!window.game?.gameActive || !this.isMobile()) return;
-      if (isGameUiTarget(e.target)) return;
-      const t = e.changedTouches[0];
-      const lp = window.game.localPlayer;
-      const item = lp?.getSelectedItem();
-      const info = item ? ITEM_DB[item.key] : null;
-      if (info?.type === 'block') {
-        lp.placeBlock({ x: t.clientX, y: t.clientY }, true);
-      } else {
-        const rc = window.game.engine.raycastPlacement(t.clientX, t.clientY, 5);
-        if (rc.hit && rc.baseKey) {
-          const blk = window.game.engine.blocks.get(rc.baseKey);
-          if (blk && blk.type !== 'ground') {
-            window.game.selectedBlockKey = rc.baseKey;
-            const panel = document.getElementById('buildPanel');
-            const hpText = document.getElementById('buildHpText');
-            const blockInfo = ITEM_DB[blk.type];
-            if (hpText) hpText.textContent = `${blockInfo?.name || '建筑'} 血量：${Math.ceil(blk.hp)}/${blk.maxHp}`;
-            if (panel) panel.style.display = 'block';
-            if (document.pointerLockElement) document.exitPointerLock();
-          }
-        }
-      }
-      this.touchLook.active = true;
-      this.touchLook.id = t.identifier;
-      this.touchLook.lastX = t.clientX;
-      this.touchLook.lastY = t.clientY;
-    };
-    document.addEventListener('touchstart', onTouchStart, { passive: true });
-    this._handlers.push({ target: document, type: 'touchstart', fn: onTouchStart, opts: { passive: true } });
-
-    const onTouchMove = e => {
-      if (!this.touchLook.active || !window.game?.gameActive || !this.isMobile()) return;
-      const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
-      if (!t) return;
-      const sens = parseFloat(localStorage.getItem('bedwars_look_sensitivity')) || 1.8;
-      this.mouse.dx += (t.clientX - this.touchLook.lastX) * sens * 0.8;
-      this.mouse.dy += (t.clientY - this.touchLook.lastY) * sens * 0.6;
-      this.touchLook.lastX = t.clientX;
-      this.touchLook.lastY = t.clientY;
-    };
-    document.addEventListener('touchmove', onTouchMove, { passive: true });
-    this._handlers.push({ target: document, type: 'touchmove', fn: onTouchMove, opts: { passive: true } });
-
-    const endLook = (e) => {
-      if (!this.touchLook.active) return;
-      const t = Array.from(e.changedTouches).find(x => x.identifier === this.touchLook.id);
-      if (!t) return;
-      this.touchLook.active = false;
-      this.touchLook.id = null;
-    };
-    document.addEventListener('touchend', endLook, { passive: true });
-    this._handlers.push({ target: document, type: 'touchend', fn: endLook, opts: { passive: true } });
-    document.addEventListener('touchcancel', endLook, { passive: true });
-    this._handlers.push({ target: document, type: 'touchcancel', fn: endLook, opts: { passive: true } });
-
-    // Mobile touch
-    this.setupMobile();
-    // 强制确保移动端控件可见（CSS媒体查询可能不被某些移动浏览器正确匹配）
-    this._ensureMobileControls();
-  }
-
-  destroy() {
-    for (const h of this._handlers) {
-      h.target.removeEventListener(h.type, h.fn, h.opts);
-    }
-    this._handlers = [];
-  }
-
-  isMobile() {
-    return window.matchMedia('(hover: none) and (pointer: coarse)').matches
-      || window.matchMedia('(pointer: coarse)').matches
-      || ('ontouchstart' in window && window.innerWidth <= 1024)
-      || (navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
-  }
-
-  _ensureMobileControls() {
-    // 在任何有触摸能力的设备上强制显示
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    if (!hasTouch) return;
-    const mc = document.getElementById('mobileControls');
-    if (mc) {
-      mc.style.setProperty('display', 'block', 'important');
-    }
-  }
-
-  setupMobile() {
-    const joyBase = document.getElementById('joystickBase');
-    const joyKnob = document.getElementById('joystickKnob');
-    const zone = document.getElementById('joystickZone');
-    if (!zone) return;
-
-    zone.addEventListener('touchstart', e => {
-      e.preventDefault();
-      const t = e.touches[0];
-      const rect = zone.getBoundingClientRect();
-      this.joystick.active = true;
-      this.joystick.originX = rect.left + rect.width / 2;
-      this.joystick.originY = rect.top + rect.height / 2;
-    }, { passive: false });
-
-    zone.addEventListener('touchmove', e => {
-      e.preventDefault();
-      if (!this.joystick.active) return;
-      const t = e.touches[0];
-      const maxR = 50;
-      let dx = t.clientX - this.joystick.originX;
-      let dy = t.clientY - this.joystick.originY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > maxR) { dx = (dx / dist) * maxR; dy = (dy / dist) * maxR; }
-      this.joystick.dx = dx / maxR;
-      this.joystick.dy = dy / maxR;
-      if (joyKnob) { joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; }
-    }, { passive: false });
-
-    const endJoy = (e) => {
-      e.preventDefault();
-      this.joystick.active = false;
-      this.joystick.dx = 0;
-      this.joystick.dy = 0;
-      if (joyKnob) joyKnob.style.transform = 'translate(-50%, -50%)';
-    };
-    zone.addEventListener('touchend', endJoy);
-    zone.addEventListener('touchcancel', endJoy);
-
-    // Mobile buttons
-    const bindBtn = (id, key) => {
-      const btn = document.getElementById(id);
-      if (!btn) return;
-      btn.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; this.lastTouchAction.x = t.clientX; this.lastTouchAction.y = t.clientY; this.buttons[key] = true; if (key === 'action') this.buttons.actionHeld = true; });
-      btn.addEventListener('touchend', e => { e.preventDefault(); this.buttons[key] = false; if (key === 'action') this.buttons.actionHeld = false; });
-      btn.addEventListener('touchcancel', e => { e.preventDefault(); this.buttons[key] = false; if (key === 'action') this.buttons.actionHeld = false; });
-    };
-    bindBtn('jumpBtnMobile', 'jump');
-    bindBtn('actionBtnMobile', 'action');
-    // Skill button with hold support
-    const skillBtn = document.getElementById('skillBtn');
-    if (skillBtn) {
-      skillBtn.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; this.lastTouchAction.x = t.clientX; this.lastTouchAction.y = t.clientY; this.buttons.skillHeld = true; });
-      skillBtn.addEventListener('touchend', e => { e.preventDefault(); this.buttons.skillHeld = false; this.buttons.skill = true; });
-      skillBtn.addEventListener('touchcancel', e => { e.preventDefault(); this.buttons.skillHeld = false; });
-      skillBtn.addEventListener('mousedown', e => { e.preventDefault(); this.buttons.skillHeld = true; });
-      skillBtn.addEventListener('mouseup', e => { e.preventDefault(); this.buttons.skillHeld = false; this.buttons.skill = true; });
-      skillBtn.addEventListener('mouseleave', e => { if (this.buttons.skillHeld) { this.buttons.skillHeld = false; this.buttons.skill = true; } });
-    }
-
-    // 移动端视角缩放
-    const zoomSlider = document.getElementById('zoomSlider');
-    const zoomThumb = document.getElementById('zoomThumb');
-    if (zoomSlider && zoomThumb) {
-      let zoomTouch = { active: false, id: null, startY: 0, startFov: 70 };
-      zoomSlider.addEventListener('touchstart', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const t = e.changedTouches[0];
-        zoomTouch.active = true;
-        zoomTouch.id = t.identifier;
-        zoomTouch.startY = t.clientY;
-        zoomTouch.startFov = window.game?.engine?.camera?.fov || 70;
-      }, { passive: false });
-      zoomSlider.addEventListener('touchmove', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        if (!zoomTouch.active) return;
-        const t = Array.from(e.changedTouches).find(x => x.identifier === zoomTouch.id);
-        if (!t) return;
-        const dy = t.clientY - zoomTouch.startY;
-        // 向上滑=放大(fov减小)，向下滑=缩小(fov增大)
-        const fov = Math.max(40, Math.min(90, zoomTouch.startFov - dy * 0.3));
-        const cam = window.game?.engine?.camera;
-        if (cam) { cam.fov = fov; cam.updateProjectionMatrix(); }
-        const pct = ((90 - fov) / 50) * 100;
-        zoomThumb.style.top = `${50 - pct * 0.5}%`;
-      }, { passive: false });
-      const endZoom = (e) => { zoomTouch.active = false; };
-      zoomSlider.addEventListener('touchend', endZoom);
-      zoomSlider.addEventListener('touchcancel', endZoom);
-    }
-  }
-
-  getMovement() {
-    if (this.isMobile() && this.joystick.active) {
-      const joyMult = 1.3; // 移动端摇杆灵敏度加成
-      return { x: this.joystick.dx * joyMult, z: -this.joystick.dy * joyMult };
-    }
-    let x = 0, z = 0;
-    if (this.keys['KeyW'] || this.keys['ArrowUp']) z += 1;
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) z -= 1;
-    if (this.keys['KeyA'] || this.keys['ArrowLeft']) x -= 1;
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) x += 1;
-    return { x, z };
-  }
-
-  getLook() {
-    const dx = this.mouse.dx;
-    const dy = this.mouse.dy;
-    this.mouse.dx = 0;
-    this.mouse.dy = 0;
-    return { dx, dy };
-  }
-
-  isDown(code) { return !!this.keys[code]; }
-  consumeAttack() { const v = this.buttons.attack; this.buttons.attack = false; return v; }
-  consumeAction() { const v = this.buttons.action; this.buttons.action = false; return v; }
-  isAttackHeld() { return !!this.buttons.attackHeld; }
-  isActionHeld() { return !!this.buttons.actionHeld; }
-  isBuildHeld() { return !!this.buttons.build; }
-  consumeBuild() {
-    const v = this.buttons.build;
-    this.buttons.build = false;
-    const target = this.buildPointer;
-    this.buildPointer = null;
-    return v ? (target || { x: window.innerWidth / 2, y: window.innerHeight / 2 }) : null;
-  }
-  consumeJump() { const v = this.buttons.jump || this.keys['Space']; this.buttons.jump = false; this.keys['Space'] = false; return v; }
-  consumeSkill() { const v = this.buttons.skill; this.buttons.skill = false; return v; }
-  consumeDrop() { const v = this.keys['KeyG']; this.keys['KeyG'] = false; return v; }
-  consumeBackpack() { const v = this.keys['Tab']; this.keys['Tab'] = false; return v; }
-  getHotbarScroll() {
-    const v = this.mouse.scroll || 0;
-    this.mouse.scroll = 0;
-    return v;
-  }
-}
-
-// ============================================
-// AI System
-// ============================================
-class AISystem {
-  constructor(game) {
-    this.game = game;
-  }
-
-  update(bot, dt) {
-    if (bot.isDead) return;
-    const state = bot.aiState || 'collect';
-    const pos = bot.pos;
-
-    // Danger check
-    let nearestEnemy = null;
-    let nearestDist = 999;
-    for (const p of this.game.players) {
-      if (p === bot || p.isDead || p.team === bot.team) continue;
-      const d = p.pos.distanceTo(pos);
-      if (d < nearestDist) { nearestDist = d; nearestEnemy = p; }
-    }
-
-    // State transitions
-    if (nearestEnemy && nearestDist < 4 && bot.hp < 40) {
-      bot.aiState = 'retreat';
-    } else if (nearestEnemy && nearestDist < bot.attackRange + 1) {
-      bot.aiState = 'attack';
-    } else if (bot.aiState === 'attack' && (!nearestEnemy || nearestDist > 8)) {
-      bot.aiState = 'collect';
-    } else if (bot.aiState === 'retreat' && (!nearestEnemy || nearestDist > 10) && bot.hp > 60) {
-      bot.aiState = 'collect';
-    }
-
-    // Auto-buy when near base
-    const baseDist = pos.distanceTo(bot.teamInfo.spawn);
-    if (baseDist < 8) {
-      this.autoBuy(bot);
-    }
-
-    // State behavior
-    let target = null;
-    switch (bot.aiState) {
-      case 'collect': {
-        // Go to nearest resource gen
-        let best = null, bestD = 999;
-        for (const g of this.game.gens) {
-          if (g.active === false) continue;
-          if (g.type === 'COPPER' && g.team !== bot.team) continue;
-          const d = g.pos.distanceTo(pos);
-          if (d < bestD) { bestD = d; best = g.pos; }
-        }
-        target = best;
-        break;
-      }
-      case 'attack': {
-        if (nearestEnemy) target = nearestEnemy.pos.clone();
-        else {
-          // Go attack enemy bed
-          for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-            if (tkey === bot.team) continue;
-            if (tinfo.bedAlive) { target = tinfo.bedPos.clone(); break; }
-          }
-        }
-        break;
-      }
-      case 'retreat': {
-        target = bot.teamInfo.spawn.clone();
-        break;
-      }
-    }
-
-    if (!target) target = bot.teamInfo.spawn.clone();
-
-    // Move toward target
-    const dir = new THREE.Vector3().subVectors(target, pos);
-    dir.y = 0;
-    const dist = dir.length();
-    if (dist > 0.5) {
-      dir.normalize();
-      const spd = bot.speed;
-      bot.vel.x = dir.x * spd;
-      bot.vel.z = dir.z * spd;
-
-      // Face target
-      bot.yaw = Math.atan2(dir.x, dir.z) + Math.PI;
-
-      // Bridge if needed
-      const forward = new THREE.Vector3(-Math.sin(bot.yaw), 0, -Math.cos(bot.yaw));
-      const front = pos.clone().addScaledVector(forward, 1);
-      const groundH = bot.getGroundHeight(front.x, front.z);
-      const woodCount = this.getBlockCount(bot, 'wood_plank');
-      if (groundH < -5 && woodCount > 0) {
-        const bx = Math.floor(front.x);
-        const by = Math.floor(pos.y - bot.radius);
-        const bz = Math.floor(front.z);
-        if (this.game.engine.placeBlock(bx, by, bz, 'wood_plank', bot.team)) {
-          this.consumeBlock(bot, 'wood_plank', 1);
-        }
-      }
-
-      // Jump if obstacle
-      const head = pos.clone().addScaledVector(forward, 0.6);
-      head.y += 0.5;
-      const key = this.game.engine.getBlockKey(head.x, head.y, head.z);
-      if (this.game.engine.blocks.has(key) && bot.onGround) {
-        bot.jump();
-      }
-    } else {
-      bot.vel.x = 0;
-      bot.vel.z = 0;
-    }
-
-    // Attack
-    if (bot.aiState === 'attack' && nearestEnemy && nearestDist < bot.attackRange) {
-      bot.attack();
-    }
-    // Attack bed
-    if (bot.aiState === 'attack') {
-      for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-        if (tkey === bot.team) continue;
-        if (tinfo.bedAlive && pos.distanceTo(tinfo.bedPos) < bot.attackRange + 2) {
-          bot.attack();
-          break;
-        }
-      }
-    }
-  }
-
-  autoBuy(bot) {
-    const res = bot.inv;
-    const woodCount = bot.hotbar.reduce((s, slot) => s + (slot && slot.key === 'wood_plank' ? slot.count : 0), 0)
-      + bot.backpack.reduce((s, slot) => s + (slot && slot.key === 'wood_plank' ? slot.count : 0), 0);
-    // Buy blocks
-    if (woodCount < 64) {
-      const cost = ITEM_DB.wood_plank.cost.copper;
-      if ((res.copper || 0) >= cost) {
-        res.copper -= cost;
-        bot.addToBackpack('wood_plank', 1);
-      }
-    }
-    // Buy weapon
-    const hasWeapon = bot.equipped.weapon;
-    const weaponTier = hasWeapon ? (hasWeapon.includes('diamond') ? 4 : hasWeapon.includes('iron') ? 3 : hasWeapon.includes('stone') ? 2 : 1) : 0;
-    if (weaponTier < 2 && (res.silver || 0) >= 8) {
-      res.silver -= 8;
-      bot.addToBackpack('stone_sword');
-      bot.equip('stone_sword');
-    } else if (weaponTier < 3 && (res.gold || 0) >= 4) {
-      res.gold -= 4;
-      bot.addToBackpack('iron_sword');
-      bot.equip('iron_sword');
-    } else if (weaponTier < 4 && (res.jade || 0) >= 2) {
-      res.jade -= 2;
-      bot.addToBackpack('diamond_sword');
-      bot.equip('diamond_sword');
-    }
-    // Buy armor
-    if (!bot.equipped.armor && (res.gold || 0) >= 8) {
-      res.gold -= 8;
-      bot.addToBackpack('std_armor');
-      bot.equip('std_armor');
-    }
-    // Buy arrows if has bow
-    if (bot.equipped.weapon === 'bow' && bot.arrowCount < 16 && (res.silver || 0) >= 2) {
-      res.silver -= 2;
-      bot.addToBackpack('arrow');
-    }
-    // Buy bow
-    if (!bot.equipped.weapon && (res.silver || 0) >= 12) {
-      res.silver -= 12;
-      bot.addToBackpack('bow');
-      bot.equip('bow');
-    }
-  }
-
-  getBlockCount(bot, key) {
-    return bot.hotbar.reduce((s, slot) => s + (slot && slot.key === key ? slot.count : 0), 0)
-      + bot.backpack.reduce((s, slot) => s + (slot && slot.key === key ? slot.count : 0), 0);
-  }
-
-  consumeBlock(bot, key, count = 1) {
-    // 优先消耗快捷栏
-    for (let i = 0; i < bot.hotbar.length; i++) {
-      if (bot.hotbar[i] && bot.hotbar[i].key === key) {
-        const take = Math.min(count, bot.hotbar[i].count);
-        bot.hotbar[i].count -= take;
-        count -= take;
-        if (bot.hotbar[i].count <= 0) bot.hotbar[i] = null;
-        if (count <= 0) return true;
-      }
-    }
-    // 再消耗背包
-    for (let i = 0; i < bot.backpack.length; i++) {
-      if (bot.backpack[i] && bot.backpack[i].key === key) {
-        const take = Math.min(count, bot.backpack[i].count);
-        bot.backpack[i].count -= take;
-        count -= take;
-        if (bot.backpack[i].count <= 0) bot.backpack[i] = null;
-        if (count <= 0) return true;
-      }
-    }
-    return false;
-  }
-}
-
-// ============================================
-// UI Manager
-// ============================================
-class UIManager {
-  constructor(game) {
-    this.game = game;
-    this.shopOpen = false;
-    this.shopTab = 'blocks';
-    this.bigMapOpen = false;
-    this._minimapClickBound = this._onMinimapClick.bind(this);
-    const minimap = document.getElementById('minimap');
-    if (minimap) minimap.addEventListener('click', this._minimapClickBound);
-    const bigMapClose = document.getElementById('bigMapCloseBtn');
-    if (bigMapClose) bigMapClose.addEventListener('click', () => this.toggleBigMap(false));
-  }
-
-  _onMinimapClick() {
-    this.toggleBigMap(true);
-  }
-
-  toggleBigMap(show) {
-    this.bigMapOpen = show;
-    const panel = document.getElementById('bigMapPanel');
-    if (panel) panel.style.display = show ? 'flex' : 'none';
-    if (show) this.drawBigMap();
-    if (show && document.pointerLockElement) document.exitPointerLock();
-    else if (!show && window.game?.gameActive && !window.game?.input?.isMobile?.()) {
-      window.game.engine.renderer.domElement.requestPointerLock();
-    }
-  }
-
-  update() {
-    const lp = this.game.localPlayer;
-    if (!lp) return;
-    const hud = document.getElementById('hud');
-    if (hud) hud.classList.toggle('dead-state', !!lp.isDead);
-    const countdown = document.getElementById('respawnCountdown');
-    const hint = document.getElementById('respawnHint');
-    if (lp.isDead && countdown) {
-      countdown.textContent = lp.pendingElimination
-        ? '床已被摧毁，无法复活'
-        : `还剩 ${Math.max(0, Math.ceil(lp.respawnTimer))} 秒复活`;
-      if (hint) hint.textContent = lp.pendingElimination ? '等待队友获胜或对局结束' : '床仍存在，正在寻找安全复活点';
-    }
-
-    // Resources
-    const r = lp.inv;
-    const $ = id => document.getElementById(id);
-    const resC = $('resCopper'), resS = $('resSilver'), resG = $('resGold'), resJ = $('resJade');
-    if (resC) resC.textContent = Math.floor(r.copper || 0);
-    if (resS) resS.textContent = Math.floor(r.silver || 0);
-    if (resG) resG.textContent = Math.floor(r.gold || 0);
-    if (resJ) resJ.textContent = Math.floor(r.jade || 0);
-
-    // HP / Armor
-    const hpF = $('hpFill'), hpT = $('hpText'), arF = $('armorFill'), arT = $('armorText');
-    if (hpF) hpF.style.width = `${(lp.hp / lp.maxHp) * 100}%`;
-    if (hpT) hpT.textContent = `${Math.ceil(lp.hp)}/${lp.maxHp}`;
-    if (arF) arF.style.width = `${lp.armorMax ? Math.min(100, (lp.armor / lp.armorMax) * 100) : 0}%`;
-    if (arT) arT.textContent = `${Math.ceil(lp.armor)}${lp.armorMax ? '/' + lp.armorMax : ''}`;
-    const currentNeed = GROWTH_CONFIG.levelXp[lp.matchLevel - 1] || 0;
-    const nextNeed = GROWTH_CONFIG.levelXp[lp.matchLevel] || GROWTH_CONFIG.levelXp[GROWTH_CONFIG.levelXp.length - 1];
-    const xpPct = lp.matchLevel >= GROWTH_CONFIG.maxInMatchLevel ? 100 : ((lp.matchXp - currentNeed) / Math.max(1, nextNeed - currentNeed)) * 100;
-    const xpF = $('xpFill'), xpT = $('xpText');
-    if (xpF) xpF.style.width = `${Math.max(0, Math.min(100, xpPct))}%`;
-    if (xpT) xpT.textContent = `Lv.${lp.matchLevel}`;
-
-    // Timer
-    const mins = Math.floor(this.game.gameTime / 60);
-    const secs = Math.floor(this.game.gameTime % 60);
-    const timerEl = document.getElementById('gameTimer');
-    if (timerEl) timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-    if (this.game.shrinkActive && timerEl) timerEl.style.color = '#ff4444';
-
-    // Team info
-    const tinfo = document.getElementById('teamInfo');
-    if (tinfo) {
-      const bedAlive = lp.teamInfo.bedAlive;
-      tinfo.querySelector('.bed-status').innerHTML = bedAlive
-        ? '<span class="bed-alive">床: 安全</span>'
-        : '<span class="bed-dead">床: 已摧毁</span>';
-      const alive = this.game.players.filter(p => p.team === lp.team && !p.isDead).length;
-      const total = this.game.players.filter(p => p.team === lp.team).length;
-      tinfo.querySelector('.players').textContent = `队友存活: ${alive}/${total}`;
-    }
-
-    // Hotbar (8 slots)
-    for (let i = 0; i < 8; i++) {
-      const slot = document.getElementById(`slot${i}`);
-      if (!slot) continue;
-      const item = lp.hotbar[i];
-      slot.querySelector('.slot-name').textContent = item ? ITEM_DB[item.key]?.name?.slice(0, 3) || '?' : '';
-      const info = item ? ITEM_DB[item.key] : null;
-      const extra = item && info?.durability ? `耐${item.durability ?? info.durability}` : item?.usesLeft ? `用${item.usesLeft}` : (item?.count > 1 ? item.count : '');
-      slot.querySelector('.slot-count').textContent = item ? extra : '';
-      if (lp.hotbarIndex === i) slot.classList.add('active');
-      else slot.classList.remove('active');
-    }
-
-    // Minimap
-    this.drawMinimap();
-
-    // Skill CD
-    const skillBtn = document.getElementById('skillBtn');
-    if (skillBtn) {
-      if (!lp.isDead) skillBtn.style.display = 'flex';
-      if (lp.skillCd > 0) {
-        skillBtn.querySelector('.skill-cd').textContent = Math.ceil(lp.skillCd) + 's';
-        skillBtn.style.opacity = '0.5';
-      } else {
-        skillBtn.querySelector('.skill-cd').textContent = '就绪';
-        skillBtn.style.opacity = '1';
-      }
-    }
-
-    // 传送硬币蓄力显示
-    const teleportIndicator = document.getElementById('teleportCharge');
-    if (teleportIndicator) {
-      if (lp.teleportCoinCharge > 0) {
-        const dist = Math.min(20, Math.round(lp.teleportCoinCharge * 0.5));
-        teleportIndicator.textContent = `传送硬币: ${dist}格`;
-        teleportIndicator.style.display = 'block';
-      } else {
-        teleportIndicator.style.display = 'none';
-      }
-    }
-
-    // 弓蓄力显示
-    const bowIndicator = document.getElementById('bowCharge');
-    if (bowIndicator) {
-      if (lp.bowCharge > 0) {
-        const pct = Math.min(100, Math.round((lp.bowCharge / 4) * 100));
-        const dist = Math.round(4 + lp.bowCharge * 3);
-        bowIndicator.textContent = `蓄力 ${pct}% | 射程 ${dist}格`;
-        bowIndicator.style.display = 'block';
-      } else {
-        bowIndicator.style.display = 'none';
-      }
-    }
-
-    // 探测仪 HUD
-    const detectorHud = document.getElementById('detectorHud');
-    if (detectorHud) {
-      if (lp.detectorEnemyCount > 0) {
-        detectorHud.textContent = `探测仪: 附近 ${lp.detectorEnemyCount} 名敌人`;
-        detectorHud.style.display = 'block';
-      } else {
-        detectorHud.style.display = 'none';
-      }
-    }
-
-    // 状态药水计时器显示
-    const statusBar = document.getElementById('statusEffects');
-    if (statusBar) {
-      const effects = [];
-      if (lp.hasRevivalToken) effects.push('<span class="eff-revival">复活金牌</span>');
-      if (lp.speedPotionTimer > 0) effects.push(`<span class="eff-speed">极速 ${lp.speedPotionTimer.toFixed(1)}s</span>`);
-      if (lp.burstPotionTimer > 0) effects.push(`<span class="eff-burst">爆发 ${lp.burstPotionTimer.toFixed(1)}s</span>`);
-      if (lp.hurricaneDamageTimer > 0) effects.push(`<span class="eff-hurricane">飓风 ${lp.hurricaneDamageTimer.toFixed(1)}s</span>`);
-      if (lp.camouflageTimer > 0) effects.push(`<span class="eff-camo">隐身 ${lp.camouflageTimer.toFixed(1)}s</span>`);
-      if (lp.jetpackTimer > 0) effects.push(`<span class="eff-jetpack">喷气 ${lp.jetpackTimer.toFixed(1)}s</span>`);
-      if (lp.frostTimer > 0 || lp.rootTimer > 0) effects.push(`<span class="eff-frozen">冰冻 ${Math.max(lp.frostTimer||0, lp.rootTimer||0).toFixed(1)}s</span>`);
-      const camoOverlay = document.getElementById('camoOverlay');
-      if (camoOverlay) {
-        if (lp.camouflageTimer > 0) {
-          camoOverlay.style.display = 'block';
-          document.getElementById('camoTime').textContent = lp.camouflageTimer.toFixed(1);
-        } else {
-          camoOverlay.style.display = 'none';
-        }
-      }
-      // 高能人悬浮时间HUD
-      const jetpackOverlay = document.getElementById('jetpackOverlay');
-      if (jetpackOverlay) {
-        if (lp.jetpackTimer > 0) {
-          jetpackOverlay.style.display = 'block';
-          document.getElementById('jetpackTime').textContent = lp.jetpackTimer.toFixed(1);
-        } else {
-          jetpackOverlay.style.display = 'none';
-        }
-      }
-      // 冰冻状态HUD
-      const frostOverlay = document.getElementById('frostOverlay');
-      if (frostOverlay) {
-        if (lp.frostTimer > 0 || lp.rootTimer > 0) {
-          frostOverlay.style.display = 'block';
-          document.getElementById('frostTime').textContent = Math.max(lp.frostTimer || 0, lp.rootTimer || 0).toFixed(1);
-          // 冰冻边框效果
-          const hud = document.getElementById('hud');
-          if (hud) hud.classList.add('frozen-state');
-        } else {
-          frostOverlay.style.display = 'none';
-          const hud = document.getElementById('hud');
-          if (hud) hud.classList.remove('frozen-state');
-        }
-      }
-      if (lp.fatTimer > 0) effects.push(`<span class="eff-fat">肥肉 ${lp.fatTimer.toFixed(1)}s</span>`);
-      if (lp.role === 'WAIWAI') effects.push(`<span class="eff-miss">miss ${lp.miss}/${lp.maxMiss}${lp.missInvulnTimer > 0 ? ` 无敌 ${lp.missInvulnTimer.toFixed(1)}s` : ''}</span>`);
-      statusBar.innerHTML = effects.join(' ');
-      statusBar.style.display = effects.length > 0 ? 'flex' : 'none';
-    }
-
-    const timedAction = document.getElementById('timedAction');
-    if (timedAction) {
-      if (lp.healAction) {
-        timedAction.textContent = `${lp.healAction.info.name}：${lp.healAction.remain.toFixed(1)}秒后完成，再次点击取消`;
-        timedAction.style.display = 'block';
-      } else if (lp.missileControl) {
-        timedAction.textContent = `导弹自动爆炸：${Math.max(0, lp.missileControl.life).toFixed(1)}秒`;
-        timedAction.style.display = 'block';
-      } else {
-        timedAction.style.display = 'none';
-      }
-    }
-
-    const actionBtn = document.getElementById('actionBtnMobile');
-    if (actionBtn) {
-      const item = lp.getSelectedItem();
-      const info = item ? ITEM_DB[item.key] : null;
-      let label = '攻击';
-      if (info?.type === 'block') label = '建造';
-      else if (info?.type === 'weapon') label = '攻击';
-      else if (item?.key === 'trap_device') label = '装置';
-      else if (item?.key === 'bear_trap') label = '捕兽夹';
-      else if (item?.key === 'sensor_mine') label = '地雷';
-      else if (info?.explosive) label = '放置';
-      else if (item?.key === 'repair_drone') label = '无人机';
-      else if (info?.healAmount || info?.healFull) label = lp.healAction ? '取消' : '治疗';
-      else if (item?.key === 'portal') label = '传送';
-      else if (item?.key === 'potion') label = '药水';
-      else if (info?.name) label = info.name.slice(0, 3);
-      actionBtn.textContent = label;
-      actionBtn.dataset.mode = info?.type || item?.key || 'attack';
-    }
-  }
-
-  drawMinimap() {
-    const canvas = document.getElementById('minimapCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    const cx = w / 2, cy = h / 2;
-
-    // Islands (simplified representation for larger map)
-    ctx.fillStyle = 'rgba(100,150,100,0.5)';
-    const islandR = 6 * (w / 140);
-    ctx.fillRect(cx - 60 * (w/140), cy - 60 * (w/140), islandR, islandR);
-    ctx.fillRect(cx + 54 * (w/140), cy - 60 * (w/140), islandR, islandR);
-    ctx.fillRect(cx - 60 * (w/140), cy + 54 * (w/140), islandR, islandR);
-    ctx.fillRect(cx + 54 * (w/140), cy + 54 * (w/140), islandR, islandR);
-    ctx.fillStyle = 'rgba(80,120,80,0.6)';
-    ctx.fillRect(cx - 13 * (w/140), cy - 13 * (w/140), 26 * (w/140), 26 * (w/140));
-
-    // Beds
-    for (const [key, t] of Object.entries(TEAMS)) {
-      if (!t.bedAlive) continue;
-      const bx = cx + (t.spawn.x / 140) * w * 0.5;
-      const by = cy + (t.spawn.z / 140) * h * 0.5;
-      ctx.fillStyle = t.hex;
-      ctx.fillRect(bx - 3, by - 2, 6, 4);
-    }
-
-    // Players (只显示自己和队友)
-    const lpTeam = this.game.localPlayer?.team;
-    for (const p of this.game.players) {
-      if (p.isDead) continue;
-      if (p.team !== lpTeam) continue;
-      const px = cx + (p.pos.x / 140) * w * 0.5;
-      const py = cy + (p.pos.z / 140) * h * 0.5;
-      ctx.fillStyle = p.teamInfo.hex;
-      ctx.beginPath();
-      ctx.arc(px, py, p.isLocal ? 4 : 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      if (p.isLocal) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-
-    // Shrink boundary
-    if (this.game.shrinkActive) {
-      const r = (this.game.shrinkRadius / 140) * w * 0.5;
-      ctx.strokeStyle = 'rgba(255,0,0,0.5)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  drawBigMap() {
-    const canvas = document.getElementById('bigMapCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    ctx.fillRect(0, 0, w, h);
-
-    const cx = w / 2, cy = h / 2;
-    const scale = Math.min(w, h) / 300;
-
-    // Islands
-    ctx.fillStyle = 'rgba(100,150,100,0.6)';
-    const islandR = 16 * scale;
-    ctx.fillRect(cx - 120 * scale, cy - 120 * scale, islandR, islandR);
-    ctx.fillRect(cx + 108 * scale, cy - 120 * scale, islandR, islandR);
-    ctx.fillRect(cx - 120 * scale, cy + 108 * scale, islandR, islandR);
-    ctx.fillRect(cx + 108 * scale, cy + 108 * scale, islandR, islandR);
-    ctx.fillStyle = 'rgba(80,120,80,0.7)';
-    ctx.fillRect(cx - 26 * scale, cy - 26 * scale, 52 * scale, 52 * scale);
-
-    // Beds
-    for (const [key, t] of Object.entries(TEAMS)) {
-      if (!t.bedAlive) continue;
-      const bx = cx + (t.spawn.x / 140) * w * 0.5;
-      const by = cy + (t.spawn.z / 140) * h * 0.5;
-      ctx.fillStyle = t.hex;
-      ctx.fillRect(bx - 8, by - 6, 16, 12);
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(bx - 8, by - 6, 16, 12);
-    }
-
-    // Players (只显示自己和队友)
-    const localTeam = this.game.localPlayer?.team;
-    for (const p of this.game.players) {
-      if (p.isDead) continue;
-      if (p.team !== localTeam) continue;
-      const px = cx + (p.pos.x / 140) * w * 0.5;
-      const py = cy + (p.pos.z / 140) * h * 0.5;
-      ctx.fillStyle = '#3b82f6';
-      ctx.beginPath();
-      ctx.arc(px, py, p.isLocal ? 8 : 6, 0, Math.PI * 2);
-      ctx.fill();
-      if (p.isLocal) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-      ctx.fillStyle = '#fff';
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(p.name || '', px, py - 10);
-    }
-
-    // Shrink boundary
-    if (this.game.shrinkActive) {
-      const r = (this.game.shrinkRadius / 140) * w * 0.5;
-      ctx.strokeStyle = 'rgba(255,0,0,0.6)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  updateBackpack() {
-    const lp = this.game.localPlayer;
-    if (!lp) return;
-    const grid = document.getElementById('backpackGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    // Hotbar
-    const hotbarRow = document.createElement('div');
-    hotbarRow.className = 'backpack-row';
-    hotbarRow.innerHTML = '<div style="color:#888;font-size:12px;margin-bottom:4px;">快捷栏</div>';
-    const hotbarGrid = document.createElement('div');
-    hotbarGrid.className = 'backpack-row-grid';
-    for (let i = 0; i < 8; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'bp-slot' + (lp.hotbarIndex === i ? ' active' : '');
-      const item = lp.hotbar[i];
-      slot.innerHTML = item ? `<div>${ITEM_DB[item.key]?.name?.slice(0,4)||'?'}</div><div style="font-size:10px;color:#ffdd00;">${item.count}</div>` : '';
-      hotbarGrid.appendChild(slot);
-    }
-    hotbarRow.appendChild(hotbarGrid);
-    grid.appendChild(hotbarRow);
-    // Backpack
-    const packRow = document.createElement('div');
-    packRow.className = 'backpack-row';
-    packRow.innerHTML = '<div style="color:#888;font-size:12px;margin-bottom:4px;">背包</div>';
-    const packGrid = document.createElement('div');
-    packGrid.className = 'backpack-grid';
-    for (let i = 0; i < lp.backpack.length; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'bp-slot';
-      const item = lp.backpack[i];
-      slot.innerHTML = item ? `<div>${ITEM_DB[item.key]?.name?.slice(0,4)||'?'}</div><div style="font-size:10px;color:#ffdd00;">${item.count}</div>` : '';
-      packGrid.appendChild(slot);
-    }
-    packRow.appendChild(packGrid);
-    grid.appendChild(packRow);
-  }
-
-  updateGrowthPanel() {
-    if (this.game.growthPanelOpen) this.renderGrowthCenter();
-  }
-
-  renderGrowthCenter() {
-    const body = document.getElementById('growthBody');
-    if (!body || !this.game.growth) return;
-    const gm = this.game.growth;
-    if (this.game.growthTab === 'mastery') return this.renderMasteryPanel(body, gm);
-    if (this.game.growthTab === 'season') return this.renderSeasonPanel(body, gm);
-  }
-
-  renderMasteryPanel(body, gm) {
-    const all = JSON.parse(localStorage.getItem('bedwars_role_mastery') || '{}');
-    body.innerHTML = `<div class="growth-grid">
-      ${Object.keys(ROLES).map(role => {
-        const r = all[role] || { kills: 0, beds: 0, wins: 0, tier: '青铜' };
-        const tier = r.tier || gm.masteryTier(r);
-        const reward = tier === '筑梦大师' ? '已解锁专属搭路方块皮肤与拆床宣言' : tier === '黄金' ? '已解锁出生彩色拖尾光效' : '继续使用角色可解锁外观奖励';
-        return `<div class="mastery-card"><h4>${ROLES[role].name} · ${tier}</h4><p>击杀 ${r.kills || 0}｜拆床 ${r.beds || 0}｜胜利 ${r.wins || 0}</p><p>${reward}</p></div>`;
-      }).join('')}
-    </div>`;
-  }
-
-  renderSeasonPanel(body, gm) {
-    const seasonXp = gm.profile.seasonXp || 0;
-    const level = Math.floor(seasonXp / 300) + 1;
-    body.innerHTML = `
-      <div class="growth-summary">
-        <span class="growth-pill">赛季等级：${level}</span>
-        <span class="growth-pill">赛季积分：${seasonXp}</span>
-        <span class="growth-pill">赛季周期：每3个月重置</span>
-      </div>
-      <div class="growth-grid">
-        <div class="season-card"><h4>日常：累计放置500个方块</h4><p>奖励：120赛季积分。当前局建造会计入结算。</p></div>
-        <div class="season-card"><h4>周常：用弓箭击杀3人</h4><p>奖励：重置卷轴碎片，可在10分钟后重新选择觉醒。</p></div>
-        <div class="season-card"><h4>奖励：重置卷轴</h4><p>稀有道具，每局10分钟后可重选一次技能分支。</p></div>
-        <div class="season-card"><h4>奖励：表情动作</h4><p>击败敌人后可播放跳舞、鞠躬等表现动作。</p></div>
-      </div>`;
-  }
-
-  buildShop() {
-    const body = document.getElementById('shopBody');
-    if (!body) return;
-    const lp = this.game.localPlayer;
-    if (!lp) return;
-    body.innerHTML = '';
-    const tabs = {
-      blocks: ['wood_plank','stone_plate','iron_plate','titanium','blast_glass'],
-      weapons: ['wood_sword','stone_sword','iron_sword','diamond_sword','bow','arrow','armor_hammer','boomerang','frost_staff','javelin','smoke_launcher'],
-      armor: ['crude_armor','handmade_armor','std_armor','fine_armor','rd_armor'],
-      specials: ['tnt','handmade_tnt','military_c4','mini_nuke','repair_drone','bandage','medkit','surgery_station','trap_device','bear_trap','sensor_mine','portal','potion','revival_gold','teleport_coin','cd_potion','speed_potion','burst_potion','detector']
-    };
-    const items = tabs[this.shopTab] || [];
-
-    for (const key of items) {
-      const item = ITEM_DB[key];
-      const div = document.createElement('div');
-      div.className = 'shop-item';
-      let costStr = '';
-      let canAfford = true;
-      if (item.cost.copper) {
-        const cost = item.cost.copper;
-        costStr += `<span class="cost-copper">${cost}铜</span> `;
-        if ((lp?.inv.copper || 0) < cost) canAfford = false;
-      }
-      if (item.cost.silver) { costStr += `<span class="cost-silver">${item.cost.silver}银</span> `; if ((lp?.inv.silver || 0) < item.cost.silver) canAfford = false; }
-      if (item.cost.gold) { costStr += `<span class="cost-gold">${item.cost.gold}金</span> `; if ((lp?.inv.gold || 0) < item.cost.gold) canAfford = false; }
-      if (item.cost.jade) { costStr += `<span class="cost-jade">${item.cost.jade}玉</span> `; if ((lp?.inv.jade || 0) < item.cost.jade) canAfford = false; }
-
-      const countStr = item.count && item.count > 1 ? `<span class="item-count">获得 x${item.count}</span>` : '';
-      div.innerHTML = `<div class="item-name">${item.name}</div><div class="item-desc">${item.desc}</div><div class="item-cost">${costStr}${countStr}</div>`;
-      if (!canAfford) div.classList.add('disabled');
-      if (canAfford) {
-        const buyBtn = document.createElement('div');
-        buyBtn.className = 'shop-buy-controls';
-        buyBtn.innerHTML = `<button class="shop-buy-1" data-key="${key}">x1</button><button class="shop-buy-max" data-key="${key}">最多</button>`;
-        div.appendChild(buyBtn);
-        div.onclick = (e) => {
-          const btn = e.target.closest('[data-key]');
-          if (!btn) return;
-          const k = btn.dataset.key;
-          if (btn.classList.contains('shop-buy-max')) {
-            // 计算最大可购买数量
-            const it = ITEM_DB[k];
-            let maxCount = Infinity;
-            if (it.cost.copper) maxCount = Math.min(maxCount, Math.floor((lp.inv.copper || 0) / it.cost.copper));
-            if (it.cost.silver) maxCount = Math.min(maxCount, Math.floor((lp.inv.silver || 0) / it.cost.silver));
-            if (it.cost.gold) maxCount = Math.min(maxCount, Math.floor((lp.inv.gold || 0) / it.cost.gold));
-            if (it.cost.jade) maxCount = Math.min(maxCount, Math.floor((lp.inv.jade || 0) / it.cost.jade));
-            if (maxCount > 0 && isFinite(maxCount)) this.game.buyItem(k, maxCount);
-          } else {
-            this.game.buyItem(k, 1);
-          }
-        };
-      }
-      body.appendChild(div);
-    }
-  }
-}
-
-// ============================================
-// Main Game Class
-// ============================================
 class Game {
   constructor(options = {}) {
     this.engine = null;
@@ -1053,316 +11,259 @@ class Game {
     this.localPlayer = null;
     this.gameTime = 0;
     this.gameActive = false;
-    this.shrinkStartTime = GAME_RULES.shrinkStartTime;
-    this.shrinkTimer = this.shrinkStartTime;
+    this.lastTime = 0;
+    // 缩圈相关
+    this.shrinkTimer = 1500;
     this.shrinkActive = false;
-    this.shrinkInitialRadius = GAME_RULES.shrinkInitialRadius;
-    this.shrinkRadius = this.shrinkInitialRadius;
+    this.shrinkRadius = 125;
+    this.shrinkInitialRadius = 125;
     this.nextDreamTide = 300;
-    this.input = new InputManager();
+    // 输入（在 init 中创建）
+    this.input = null;
+    // 子系统
     this.ai = null;
     this.ui = null;
-    this.lastTime = 0;
+    this.growth = null;
+    this.social = null;
+    // UI数据
     this.killFeed = [];
     this._timeouts = [];
     this.shrinkBoundary = null;
     this.shopDirty = true;
+    // 网络与联机
     this.network = options.network || null;
     this.onlineMode = !!options.onlineMode;
     this.playerName = options.playerName || '你';
+    // 上报计时器
     this.tick = 0;
     this.matchSnapshotTimer = 0;
     this.economyLogTimer = 0;
-    this.adminCommandSub = null;
-    this.growth = null;
-    this.social = null;
+    // 面板状态
     this.growthPanelOpen = false;
-    this.growthTab = 'mastery';
     this.roleSelectionActive = false;
     this.roleSelectionTimer = 0;
     this.roleChosen = false;
+    // 建造面板
     this.selectedBlockKey = null;
     this.movingBlockKey = null;
+    // 地图与模式
     this.selectedMap = 'classic';
     this.isCampusMode = false;
     this.genLabels = [];
+    // 性能
+    this._fpsFrames = 0;
+    this._fpsTime = 0;
+    this._rafId = null;
   }
 
-  init() {
-    const container = document.getElementById('gameCanvas');
-    if (!container) throw new Error('gameCanvas 容器不存在');
+  // ============================================
+  // 初始化
+  // ============================================
 
-    // 创建 3D 引擎
+  init() {
+    // 1. 获取画布容器
+    const container = document.getElementById('gameCanvas');
+    if (!container) { console.error('找不到 #gameCanvas'); return; }
+
+    // 2. 创建引擎
     this.engine = new Engine(container);
+
+    // 3. 生成世界
     this.gens = generateWorld(this.engine, this.selectedMap);
 
-    // 创建子系统
-    this.ai = new AISystem(this);
-    this.ui = new UIManager(this);
+    // 4. 创建子系统
     this.growth = new GrowthManager(this);
     this.social = new SocialManager(this);
+    this.ui = new UIManager(this);
+    this.ai = { init: (game) => { AIManager.controllers = []; AIManager.activeCount = 0; } };
 
-    // 绑定商店标签
-    document.querySelectorAll('.shop-tab').forEach(tab => {
-      tab.onclick = () => {
-        document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+    // 5. 创建输入管理器
+    this.input = new InputManager();
+
+    // 6. 商店标签事件
+    const shopTabs = document.querySelectorAll('.shop-tab');
+    shopTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        shopTabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        this.ui.shopTab = tab.dataset.tab;
+        this.ui.shopTab = tab.getAttribute('data-tab') || 'blocks';
         this.ui.buildShop();
-      };
-    });
-
-    // 绑定按钮事件（全部安全检查）
-    const shopClose = document.querySelector('.shop-close');
-    if (shopClose) shopClose.onclick = () => this.toggleShop();
-
-    const shopBtn = document.getElementById('shopBtn');
-    if (shopBtn) {
-      shopBtn.onclick = () => this.toggleShop();
-      shopBtn.addEventListener('touchend', e => { e.preventDefault(); this.toggleShop(); });
-    }
-
-    const layoutBtn = document.getElementById('layoutBtn');
-    if (layoutBtn) layoutBtn.onclick = () => window.hudLayoutManager?.open?.();
-
-    const rescueBtn = document.getElementById('rescueBtn');
-    if (rescueBtn) rescueBtn.onclick = () => this.social?.rescueVoidMate?.();
-
-    document.querySelectorAll('.growth-tab').forEach(tab => {
-      tab.onclick = () => {
-        document.querySelectorAll('.growth-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        this.growthTab = tab.dataset.growthTab;
-        this.ui.renderGrowthCenter();
-      };
-    });
-
-    document.getElementById('buildUpgradeBtn')?.addEventListener('click', () => this.upgradeSelectedBlock());
-    document.getElementById('buildDestroyBtn')?.addEventListener('click', () => this.destroySelectedBlock());
-    document.getElementById('buildMoveBtn')?.addEventListener('click', () => this.prepareMoveSelectedBlock());
-    document.getElementById('buildCancelBtn')?.addEventListener('click', () => this.closeBuildPanel());
-
-    // 绑定快捷栏
-    document.querySelectorAll('.hotbar-slot').forEach((slot, idx) => {
-      let longPressTimer = null;
-      let longPressTriggered = false;
-
-      const select = (e) => {
-        if (longPressTriggered) {
-          e.preventDefault();
-          e.stopPropagation();
-          longPressTriggered = false;
-          return;
-        }
-        e.preventDefault();
-        if (this.gameActive) {
-          this.selectHotbar(idx);
-        }
-      };
-
-      const startLongPress = () => {
-        if (!this.gameActive) return;
-        longPressTriggered = false;
-        longPressTimer = setTimeout(() => {
-          longPressTriggered = true;
-          this.showSlotContextMenu(slot, idx);
-        }, 800);
-      };
-
-      const cancelLongPress = () => {
-        if (longPressTimer) {
-          clearTimeout(longPressTimer);
-          longPressTimer = null;
-        }
-      };
-
-      slot.addEventListener('click', select);
-      slot.addEventListener('touchstart', (e) => {
-        startLongPress();
-      }, { passive: false });
-      slot.addEventListener('touchend', cancelLongPress);
-      slot.addEventListener('touchmove', cancelLongPress);
-      slot.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        if (this.gameActive) this.showSlotContextMenu(slot, idx);
       });
     });
 
-    // Slot context menu actions
-    document.getElementById('ctxDrop')?.addEventListener('click', () => {
-      if (this.localPlayer) {
-        this.localPlayer.dropSelectedItem();
-        this.hideSlotContextMenu();
-      }
-    });
-    document.getElementById('ctxSplit')?.addEventListener('click', () => this.splitSelectedItem());
-    document.getElementById('ctxCancel')?.addEventListener('click', () => this.hideSlotContextMenu());
+    // 7. 按钮事件（null安全检查）
+    const shopClose = document.querySelector('.shop-close');
+    if (shopClose) shopClose.addEventListener('click', () => this.toggleShop());
 
-    // Hotbar keys & actions
-    document.addEventListener('keydown', e => {
-      if (!this.gameActive) return;
-      if (e.code === 'Digit1') this.selectHotbar(0);
-      if (e.code === 'Digit2') this.selectHotbar(1);
-      if (e.code === 'Digit3') this.selectHotbar(2);
-      if (e.code === 'Digit4') this.selectHotbar(3);
-      if (e.code === 'Digit5') this.selectHotbar(4);
-      if (e.code === 'Digit6') this.selectHotbar(5);
-      if (e.code === 'Digit7') this.selectHotbar(6);
-      if (e.code === 'Digit8') this.selectHotbar(7);
-      if (e.code === 'KeyB') this.toggleShop();
-      if (e.code === 'KeyC') this.social?.openMarkWheel();
-      if (e.code === 'KeyV') this.social?.sendAid();
-      if (e.code === 'KeyX') this.social?.openTeamChest();
-      if (e.code === 'KeyZ') this.social?.castCombo('shield');
-      // KeyQ skill handled by InputManager keyup -> consumeSkill in loop
-      if (e.code === 'KeyG') {
-        if (this.localPlayer) this.localPlayer.dropSelectedItem();
-      }
-      if (e.code === 'Tab') {
+    const shopBtn = document.getElementById('shopBtn');
+    if (shopBtn) {
+      shopBtn.addEventListener('click', () => this.toggleShop());
+      shopBtn.addEventListener('touchend', () => this.toggleShop());
+    }
+
+    const backpackBtn = document.getElementById('backpackBtn');
+    if (backpackBtn) {
+      backpackBtn.addEventListener('click', () => this.toggleBackpack());
+      backpackBtn.addEventListener('touchend', () => this.toggleBackpack());
+    }
+
+    const growthBtn = document.getElementById('growthBtn');
+    if (growthBtn) growthBtn.addEventListener('click', () => this.toggleGrowthPanel());
+
+    // 8. 快捷栏点击事件
+    const hotbarSlots = document.querySelectorAll('.hotbar-slot');
+    hotbarSlots.forEach((slot, idx) => {
+      slot.addEventListener('click', () => this.selectHotbar(idx));
+      slot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (this.isCampusMode) {
-          const bp = document.getElementById('campusBackpack');
-          if (bp) bp.style.display = bp.style.display === 'none' ? 'block' : 'none';
-        } else {
-          this.toggleBackpack();
-        }
-      }
+        this.showSlotContextMenu(slot, idx);
+      });
     });
 
-    // Start loop
-    this._rafId = requestAnimationFrame(t => this.loop(t));
+    // 9. 建造面板按钮
+    const upgradeBtn = document.getElementById('upgradeBuildBtn');
+    if (upgradeBtn) upgradeBtn.addEventListener('click', () => this.upgradeSelectedBlock());
+    const destroyBtn = document.getElementById('destroyBuildBtn');
+    if (destroyBtn) destroyBtn.addEventListener('click', () => this.destroySelectedBlock());
+    const moveBtn = document.getElementById('moveBuildBtn');
+    if (moveBtn) moveBtn.addEventListener('click', () => this.prepareMoveSelectedBlock());
 
-    // Subscribe to admin commands
-    this.subscribeAdminCommands();
+    // 10. 启动渲染循环
+    this.lastTime = performance.now();
+    this._rafId = requestAnimationFrame((t) => this.loop(t));
   }
 
+  // ============================================
+  // 开始游戏
+  // ============================================
+
   start(teamKey, roleKey, mode = 'classic') {
+    // 重置游戏状态
     this.gameActive = true;
     this.gameTime = 0;
-    this.shrinkTimer = this.shrinkStartTime;
+    this.shrinkTimer = GAME_RULES.shrinkStartTime || 1500;
     this.shrinkActive = false;
-    this.shrinkRadius = this.shrinkInitialRadius;
-    this.nextDreamTide = 300;
-
-    // 重置队伍状态
-    for (const t of Object.values(TEAMS)) { t.bedAlive = true; if (t.bedMesh) t.bedMesh.visible = true; }
-
-    // 清除旧实体
-    for (const p of this.players) { try { this.engine.removeEntity(p); } catch(_) {} }
-    this.players = [];
+    this.shrinkRadius = GAME_RULES.shrinkInitialRadius || 125;
+    this.shrinkInitialRadius = this.shrinkRadius;
+    this.nextDreamTide = GAME_RULES.dreamTideInterval || 300;
+    this.tick = 0;
+    this.matchSnapshotTimer = 5;
+    this.economyLogTimer = 30;
     this.killFeed = [];
+    this.selectedBlockKey = null;
+    this.movingBlockKey = null;
+    this.shopDirty = true;
+    this.isCampusMode = false;
+    this.campusMode = null;
+
+    // 重置所有队伍的床状态
+    for (const t of Object.values(TEAMS)) {
+      t.bedAlive = true;
+      if (t.bedMesh) t.bedMesh.visible = true;
+    }
+
+    // 清除旧玩家和击杀信息
+    this.players = [];
+    AIManager.controllers = [];
+    AIManager.activeCount = 0;
     const killFeedEl = document.getElementById('killFeed');
     if (killFeedEl) killFeedEl.innerHTML = '';
 
-    // === 通用 UI 切换 ===
-    const hideIds = ['seasonPassPanel','passPayPanel','menuGrowthPanel','layoutPanel','gameOverScreen','shopPanel','startRolePanel'];
-    hideIds.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-    document.querySelectorAll('.lobby-float-panel.open').forEach(panel => panel.classList.remove('open'));
+    // 隐藏所有面板
+    this._hideAllPanels();
+
+    // 隐藏主菜单
     const mainMenu = document.getElementById('mainMenu');
     if (mainMenu) mainMenu.style.display = 'none';
 
     // 按模式分发
-    if (mode === 'campus') return this._startCampusMode();
+    if (mode === 'campus') {
+      return this._startCampusMode();
+    }
     this._startClassicMode(teamKey, roleKey);
   }
 
-  /** 经典起床战争模式 */
-  _startClassicMode(teamKey, roleKey) {
-    const hud = document.getElementById('hud');
-    if (hud) hud.style.display = 'block';
-    const crosshair = document.getElementById('crosshair');
-    if (crosshair) crosshair.style.display = 'block';
-    const skillBtn = document.getElementById('skillBtn');
-    if (skillBtn) skillBtn.style.display = 'flex';
-    window.hudLayoutManager?.init?.();
-    this.input._ensureMobileControls();
-
-    // 创建本地玩家
-    const localId = this.onlineMode && this.network?.auth?.user?.id
-      ? this.network.auth.user.id
-      : 'local-' + Math.random().toString(36).slice(2, 10);
-    this.localPlayer = new PlayerEntity(this.engine, teamKey, roleKey, true, this.playerName, localId);
-    this.players.push(this.localPlayer);
-
-    // 创建 AI
-    AIManager.removeAll();
-    const botNames = ['Alpha','Bravo','Charlie','Delta','Echo','Foxtrot','Golf','Hotel','India','Juliet','Kilo','Lima'];
-    let nameIdx = 0;
-    const roles = Object.keys(ROLES);
-    const desiredAiCount = this.onlineMode ? (window.lobbyAiSlots || 0) : Math.max(4, window.lobbyAiSlots || 0);
-    for (const [tkey] of Object.entries(TEAMS)) {
-      const count = desiredAiCount > 0 ? 1 : 0;
-      for (let i = 0; i < count; i++) {
-        if (AIManager.getCount() >= desiredAiCount || AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
-        const role = roles[Math.floor(Math.random() * roles.length)];
-        const result = AIManager.createAI(this.engine, this, tkey, botNames[nameIdx++] || 'Bot', role);
-        if (result) {
-          result.entity.applyStarterGear?.();
-          result.entity.addToBackpack('wood_plank', 32);
-          result.entity.pos.x += (Math.random() - 0.5) * 4;
-          result.entity.pos.z += (Math.random() - 0.5) * 4;
-          this.players.push(result.entity);
-        }
-      }
-      if (AIManager.getCount() >= desiredAiCount || AIManager.getCount() >= AI_CONFIG.MAX_AI_COUNT) break;
-    }
-
-    // 队伍信息面板
-    const teamInfoEl = document.getElementById('teamInfo');
-    if (teamInfoEl && !teamInfoEl._boundDetailClick) {
-      teamInfoEl._boundDetailClick = true;
-      teamInfoEl.style.cursor = 'pointer';
-      teamInfoEl.onclick = () => {
-        const panel = document.getElementById('teamDetailPanel');
-        if (!panel) return;
-        if (panel.style.display === 'flex') { panel.style.display = 'none'; return; }
-        let html = '<div class="team-detail-content">';
-        if (this.players) {
-          for (const p of this.players) {
-            if (p.team !== this.localPlayer?.team && !p.isLocal) continue;
-            const role = ROLES[p.role] || {};
-            const isMe = p.isLocal;
-            html += '<div class="team-player-row ' + (isMe ? 'me' : '') + '">'
-              + '<span class="tp-name">' + (isMe ? '&#9654; ' : '') + (p.name || '???') + '</span>'
-              + '<span class="tp-role">' + (role.name || '?') + '</span>'
-              + '<span class="tp-stats">\u51FB\u6740:' + (p.kills||0) + ' \u590D\u6D3B:' + (p.respawnCount||0) + '</span>'
-              + '</div>';
-            if (isMe && role.passive && role.active) {
-              html += '<div class="my-skill-info">'
-                + '<div class="skill-info-row"><b>\u88AB\u52A8\uFF1A' + role.passive.name + '</b><p>' + role.passive.desc + '</p></div>'
-                + '<div class="skill-info-row"><b>\u4E3B\u52A8\uFF1A' + role.active.name + '</b><p>' + role.active.desc + ' | \u51B7\u5374 ' + role.active.cd + '\u79D2</p></div>'
-                + '</div>';
-            }
-          }
-        }
-        html += '</div><button class="small-btn" style="margin-top:8px;" onclick="document.getElementById(\'teamDetailPanel\').style.display=\'none\'">\u5173\u95ED</button>';
-        panel.innerHTML = html;
-        panel.style.display = 'flex';
-      };
-    }
-
-    // 技能按钮文字
-    const skillBtnEl = document.getElementById('skillBtn');
-    if (skillBtnEl) {
-      const roleData = ROLES[roleKey];
-      if (roleData?.active) {
-        const span = skillBtnEl.querySelector('span:first-child');
-        if (span) span.textContent = roleData.active.name;
-      }
-    }
-
-    this.showMessage('游戏开始！保护你的床，摧毁敌人的床！');
-    this.social?.initMatch?.();
-    this.beginRoleSelection();
-    if (this.network) {
-      this.network.startSnapshotLoop?.(() => this.getNetworkState());
+  /** 隐藏所有面板 */
+  _hideAllPanels() {
+    const ids = [
+      'shopPanel', 'backpackPanel', 'growthPanel', 'buildPanel',
+      'socialPanel', 'markWheel', 'teamChestPanel', 'bigMapPanel',
+      'postMatchGallery', 'slotContextMenu', 'startRolePanel',
+      'campusHud', 'workshopPanel'
+    ];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
     }
   }
 
-  /** 校园寻宝模式 */
-  _startCampusMode() {
+  // ============================================
+  // 经典模式启动
+  // ============================================
+
+  _startClassicMode(teamKey, roleKey) {
+    // 显示HUD
     const hud = document.getElementById('hud');
-    if (hud) hud.style.display = 'block';
+    if (hud) hud.style.display = '';
+    const crosshair = document.getElementById('crosshair');
+    if (crosshair) crosshair.style.display = '';
+
+    // 随机角色列表
+    const roleKeys = Object.keys(ROLES);
+
+    // 遍历4队生成玩家
+    for (const [tKey, tInfo] of Object.entries(TEAMS)) {
+      const isLocal = (tKey === teamKey);
+      const rKey = isLocal ? roleKey : roleKeys[Math.floor(Math.random() * roleKeys.length)];
+      const name = isLocal ? this.playerName : (tInfo.name + '玩家');
+      const entity = new PlayerEntity(this.engine, tKey, rKey, isLocal, name);
+      entity.pos = tInfo.spawn.clone();
+      // 朝向地图中心
+      entity.yaw = Math.atan2(-tInfo.spawn.x, -tInfo.spawn.z);
+      this.players.push(entity);
+
+      if (isLocal) {
+        this.localPlayer = entity;
+        entity.isFrozen = true;
+      } else {
+        // AI接管
+        entity.aiTakeover = true;
+        entity.isAI = true;
+        entity.inv.copper = 10 + Math.floor(Math.random() * 20);
+        const ctrl = new AIController(entity, this.engine, this);
+        AIManager.controllers.push(ctrl);
+        AIManager.activeCount++;
+      }
+    }
+
+    // 相机跟随本地玩家
+    if (this.localPlayer) {
+      this.engine.cameraOffset = new THREE.Vector3(0, 4, 8);
+    }
+
+    // AI初始化
+    if (this.ai && this.ai.init) this.ai.init(this);
+
+    // 社交系统初始化
+    if (this.social && this.social.initMatch) this.social.initMatch();
+
+    // 开始角色选择
+    this.beginRoleSelection();
+
+    // 网络同步：设置房间状态为playing
+    if (this.network && this.network.roomNet && this.network.roomNet.room) {
+      this.network.roomNet.setRoomStatus('playing').catch(() => {});
+    }
+  }
+
+  // ============================================
+  // 校园寻宝模式
+  // ============================================
+
+  _startCampusMode() {
+    // 显示/隐藏对应HUD
+    const hud = document.getElementById('hud');
+    if (hud) hud.style.display = '';
     const crosshair = document.getElementById('crosshair');
     if (crosshair) crosshair.style.display = 'none';
     const skillBtn = document.getElementById('skillBtn');
@@ -1375,154 +276,258 @@ class Game {
     if (hotbar) hotbar.style.display = 'none';
     const shopBtn = document.getElementById('shopBtn');
     if (shopBtn) shopBtn.style.display = 'none';
-    const campusHud = document.getElementById('campusHud');
-    if (campusHud) campusHud.style.display = 'block';
 
+    // 确保移动端控件
     this.input._ensureMobileControls();
     this.isCampusMode = true;
+
+    // 显示校园职业选择
     this._showCampusCareerSelection();
   }
+
+  /** 显示校园模式职业选择 */
+  _showCampusCareerSelection() {
+    const panel = document.getElementById('startRolePanel');
+    const cards = document.getElementById('startRoleCards');
+    if (!panel || !cards) return;
+
+    panel.style.display = '';
+    panel.querySelector('h2').textContent = '选择你的校园职业';
+    const desc = panel.querySelector('p');
+    if (desc) desc.textContent = '选择一个职业开始校园寻宝';
+
+    let html = '';
+    for (const [key, career] of Object.entries(CAREERS)) {
+      const hexColor = '#' + career.color.toString(16).padStart(6, '0');
+      html += '<div class="role-card" data-career="' + key + '">'
+        + '<div class="role-card-color" style="background:' + hexColor + '">' + career.code + '</div>'
+        + '<div class="role-card-name">' + career.name + '</div>'
+        + '<div class="role-card-passive">' + career.passive.name + '：' + career.passive.desc + '</div>'
+        + '<div class="role-card-active">' + career.active.name + '：' + career.active.desc + '</div>'
+        + '</div>';
+    }
+    cards.innerHTML = html;
+
+    // 隐藏分类栏
+    const catBar = document.getElementById('roleCatBar');
+    if (catBar) catBar.style.display = 'none';
+
+    // 绑定点击事件
+    cards.querySelectorAll('.role-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const careerKey = card.getAttribute('data-career');
+        this._startCampusWithCareer(careerKey);
+      });
+    });
+  }
+
+  /** 用选择的职业启动校园模式 */
+  _startCampusWithCareer(careerKey) {
+    // 隐藏角色选择面板
+    const panel = document.getElementById('startRolePanel');
+    if (panel) panel.style.display = 'none';
+
+    // 创建CampusMode实例
+    this.campusMode = new CampusMode(this.engine, {});
+
+    // 生成校园地图
+    const mapGen = new CampusMapGenerator(this.engine.scene);
+    mapGen.generate();
+
+    // 初始化校园模式
+    this.campusMode.init(careerKey, this.playerName);
+
+    // 绑定事件
+    this.campusMode.onEvent = (type, text) => {
+      this.showMessage(text, type === 'blackout' ? '#333366' : '#ffaa00');
+      const eventEl = document.getElementById('campusEvent');
+      if (eventEl) eventEl.textContent = text;
+    };
+    this.campusMode.onPickup = (kind, key, info) => {
+      this.showMessage('拾取了 ' + (info.name || key), '#8be9fd');
+    };
+    this.campusMode.onEnd = (success, reason, player) => {
+      this.endCampusMode(success, reason, player);
+    };
+
+    // 显示校园HUD
+    const campusHud = document.getElementById('campusHud');
+    if (campusHud) campusHud.style.display = '';
+  }
+
+  /** 校园模式结束 */
+  endCampusMode(success, reason, player) {
+    this.gameActive = false;
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+
+    // 清理校园模式
+    if (this.campusMode) {
+      this.campusMode.dispose();
+      this.campusMode = null;
+    }
+
+    // 清理timeout
+    for (const t of this._timeouts) clearTimeout(t);
+    this._timeouts = [];
+
+    // 显示结算
+    const screen = document.getElementById('gameOverScreen');
+    if (screen) {
+      screen.style.display = '';
+      const titleEl = screen.querySelector('.result-title');
+      if (titleEl) titleEl.textContent = success ? '寻宝成功！' : '寻宝失败';
+      const winnerEl = screen.querySelector('.winner');
+      if (winnerEl) winnerEl.textContent = reason || '';
+    }
+  }
+
+  /** 更新校园HUD */
+  _updateCampusHud() {
+    if (!this.campusMode || !this.campusMode.localPlayer) return;
+    const lp = this.campusMode.localPlayer;
+    const cm = this.campusMode;
+
+    const timerEl = document.getElementById('campusTimer');
+    if (timerEl) {
+      const remaining = Math.max(0, Math.floor(cm.maxTime - cm.gameTime));
+      const min = Math.floor(remaining / 60);
+      const sec = remaining % 60;
+      timerEl.textContent = min + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+
+    const statusEl = document.getElementById('campusStatus');
+    if (statusEl) statusEl.textContent = lp.isDead ? '已阵亡' : '存活';
+
+    const weightEl = document.getElementById('campusWeight');
+    if (weightEl) weightEl.textContent = '负重 ' + Math.floor(lp.totalWeight);
+  }
+
+  // ============================================
+  // 角色选择
+  // ============================================
 
   beginRoleSelection() {
     this.roleSelectionActive = true;
     this.roleSelectionTimer = 10;
     this.roleChosen = false;
     if (this.localPlayer) this.localPlayer.isFrozen = true;
+
     const panel = document.getElementById('startRolePanel');
     const cards = document.getElementById('startRoleCards');
     if (!panel || !cards) return;
-    const shapeClass = { FOX: 'shape-fox', PORK_DOCTOR: 'shape-pork', HURRICANE: 'shape-hurricane', DRIFTWOOD: 'shape-driftwood', STEEL_BONE: 'shape-steel', WAIWAI: 'shape-waiwai' };
-    const subtitles = {
-      FOX: '伪装突袭 / 残血反杀',
-      PORK_DOCTOR: '高血抗压 / 持续恢复',
-      HURRICANE: '位移爆发 / 远程标记',
-      DRIFTWOOD: '导弹操控 / 护盾回收',
-      STEEL_BONE: '搭桥 / 建筑加固',
-      WAIWAI: '1血极限 / miss免伤'
-    };
-    const starterText = (role) => (role.starter || []).map(s => s.currency ? `${s.count}${s.currency === 'copper' ? '铜币' : s.currency}` : `${ITEM_DB[s.key]?.name || s.key}x${s.count}`).join('、') || '无';
-    // 分类栏
+
+    panel.style.display = '';
+
+    // 动态生成角色卡片
+    let html = '';
     const categories = {};
     for (const [key, role] of Object.entries(ROLES)) {
-      const cat = role.category || '通用';
+      const cat = role.category || '其他';
       if (!categories[cat]) categories[cat] = [];
-      categories[cat].push(key);
+      categories[cat].push({ key, ...role });
     }
-    
-    // 如果面板还没有分类栏，创建一个
-    let catBar = document.getElementById('roleCatBar');
-    if (!catBar) {
-      catBar = document.createElement('div');
-      catBar.id = 'roleCatBar';
-      catBar.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;';
-      panel.insertBefore(catBar, cards);
-    }
-    catBar.innerHTML = '';
-    const allCats = ['全部', ...Object.keys(categories)];
-    allCats.forEach((cat, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'role-cat-btn' + (i === 0 ? ' active' : '');
-      btn.textContent = cat;
-      btn.style.cssText = 'padding:4px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#ccc;cursor:pointer;font-size:12px;transition:all .2s;';
-      btn.addEventListener('click', () => {
-        catBar.querySelectorAll('.role-cat-btn').forEach(b => {
-          b.classList.remove('active');
-          b.style.background = 'rgba(255,255,255,.08)';
-          b.style.color = '#ccc';
-          b.style.borderColor = 'rgba(255,255,255,.2)';
-        });
-        btn.classList.add('active');
-        btn.style.background = 'rgba(0,212,255,.25)';
-        btn.style.color = '#00d4ff';
-        btn.style.borderColor = '#00d4ff';
-        // 过滤角色
-        const filter = btn.textContent;
-        cards.querySelectorAll('.start-role-card').forEach(card => {
-          if (filter === '全部' || ROLES[card.dataset.role]?.category === filter) {
-            card.style.display = '';
-          } else {
-            card.style.display = 'none';
-          }
-        });
-      });
-      if (i === 0) {
-        btn.style.background = 'rgba(0,212,255,.25)';
-        btn.style.color = '#00d4ff';
-        btn.style.borderColor = '#00d4ff';
+
+    for (const [catName, roles] of Object.entries(categories)) {
+      html += '<div class="role-cat-label">' + catName + '</div><div class="role-cat-row">';
+      for (const r of roles) {
+        html += '<div class="role-card ' + r.skinClass + '" data-role="' + r.key + '">'
+          + '<div class="role-card-name">' + r.name + '</div>'
+          + '<div class="role-card-hp">HP: ' + r.hp + '</div>'
+          + '<div class="role-card-passive">' + r.passive.name + '：' + r.passive.desc + '</div>'
+          + '<div class="role-card-active">' + r.active.name + '：' + r.active.desc + '</div>'
+          + '</div>';
       }
-      catBar.appendChild(btn);
+      html += '</div>';
+    }
+    cards.innerHTML = html;
+
+    // 绑定卡片点击
+    cards.querySelectorAll('.role-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const roleKey = card.getAttribute('data-role');
+        if (roleKey) this.confirmRoleSelection(roleKey);
+      });
     });
 
-    cards.innerHTML = Object.entries(ROLES).map(([key, role]) => `
-      <div class="start-role-card" data-role="${key}">
-        <div class="role-shape ${shapeClass[key] || ''}"></div>
-        <h3>${role.name}</h3>
-        <div class="role-category">${role.category || '通用'}</div>
-        <div class="role-stat"><span>定位</span><b>${subtitles[key]}</b></div>
-        <div class="role-stat"><span>生命</span><b>${role.hp}</b></div>
-        <div class="role-stat"><span>初始</span><b>${starterText(role)}</b></div>
-        <div class="role-skill-box"><b>被动：${role.passive.name}</b><p>${role.passive.desc}</p></div>
-        <div class="role-skill-box"><b>主动：${role.active.name}</b><p>${role.active.desc}｜冷却 ${role.active.cd} 秒</p></div>
-      </div>
-    `).join('');
-    cards.querySelectorAll('.start-role-card').forEach(card => {
-      const handler = (e) => { e.preventDefault(); e.stopPropagation(); this.confirmRoleSelection(card.dataset.role); };
-      card.onclick = handler;
-      card.addEventListener('touchend', handler, { passive: false });
-    });
-    panel.style.display = 'flex';
-    panel.style.visibility = 'visible';
-    if (document.pointerLockElement) document.exitPointerLock();
-    this.updateRoleSelectionUI();
+    // 绑定分类按钮（如果存在）
+    const catBar = document.getElementById('roleCatBar');
+    if (catBar) {
+      catBar.style.display = 'flex';
+      catBar.innerHTML = '';
+      for (const catName of Object.keys(categories)) {
+        const btn = document.createElement('button');
+        btn.textContent = catName;
+        btn.className = 'role-cat-btn';
+        btn.addEventListener('click', () => {
+          const allCards = cards.querySelectorAll('.role-card');
+          allCards.forEach(c => {
+            const role = ROLES[c.getAttribute('data-role')];
+            c.style.display = (role && role.category === catName) ? '' : 'none';
+          });
+        });
+        catBar.appendChild(btn);
+      }
+    }
   }
 
   updateRoleSelection(dt) {
     if (!this.roleSelectionActive) return;
     this.roleSelectionTimer -= dt;
-    this.updateRoleSelectionUI();
-    if (this.roleSelectionTimer <= 0) this.confirmRoleSelection('FOX');
-  }
-
-  updateRoleSelectionUI() {
-    const sec = Math.max(0, Math.ceil(this.roleSelectionTimer));
-    const small = document.getElementById('roleCountdown');
-    const big = document.getElementById('roleCountdownBig');
-    if (small) small.textContent = sec;
-    if (big) big.textContent = sec;
+    // 更新倒计时文字
+    const descEl = document.querySelector('#startRolePanel > p');
+    if (descEl) {
+      descEl.textContent = Math.ceil(Math.max(0, this.roleSelectionTimer)) + '秒内选择，超时默认狐狸';
+    }
+    // 超时默认狐狸
+    if (this.roleSelectionTimer <= 0) {
+      this.confirmRoleSelection('FOX');
+    }
   }
 
   confirmRoleSelection(roleKey) {
-    if (!this.roleSelectionActive || this.roleChosen) return;
+    this.roleSelectionActive = false;
     this.roleChosen = true;
-    const role = ROLES[roleKey] ? roleKey : 'FOX';
-    this.localPlayer?.setRole?.(role, true);
     if (this.localPlayer) this.localPlayer.isFrozen = false;
+
+    // 隐藏选择面板
     const panel = document.getElementById('startRolePanel');
     if (panel) panel.style.display = 'none';
-    const skillBtn = document.getElementById('skillBtn');
-    if (skillBtn) {
-      skillBtn.querySelector('span:first-child').textContent = ROLES[role].active.name;
-      skillBtn.style.display = 'flex';
+
+    // 设置角色和初始装备
+    if (this.localPlayer) {
+      this.localPlayer.setRole(roleKey, true);
+      this.localPlayer.applyStarterGear();
     }
-    this.showMessage(`已选择角色：${ROLES[role].name}｜${ROLES[role].active.name}`, '#ffdd00');
-    this.roleSelectionActive = false;
-    if (!this.input.isMobile()) this.engine.renderer.domElement.requestPointerLock();
+
+    // 请求pointer lock（非移动端）
+    if (!this.input.isMobile()) {
+      const canvas = document.getElementById('gameCanvas');
+      if (canvas) canvas.requestPointerLock().catch(() => {});
+    }
   }
 
+  // ============================================
+  // 核心游戏循环
+  // ============================================
+
   loop(time) {
-    this._rafId = requestAnimationFrame(t => this.loop(t));
+    this._rafId = requestAnimationFrame((t) => this.loop(t));
+
+    const now = performance.now();
     const dt = Math.min((time - this.lastTime) / 1000, 0.05);
     this.lastTime = time;
-    if (!this._fpsFrames) this._fpsFrames = 0;
-    if (!this._fpsTime) this._fpsTime = performance.now();
+
+    // FPS计算
     this._fpsFrames++;
-    const now = performance.now();
     if (now - this._fpsTime >= 1000) {
+      const fpsEl = document.getElementById('fpsCounter');
+      if (fpsEl) fpsEl.textContent = this._fpsFrames + ' FPS';
       window._fpsCounter = this._fpsFrames;
       this._fpsFrames = 0;
       this._fpsTime = now;
     }
 
+    // 游戏未激活时仅渲染
     if (!this.gameActive) {
       this.engine.render();
       return;
@@ -1531,199 +536,251 @@ class Game {
     this.gameTime += dt;
     this.tick++;
     this.shrinkTimer -= dt;
-    this.updateRoleSelection(dt);
 
-    // 梦域潮汐：每 5 分钟重排部分资源浮岛并刷新临时资源点
+    // 角色选择倒计时
+    if (this.roleSelectionActive) {
+      this.updateRoleSelection(dt);
+    }
+
+    // 梦域潮汐
     if (GAME_RULES.enableDreamTide && this.gameTime >= this.nextDreamTide) {
       this.nextDreamTide += GAME_RULES.dreamTideInterval;
-      if (this.engine.triggerDreamTide) {
-        this.engine.triggerDreamTide(this.gens);
-        this.showMessage('梦域潮汐涌动：资源浮岛路线发生变化！', '#b388ff');
+      this.showMessage('梦域潮汐来袭！资源生成加速30秒！', '#b388ff');
+      // 临时加速生成器
+      for (const g of this.gens) {
+        if (g.resKey) {
+          const origSec = RES[g.resKey.toUpperCase()]?.spawnSec || 10;
+          g._origSpawnSec = g._origSpawnSec || g.spawnSec;
+          g.spawnSec = Math.max(0.5, origSec * 0.3);
+          const tid = setTimeout(() => { g.spawnSec = g._origSpawnSec || origSec; }, 30000);
+          this._timeouts.push(tid);
+        }
       }
     }
 
-    // Shrink
+    // 缩圈逻辑
     if (GAME_RULES.enableShrink) {
-    if (this.shrinkTimer <= 0 && !this.shrinkActive) {
-      this.shrinkActive = true;
-      this.showMessage('警告：死亡边界开始收缩！', '#ff4444');
-    }
-    if (this.shrinkActive) {
-      this.shrinkRadius = Math.max(GAME_RULES.shrinkFinalRadius, this.shrinkInitialRadius - (this.gameTime - this.shrinkStartTime) * GAME_RULES.shrinkSpeed);
-      // Damage players outside
-      for (const p of this.players) {
-        if (p.isDead) continue;
-        const dist = Math.sqrt(p.pos.x * p.pos.x + p.pos.z * p.pos.z);
-        if (dist > this.shrinkRadius) {
-          p.takeDamage(GAME_RULES.shrinkDamage * dt, null);
+      if (this.shrinkTimer <= 0 && !this.shrinkActive) {
+        // 开始缩圈
+        this.shrinkActive = true;
+        this.shrinkRadius = this.shrinkInitialRadius;
+        this.showMessage('缩圈开始！注意安全区域！', '#ff4444');
+        // 创建缩圈边界可视化
+        if (!this.shrinkBoundary) {
+          const geo = new THREE.RingGeometry(
+            Math.max(0.1, this.shrinkRadius - 0.5),
+            Math.max(0.2, this.shrinkRadius + 0.5), 64
+          );
+          const mat = new THREE.MeshBasicMaterial({
+            color: 0xff0000, transparent: true, opacity: 0.3, side: THREE.DoubleSide
+          });
+          this.shrinkBoundary = new THREE.Mesh(geo, mat);
+          this.shrinkBoundary.rotation.x = -Math.PI / 2;
+          this.shrinkBoundary.position.y = 0.1;
+          this.engine.scene.add(this.shrinkBoundary);
         }
       }
-      // Destroy beds outside
-      for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-        if (!tinfo.bedAlive) continue;
-        const dist = Math.sqrt(tinfo.bedPos.x * tinfo.bedPos.x + tinfo.bedPos.z * tinfo.bedPos.z);
-        if (dist > this.shrinkRadius) {
-          tinfo.bedAlive = false;
-          tinfo.bedMesh.visible = false;
-          this.onBedDestroyed(tkey, null);
-          this.showMessage(`${tinfo.name} 的床被毒圈吞没并自动销毁！`, '#ff4444');
-        }
-      }
-      // 第 35 分钟按存活人数判定胜负
-      if (this.gameTime > 2100) {
-        this.endGameByShrink();
-      }
-    }
-    }
-
-    // Local input
-    if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
-      const move = this.input.getMovement();
-      const look = this.input.getLook();
-      if (this.isCampusMode && this.campusMode?.localPlayer) {
-        const campusInput = {
-          forward: !!move.z && move.z > 0,
-          backward: !!move.z && move.z < 0,
-          left: !!move.x && move.x < 0,
-          right: !!move.x && move.x > 0,
-          sprint: this.input.isDown('ShiftLeft'),
-          crouch: this.input.isDown('ControlLeft'),
-        };
-        this.campusMode.localPlayer.update(dt, campusInput);
-        this.campusMode.localPlayer.look(look.dx, look.dy);
-      }
-      this.localPlayer.moveInput(move.x, move.z, this.input.isDown('ShiftLeft'));
-      this.localPlayer.look(look.dx, look.dy);
-      // 校园寻宝模式
-      if (this.isCampusMode && this.campusMode) {
-        this.campusMode.update(dt);
-        this._updateCampusHud();
-        return; // skip normal game loop
-      }
-      // Scroll hotbar
-      const scroll = this.input.getHotbarScroll();
-      if (scroll !== 0) {
-        this.localPlayer.setHotbarIndex((this.localPlayer.hotbarIndex + scroll + 8) % 8);
-      }
-      if (this.input.consumeJump()) this.localPlayer.jump();
-      if (this.input.consumeAction()) this.performMobileAction();
-      if (this.input.consumeAttack()) {
-        if (!this.tryOpenFriendlyBlockPanel()) {
-          const weaponInfo = this.localPlayer.equipped.weapon ? ITEM_DB[this.localPlayer.equipped.weapon] : null;
-          if (weaponInfo?.ranged && this.localPlayer.arrowCount > 0) {
-            this.localPlayer.startBowCharge();
-          } else {
-            this.localPlayer.attack();
+      if (this.shrinkActive) {
+        // 缩小半径
+        const finalRadius = GAME_RULES.shrinkFinalRadius || 8;
+        if (this.shrinkRadius > finalRadius) {
+          this.shrinkRadius -= GAME_RULES.shrinkSpeed * dt;
+          this.shrinkRadius = Math.max(finalRadius, this.shrinkRadius);
+          // 更新边界可视化
+          if (this.shrinkBoundary) {
+            this.engine.scene.remove(this.shrinkBoundary);
+            this.shrinkBoundary.geometry.dispose();
+            const geo = new THREE.RingGeometry(
+              Math.max(0.1, this.shrinkRadius - 0.5),
+              Math.max(0.2, this.shrinkRadius + 0.5), 64
+            );
+            this.shrinkBoundary.geometry = geo;
+            this.engine.scene.add(this.shrinkBoundary);
           }
         }
-      }
-      const heldItem = this.localPlayer.getSelectedItem();
-      const heldInfo = heldItem ? ITEM_DB[heldItem.key] : null;
-      const canHandBreakByMobile = this.input.isActionHeld() && heldInfo?.type !== 'block' && heldInfo?.type !== 'special';
-      if (this.localPlayer.bowCharge > 0) {
-        if (this.input.isAttackHeld()) {
-          this.localPlayer.updateBowCharge(dt);
-        } else {
-          this.localPlayer.releaseBowCharge();
-        }
-      } else if (this.input.isAttackHeld() || canHandBreakByMobile) {
-        this.localPlayer.updateHandBreak(dt, { x: window.innerWidth / 2, y: window.innerHeight / 2 });
-      }
-      const buildPointer = this.input.consumeBuild();
-      if (buildPointer) {
-        if (this.movingBlockKey) {
-          this.placeMovedBlock(buildPointer);
-        } else {
-          const selectedItem = this.localPlayer.getSelectedItem();
-          const selectedInfo = selectedItem ? ITEM_DB[selectedItem.key] : null;
-          if (selectedItem?.key === 'teleport_coin') {
-            this.localPlayer.teleportCoinCharge = Math.max(0.5, this.localPlayer.teleportCoinCharge || 0);
-          } else if (selectedInfo?.type === 'special') {
-            this.localPlayer.useHotbarItem();
-          } else if (selectedInfo?.type === 'weapon') {
-            this.localPlayer.useHotbarItem();
-          } else {
-            this.localPlayer.placeBlock(buildPointer);
-          }
-        }
-      }
-      // 传送硬币蓄力与释放
-      if (this.localPlayer.teleportCoinCharge > 0) {
-        if (this.input.isBuildHeld()) {
-          this.localPlayer.teleportCoinCharge = Math.min(40, this.localPlayer.teleportCoinCharge + dt * 8);
-        } else {
-          // 释放硬币
-          this.localPlayer.throwTeleportCoin();
-          this.localPlayer.teleportCoinCharge = 0;
-        }
-      }
-      if (this.input.consumeSkill()) this.localPlayer.useSkill();
-      if (this.input.consumeDrop()) this.localPlayer.dropSelectedItem();
-      if (this.input.consumeBackpack()) this.toggleBackpack();
-      // 按F装填最近陷阱的箭矢
-      if (this.input.isDown('KeyF') && this.localPlayer.arrowCount > 0) {
-        this.input.keys['KeyF'] = false;
-        this.loadNearestTrap();
-      }
-    }
-
-    // Resource generators spawn drop items
-    for (const g of this.gens) {
-      if (g.active === false) continue;
-      if (g.activated !== true) {
-        if (this.localPlayer) {
-          const dist = this.localPlayer.pos.distanceTo(g.pos);
-          if (dist < 15) {
-            g.activated = true;
-            if (!g.label) {
-              const label = this.engine.makeTextSprite(`${g.spawnSec.toFixed(1)}s`, '#ffffff');
-              label.position.copy(g.pos).add(new THREE.Vector3(0, 1.8, 0));
-              this.engine.scene.add(label);
-              g.label = label;
-              this.genLabels.push(label);
+        // 对圈外玩家造成伤害
+        for (const p of this.players) {
+          if (p.isDead) continue;
+          const dist2D = Math.sqrt(p.pos.x * p.pos.x + p.pos.z * p.pos.z);
+          if (dist2D > this.shrinkRadius) {
+            p.hp -= GAME_RULES.shrinkDamage * dt;
+            if (p.hp <= 0 && !p.isDead) {
+              p.die(null, false);
+              this.onPlayerKilled(p, null);
             }
           }
         }
-        continue;
-      }
-      g.timer += dt;
-      if (g.label) {
-        const remaining = Math.max(0, g.spawnSec - g.timer);
-        this.engine.updateTextSprite(g.label, `${remaining.toFixed(1)}s`);
-      }
-      if (g.timer >= g.spawnSec) {
-        g.timer = 0;
-        g.ready = true;
-        // Visual pulse
-        g.mesh.scale.set(1.2, 1.2, 1.2);
-        this._timeouts.push(setTimeout(() => { if(g.mesh) g.mesh.scale.set(1,1,1); }, 200));
-        // Spawn currency drop item
-        const resKey = g.type === 'COPPER' ? 'copper' : g.type === 'SILVER' ? 'silver' : g.type === 'GOLD' ? 'gold' : 'jade';
-        const dropPos = g.pos.clone();
-        dropPos.x += (Math.random() - 0.5) * 2;
-        dropPos.z += (Math.random() - 0.5) * 2;
-        this.engine.spawnCurrencyDrop(dropPos, resKey, 1);
+        // 缩圈摧毁圈外的床
+        for (const [tKey, tInfo] of Object.entries(TEAMS)) {
+          if (!tInfo.bedAlive) continue;
+          const bedDist = Math.sqrt(tInfo.bedPos.x * tInfo.bedPos.x + tInfo.bedPos.z * tInfo.bedPos.z);
+          if (bedDist > this.shrinkRadius) {
+            tInfo.bedAlive = false;
+            if (tInfo.bedMesh) tInfo.bedMesh.visible = false;
+            this.engine.spawnParticles(tInfo.bedPos, tInfo.color, 20);
+            this.showMessage(tInfo.name + ' 的床被缩圈摧毁！', '#ff4444');
+            this.onBedDestroyed(tKey, null);
+          }
+        }
+        // 35分钟强制判定
+        if (this.gameTime >= 2100) {
+          this.endGameByShrink();
+        }
       }
     }
 
-    // AI Controller update (三层架构：战略+战术+执行)
-    AIManager.updateAll(dt, this.gameTime);
+    // ---- 本地玩家输入处理 ----
+    if (this.localPlayer && !this.localPlayer.isDead && !this.roleSelectionActive) {
+      if (!this.isCampusMode) {
+        // 经典模式输入
+        const move = this.input.getMovement();
+        const look = this.input.getLook();
+        this.localPlayer.moveInput(move.x, move.z, move.sprint);
+        this.localPlayer.look(look.dx, look.dy);
 
-    // Engine update
-    this.social?.update?.(dt);
+        // 跳跃
+        if (this.input.consumeJump()) {
+          if (this.localPlayer.onGround) {
+            this.localPlayer.vel.y = this.localPlayer.jumpPower;
+            this.localPlayer.onGround = false;
+          }
+        }
+
+        // 攻击
+        if (this.input.consumeAttack()) {
+          this.localPlayer.attack();
+        }
+
+        // 建造/放置方块
+        if (this.input.consumeBuild()) {
+          const blockType = this.localPlayer.getSelectedBlockType();
+          if (blockType) {
+            const rc = this.getLookedBlock(6);
+            if (rc.hit) {
+              this.engine.placeBlock(
+                rc.placePos.x, rc.placePos.y, rc.placePos.z,
+                blockType, this.localPlayer.team
+              );
+              this.localPlayer.matchStats.blocksPlaced++;
+              if (this.growth) this.growth.addXp(this.localPlayer, GROWTH_CONFIG.xp.placeBlock, '放置方块');
+            }
+          } else {
+            // 没有方块时尝试交互（拆对方方块）
+            const rc = this.getLookedBlock(6);
+            if (rc.hit) {
+              this.engine.damageBlock(rc.pos.x, rc.pos.y, rc.pos.z, this.localPlayer.baseDmg);
+            }
+          }
+        }
+
+        // 技能
+        if (this.input.consumeSkill()) {
+          this.localPlayer.useSkill();
+        }
+
+        // 交互（E键）
+        if (this.input.consumeAction()) {
+          this.tryOpenFriendlyBlockPanel();
+        }
+
+        // 背包（Tab键）
+        if (this.input.consumeBackpack()) {
+          this.toggleBackpack();
+        }
+
+        // 丢弃（G键）
+        if (this.input.consumeDrop()) {
+          const item = this.localPlayer.getSelectedItem();
+          if (item) {
+            this.engine.spawnItemDrop(this.localPlayer.pos, item.key, 1);
+            item.count--;
+            if (item.count <= 0) this.localPlayer.hotbar[this.localPlayer.hotbarIndex] = null;
+            this.localPlayer.updateWeaponMesh();
+          }
+        }
+
+        // 快捷栏滚轮切换
+        const scroll = this.input.getHotbarScroll();
+        if (scroll !== 0) {
+          let idx = this.localPlayer.hotbarIndex + scroll;
+          if (idx < 0) idx = 7;
+          if (idx > 7) idx = 0;
+          this.localPlayer.setHotbarIndex(idx);
+        }
+
+        // 移动端操作按钮
+        if (this.input.isMobile()) {
+          this.performMobileAction();
+        }
+      } else if (this.isCampusMode && this.campusMode && this.campusMode.localPlayer) {
+        // 校园模式输入
+        const cmInput = this.campusMode.input;
+        const move = this.input.getMovement();
+        cmInput.forward = move.z < -0.3;
+        cmInput.backward = move.z > 0.3;
+        cmInput.left = move.x < -0.3;
+        cmInput.right = move.x > 0.3;
+        cmInput.sprint = move.sprint;
+
+        // 校园模式视角
+        const look = this.input.getLook();
+        const lp = this.campusMode.localPlayer;
+        lp.yaw -= look.dx * 0.002;
+        lp.pitch = Math.max(-1.2, Math.min(1.2, lp.pitch - look.dy * 0.002));
+
+        // 校园模式跳跃
+        if (this.input.consumeJump()) {
+          lp.vel.y = 8;
+          lp.onGround = false;
+        }
+
+        // 校园模式技能
+        if (this.input.consumeSkill()) {
+          this.campusMode.handleSkillActivation();
+        }
+
+        // 校园模式交互
+        if (this.input.consumeAction()) {
+          // 交互逻辑
+        }
+
+        this.campusMode.update(dt);
+        this._updateCampusHud();
+      }
+    }
+
+    // ---- 资源生成器更新 ----
+    for (const g of this.gens) {
+      if (!g.resKey) continue;
+      g.spawnTimer = (g.spawnTimer || 0) + dt;
+      if (g.spawnTimer >= (g.spawnSec || 10)) {
+        g.spawnTimer = 0;
+        this.engine.spawnCurrencyDrop(g.pos, g.resKey, 1);
+      }
+    }
+
+    // ---- AI更新 ----
+    if (this.ai && !this.isCampusMode) {
+      AIManager.updateAll(dt, this.gameTime);
+    }
+
+    // ---- 社交系统更新 ----
+    if (this.social && this.social.update) {
+      this.social.update(dt);
+    }
+
+    // ---- 引擎更新和渲染 ----
     this.engine.update(dt);
     this.engine.render();
 
-    // UI
-    this.ui.update();
-
-    // Update shop if open and dirty
-    if (this.ui.shopOpen && this.shopDirty) {
+    // ---- UI更新 ----
+    if (this.ui) this.ui.update();
+    if (this.ui && this.ui.shopOpen && this.shopDirty) {
       this.ui.buildShop();
       this.shopDirty = false;
     }
 
-    // Admin data reporting
+    // ---- 数据上报 ----
     this.matchSnapshotTimer -= dt;
     if (this.matchSnapshotTimer <= 0) {
       this.matchSnapshotTimer = 5;
@@ -1734,735 +791,666 @@ class Game {
       this.economyLogTimer = 30;
       this.reportEconomyStats();
     }
+
+    // ---- 重置输入帧状态 ----
+    this.input.resetFrame();
   }
 
+  // ============================================
+  // 快捷栏与移动端
+  // ============================================
+
   selectHotbar(idx) {
-    if (this.localPlayer) {
-      this.localPlayer.setHotbarIndex(idx);
-    }
+    if (!this.localPlayer) return;
+    this.localPlayer.setHotbarIndex(idx);
   }
 
   performMobileAction() {
-    const lp = this.localPlayer;
-    if (!lp || lp.isDead) return;
-    if (this.movingBlockKey) {
-      this.placeMovedBlock({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-      return;
+    if (!this.localPlayer) return;
+    // 移动端攻击
+    if (this.input.buttons.attack) {
+      this.localPlayer.attack();
     }
-    const item = lp.getSelectedItem();
-    const info = item ? ITEM_DB[item.key] : null;
-    if (!item || !info) {
-      if (this.tryOpenFriendlyBlockPanel()) return;
-      lp.attack();
-      return;
+    // 移动端技能（长按释放）
+    if (this.input.buttons.skillHeld) {
+      // 持续按住技能时的处理
     }
-    if (info.type === 'weapon') {
-      lp.attack();
-      return;
+    if (this.input.buttons.skill) {
+      this.localPlayer.useSkill();
     }
-    lp.useHotbarItem();
   }
 
+  // ============================================
+  // 方块交互
+  // ============================================
+
   getLookedBlock(maxDist = 6) {
-    if (!this.localPlayer) return null;
-    return this.engine.raycastBlocks(
-      this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.7, 0)),
-      this.localPlayer.getForwardDir(),
-      maxDist
-    );
+    if (!this.localPlayer) return { hit: false };
+    const origin = this.localPlayer.pos.clone().add(new THREE.Vector3(0, 0.7, 0));
+    const dir = this.localPlayer.getForwardDir();
+    return this.engine.raycastBlocks(origin, dir, maxDist);
   }
 
   tryOpenFriendlyBlockPanel() {
-    const lp = this.localPlayer;
     const rc = this.getLookedBlock(6);
-    if (!lp || !rc.hit || !rc.block || rc.block.type === 'ground') return false;
-    this.selectedBlockKey = rc.key;
-    const panel = document.getElementById('buildPanel');
-    const hp = document.getElementById('buildHpText');
-    const info = ITEM_DB[rc.block.type];
-    if (hp) hp.textContent = `${info?.name || '建筑'} 血量：${Math.ceil(rc.block.hp)}/${rc.block.maxHp}`;
-    if (panel) panel.style.display = 'block';
-    if (document.pointerLockElement) document.exitPointerLock();
-    return true;
+    if (!rc.hit) { this.closeBuildPanel(); return; }
+    const blk = this.engine.blocks.get(rc.pos.x + ',' + rc.pos.y + ',' + rc.pos.z);
+    if (!blk || blk.type === 'ground') { this.closeBuildPanel(); return; }
+    // 检查是否为友方方块
+    if (blk.team === this.localPlayer.team) {
+      this.selectedBlockKey = rc.pos.x + ',' + rc.pos.y + ',' + rc.pos.z;
+      const panel = document.getElementById('buildPanel');
+      const hpText = document.getElementById('buildHpText');
+      if (hpText) {
+        const blockInfo = ITEM_DB[blk.type];
+        hpText.textContent = (blockInfo ? blockInfo.name : '建筑') + ' 血量：' + Math.ceil(blk.hp) + '/' + blk.maxHp;
+      }
+      if (panel) panel.style.display = 'block';
+    } else {
+      this.closeBuildPanel();
+    }
   }
 
   closeBuildPanel() {
+    this.selectedBlockKey = null;
     const panel = document.getElementById('buildPanel');
     if (panel) panel.style.display = 'none';
   }
 
   nextBlockUpgrade(type) {
-    const order = GAME_RULES.blockUpgradeChain;
-    const idx = order.indexOf(type);
-    if (idx < 0 || idx >= order.length - 1) return null;
-    return order[idx + 1];
+    const chain = GAME_RULES.blockUpgradeChain || ['wood_plank', 'stone_plate', 'iron_plate', 'titanium'];
+    const idx = chain.indexOf(type);
+    if (idx >= 0 && idx < chain.length - 1) return chain[idx + 1];
+    return null;
   }
 
   upgradeSelectedBlock() {
-    const lp = this.localPlayer;
+    if (!this.selectedBlockKey || !this.localPlayer) return;
     const blk = this.engine.blocks.get(this.selectedBlockKey);
-    if (!lp || !blk || blk.team !== lp.team) return;
-    const next = this.nextBlockUpgrade(blk.type);
-    if (!next) return this.showMessage('该建筑已是最高等级', '#ffdd00');
-    const cost = ITEM_DB[next].cost || {};
-    for (const [k, v] of Object.entries(cost)) {
-      if ((lp.inv[k] || 0) < v) return this.showMessage(`升级需要 ${v}${RES[k.toUpperCase()]?.name || k}`, '#ff5555');
+    if (!blk) return;
+    const nextType = this.nextBlockUpgrade(blk.type);
+    if (!nextType) { this.showMessage('已经是最高级', '#ffaa00'); return; }
+    const cost = ITEM_DB[nextType] ? ITEM_DB[nextType].cost : null;
+    if (!cost) return;
+    // 检查资源
+    for (const [cur, amount] of Object.entries(cost)) {
+      if ((this.localPlayer.inv[cur] || 0) < amount) {
+        this.showMessage('资源不足！', '#ff4444');
+        return;
+      }
     }
-    for (const [k, v] of Object.entries(cost)) lp.inv[k] -= v;
-    this.engine.replaceBlockType(this.selectedBlockKey, next, lp.role === 'STEEL_BONE' ? 1.2 + (lp.steelBuildBonus || 0) : 1);
-    this.showMessage(`建筑已升级为${ITEM_DB[next].name}`, '#8be9fd');
+    // 扣除资源
+    for (const [cur, amount] of Object.entries(cost)) {
+      this.localPlayer.inv[cur] -= amount;
+    }
+    // 替换方块
+    this.engine.replaceBlockType(this.selectedBlockKey, nextType);
     this.closeBuildPanel();
+    this.shopDirty = true;
   }
 
   destroySelectedBlock() {
+    if (!this.selectedBlockKey || !this.localPlayer) return;
     const blk = this.engine.blocks.get(this.selectedBlockKey);
-    if (!blk || blk.team !== this.localPlayer?.team) return;
-    if (['iron_plate','titanium','blast_glass'].includes(blk.type) && !confirm('这是高等级建筑，确定要拆毁吗？')) return;
-    const [x, y, z] = this.selectedBlockKey.split(',').map(Number);
-    this.engine.removeBlock(x, y, z);
-    this.showMessage('建筑已拆毁', '#ffdd00');
+    if (!blk) return;
+    // 高等级方块需要确认
+    const chain = GAME_RULES.blockUpgradeChain || ['wood_plank', 'stone_plate', 'iron_plate', 'titanium'];
+    const level = chain.indexOf(blk.type);
+    if (level >= 2) {
+      // 高等级方块：直接拆毁但返还部分资源
+      this.showMessage('拆毁了 ' + (ITEM_DB[blk.type]?.name || '建筑'), '#ffaa00');
+    }
+    const parts = this.selectedBlockKey.split(',');
+    this.engine.removeBlock(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
     this.closeBuildPanel();
   }
 
   prepareMoveSelectedBlock() {
-    const blk = this.engine.blocks.get(this.selectedBlockKey);
-    if (!blk || blk.team !== this.localPlayer?.team) return;
+    if (!this.selectedBlockKey || !this.localPlayer) return;
     this.movingBlockKey = this.selectedBlockKey;
     this.closeBuildPanel();
-    this.showMessage('请选择新位置，右键/建造键放置，不消耗货币', '#8be9fd');
+    this.showMessage('点击目标位置放置方块', '#8be9fd');
+    // 监听下次点击
+    const handler = (e) => {
+      document.removeEventListener('click', handler);
+      this.placeMovedBlock({ x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener('click', handler);
   }
 
   placeMovedBlock(pointer) {
-    const lp = this.localPlayer;
-    const rc = this.engine.raycastPlacement(pointer?.x, pointer?.y, 6);
-    if (!lp || !rc.hit) return;
-    const center = new THREE.Vector3(rc.x + 0.5, rc.y + 0.5, rc.z + 0.5);
-    if (center.distanceTo(lp.pos) > 6.5) return;
-    if (this.engine.moveBlock(this.movingBlockKey, rc.x, rc.y, rc.z)) {
-      this.showMessage('建筑已移动', '#8be9fd');
-      this.movingBlockKey = null;
-      this.selectedBlockKey = null;
-    } else {
-      this.showMessage('目标位置已有建筑，无法移动', '#ff5555');
+    if (!this.movingBlockKey) return;
+    const blk = this.engine.blocks.get(this.movingBlockKey);
+    if (!blk) { this.movingBlockKey = null; return; }
+    // 用引擎的射线检测新位置
+    const rc = this.engine.raycastPlacement(pointer.x, pointer.y, 8);
+    if (rc.hit && rc.baseKey) {
+      const type = blk.type;
+      const team = blk.team;
+      const parts = this.movingBlockKey.split(',');
+      this.engine.removeBlock(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
+      this.engine.placeBlock(rc.placePos.x, rc.placePos.y, rc.placePos.z, type, team);
     }
+    this.movingBlockKey = null;
   }
+
+  // ============================================
+  // 面板切换
+  // ============================================
 
   toggleBackpack() {
     const panel = document.getElementById('backpackPanel');
     if (!panel) return;
-    const showing = panel.style.display === 'flex';
-    panel.style.display = showing ? 'none' : 'flex';
-    if (!showing) this.ui.updateBackpack();
-    if (!showing && document.pointerLockElement) document.exitPointerLock();
-    else if (showing && !this.input.isMobile()) this.engine.renderer.domElement.requestPointerLock();
+    const isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : '';
+    if (!isOpen && this.ui) this.ui.updateBackpack();
+    // 关闭其他面板
+    if (!isOpen) {
+      const shop = document.getElementById('shopPanel');
+      if (shop) shop.style.display = 'none';
+      this.ui.shopOpen = false;
+      this.growthPanelOpen = false;
+      const growth = document.getElementById('growthPanel');
+      if (growth) growth.style.display = 'none';
+    }
   }
 
   toggleShop() {
-    this.ui.shopOpen = !this.ui.shopOpen;
-    this.shopDirty = true;
     const panel = document.getElementById('shopPanel');
-    if (panel) panel.style.display = this.ui.shopOpen ? 'flex' : 'none';
-    if (this.ui.shopOpen) this.ui.buildShop();
-    // Release pointer
-    if (this.ui.shopOpen && document.pointerLockElement) {
-      document.exitPointerLock();
-    } else if (!this.ui.shopOpen && !this.input.isMobile()) {
-      this.engine.renderer.domElement.requestPointerLock();
+    if (!panel) return;
+    const isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : '';
+    this.ui.shopOpen = !isOpen;
+    if (!isOpen) {
+      this.shopDirty = true;
+      this.ui.buildShop();
+      // 绑定购买按钮
+      this._bindShopBuyButtons();
     }
+    // 关闭其他面板
+    if (!isOpen) {
+      const bp = document.getElementById('backpackPanel');
+      if (bp) bp.style.display = 'none';
+      this.growthPanelOpen = false;
+      const growth = document.getElementById('growthPanel');
+      if (growth) growth.style.display = 'none';
+    }
+  }
+
+  _bindShopBuyButtons() {
+    const grid = document.getElementById('shopGrid') || document.getElementById('shopBody');
+    if (!grid) return;
+    grid.querySelectorAll('.shop-buy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-buy-key');
+        if (key) this.buyItem(key, ITEM_DB[key]?.count || 1, this.localPlayer);
+      });
+    });
   }
 
   toggleGrowthPanel() {
-    this.growthPanelOpen = !this.growthPanelOpen;
     const panel = document.getElementById('growthPanel');
-    if (panel) panel.style.display = this.growthPanelOpen ? 'flex' : 'none';
-    if (this.growthPanelOpen) {
+    if (!panel) return;
+    const isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : '';
+    this.growthPanelOpen = !isOpen;
+    if (!isOpen && this.ui) {
       this.ui.renderGrowthCenter();
-      if (document.pointerLockElement) document.exitPointerLock();
-    } else if (!this.input.isMobile()) {
-      this.engine.renderer.domElement.requestPointerLock();
     }
   }
 
-  buyItem(key, count = 1, targetPlayer = null) {
-    const lp = targetPlayer || this.localPlayer;
-    if (!lp) return;
-    const item = ITEM_DB[key];
-    if (!item) return;
+  // ============================================
+  // 商店购买
+  // ============================================
 
-    const totalCost = {};
-    if (item.cost.copper) totalCost.copper = item.cost.copper * count;
-    if (item.cost.silver) totalCost.silver = item.cost.silver * count;
-    if (item.cost.gold) totalCost.gold = item.cost.gold * count;
-    if (item.cost.jade) totalCost.jade = item.cost.jade * count;
-
-    for (const [rk, rv] of Object.entries(totalCost)) {
-      if ((lp.inv[rk] || 0) < rv) return;
+  buyItem(key, count, targetPlayer) {
+    const info = ITEM_DB[key];
+    if (!info || !info.cost) return;
+    const player = targetPlayer || this.localPlayer;
+    if (!player) return;
+    // 检查资源
+    for (const [cur, amount] of Object.entries(info.cost)) {
+      if ((player.inv[cur] || 0) < amount) {
+        if (player === this.localPlayer) this.showMessage('资源不足！', '#ff4444');
+        return false;
+      }
     }
-    for (const [rk, rv] of Object.entries(totalCost)) {
-      lp.inv[rk] -= rv;
+    // 扣除资源
+    for (const [cur, amount] of Object.entries(info.cost)) {
+      player.inv[cur] -= amount;
     }
-
-    lp.addToBackpack(key, (item.count || 1) * count);
-    this.network?.logEconomy?.(lp.playerId, 'buy_item', Object.keys(totalCost)[0], -Object.values(totalCost)[0], key, lp.pos, Math.floor(this.gameTime));
-    if (item.type === 'weapon') {
-      lp.equip(key);
+    // 添加到背包
+    const actualCount = info.count || count || 1;
+    player.addToBackpack(key, actualCount);
+    // 如果是武器且玩家没有装备武器，自动装备
+    if (info.type === 'weapon' && !player.equipped.weapon) {
+      player.equipped.weapon = key;
+      player.updateWeaponMesh();
     }
+    // 如果是护甲且玩家没有装备护甲，自动装备
+    if (info.type === 'armor' && !player.equipped.armor) {
+      player.equipped.armor = key;
+      // 应用护甲效果
+      player.armor = info.armor || 0;
+      player.armorMax = info.armor || 0;
+      player.armorProtectRate = info.protectRate || 0;
+    }
+    // 标记商店需要刷新
     this.shopDirty = true;
+    return true;
   }
+
+  // ============================================
+  // 陷阱装填
+  // ============================================
 
   loadNearestTrap() {
-    const lp = this.localPlayer;
-    if (!lp || lp.arrowCount <= 0) return;
-    let nearest = null, nearestDist = 3;
+    if (!this.localPlayer) return;
     for (const trap of this.engine.trapDevices) {
-      if (!trap.active) continue;
-      if (trap.team !== lp.team) continue;
-      if (trap.arrows >= trap.maxArrows) continue;
-      const dist = lp.pos.distanceTo(trap.pos);
-      if (dist < nearestDist) { nearestDist = dist; nearest = trap; }
+      if (trap.team !== this.localPlayer.team) continue;
+      if (trap.arrows >= 100) continue;
+      const dist = this.localPlayer.pos.distanceTo(trap.pos);
+      if (dist < 5) {
+        // 消耗箭矢装填
+        const arrowItem = this.localPlayer.hotbar.find(h => h && h.key === 'arrow');
+        if (arrowItem) {
+          const loadCount = Math.min(arrowItem.count, 100 - trap.arrows);
+          arrowItem.count -= loadCount;
+          trap.arrows += loadCount;
+          if (arrowItem.count <= 0) {
+            const idx = this.localPlayer.hotbar.indexOf(arrowItem);
+            if (idx >= 0) this.localPlayer.hotbar[idx] = null;
+          }
+          this.showMessage('装填了 ' + loadCount + ' 支箭矢', '#8be9fd');
+          return;
+        }
+      }
     }
-    if (nearest) {
-      const loaded = this.engine.loadTrapArrows(nearest, Math.min(lp.arrowCount, nearest.maxArrows - nearest.arrows));
-      lp.arrowCount -= loaded;
-      this.showMessage(`已装填 ${loaded} 支箭矢到追踪装置（剩余 ${nearest.arrows}/${nearest.maxArrows}）`, '#8be9fd');
-    }
+    this.showMessage('附近没有可装填的陷阱', '#ffaa00');
   }
 
+  // ============================================
+  // 击杀与床摧毁
+  // ============================================
+
   onPlayerKilled(victim, killer) {
-    let msg = '';
-    if (killer) {
-      msg = `${killer.name} 消灭了 ${victim.name}`;
-    } else {
-      msg = `${victim.name} 坠入了虚空`;
+    // 生成击杀消息
+    const victimName = victim ? victim.name : '未知';
+    const killerName = killer ? killer.name : '虚空';
+    this.addKillFeed(killerName + ' 击杀了 ' + victimName);
+    this.showMessage(victimName + ' 被击杀了！', '#ff4444');
+
+    // 掉落物品
+    if (victim) {
+      // 货币掉落
+      for (const cur of ['copper', 'silver', 'gold', 'jade']) {
+        const amount = Math.floor((victim.inv[cur] || 0) * 0.5);
+        if (amount > 0) {
+          this.engine.spawnCurrencyDrop(victim.pos.clone(), cur, amount);
+        }
+      }
+      // 死亡盒子
+      this.engine.createDeathBox(victim);
     }
-    this.addKillFeed(msg);
-    // Kill replay log
+
+    // AI击杀经验
+    if (killer && killer.isAI && this.growth) {
+      this.growth.addXp(killer, GROWTH_CONFIG.xp.kill * AI_CONFIG.XP_REDUCTION, '击杀');
+    }
+    // 本地玩家击杀经验
+    if (killer === this.localPlayer && this.growth) {
+      this.growth.addXp(killer, GROWTH_CONFIG.xp.kill, '击杀');
+    }
+
+    // 击杀者统计
+    if (killer && !killer.isAI) {
+      killer.matchStats.kills++;
+    }
+
+    // 网络同步
     try {
-      this.network?.roomNet?.client?.from('kill_replay_events')?.insert?.({
-        room_id: this.network?.roomNet?.room?.id || 'local',
-        match_tick: Math.floor(this.gameTime),
-        event_type: 'player_killed',
-        actor_id: killer?.playerId || null,
-        target_id: victim.playerId,
-        details: { victimHp: victim.hp, victimArmor: victim.armor, killerWeapon: killer?.equipped?.weapon || null }
-      })?.catch?.(() => {});
-    } catch(_) {}
-    if (this.network?.sendPlayerKilled) {
-      this.network.sendPlayerKilled(victim.playerId || victim.name, killer?.playerId || killer?.name || null);
-    }
+      if (this.network && this.network.sendPlayerKilled) {
+        this.network.sendPlayerKilled(victim?.playerId, killer?.playerId);
+      }
+    } catch (e) { /* 忽略网络错误 */ }
+
+    // 检查胜利条件
     this.checkWinCondition();
   }
 
   onBedDestroyed(teamKey, destroyer) {
-    const t = TEAMS[teamKey];
-    let msg = `${t.name}的床被摧毁了！`;
-    if (destroyer) msg = `${destroyer.name} 摧毁了 ${t.name}的床！`;
-    this.showMessage(msg, t.hex);
-    this.addKillFeed(msg);
-    if (this.network?.sendBedDestroyed) {
-      this.network.sendBedDestroyed(teamKey, destroyer?.playerId || destroyer?.name || null);
+    const teamInfo = TEAMS[teamKey];
+    if (!teamInfo) return;
+    const destroyerName = destroyer ? destroyer.name : '未知';
+    this.addKillFeed(destroyerName + ' 拆毁了 ' + teamInfo.name + ' 的床！');
+    this.showMessage(teamInfo.name + ' 的床被拆毁了！', '#ff4444');
+
+    // 拆床者经验
+    if (destroyer && this.growth) {
+      const mult = destroyer.isAI ? AI_CONFIG.XP_REDUCTION : 1;
+      this.growth.addXp(destroyer, GROWTH_CONFIG.xp.bedBreak * mult, '拆床');
     }
+    if (destroyer) destroyer.matchStats.beds++;
+
+    // 网络同步
+    try {
+      if (this.network && this.network.sendBedDestroyed) {
+        this.network.sendBedDestroyed(teamKey, destroyer?.playerId);
+      }
+    } catch (e) { /* 忽略网络错误 */ }
+
+    // 检查胜利条件
     this.checkWinCondition();
   }
 
   checkWinCondition() {
-    const aliveTeams = [];
-    for (const [tkey, tinfo] of Object.entries(TEAMS)) {
-      const hasBed = tinfo.bedAlive;
-      const hasAlive = this.players.some(p => p.team === tkey && !p.isDead);
-      if (hasBed || hasAlive) aliveTeams.push(tkey);
+    // 统计存活队伍（有活人或床还存在的队伍）
+    const aliveTeams = new Set();
+    for (const [tKey, tInfo] of Object.entries(TEAMS)) {
+      if (tInfo.bedAlive) {
+        aliveTeams.add(tKey);
+      } else {
+        // 床没了，检查是否还有活着的玩家
+        const hasAlive = this.players.some(p => p.team === tKey && !p.isDead);
+        if (hasAlive) aliveTeams.add(tKey);
+      }
     }
-    if (aliveTeams.length <= 1) {
-      const winner = aliveTeams[0];
-      this.endGame(winner ? TEAMS[winner].name : '无');
+    if (aliveTeams.size <= 1) {
+      const winnerKey = aliveTeams.values().next().value;
+      const winnerName = winnerKey ? TEAMS[winnerKey].name : '平局';
+      this.endGame(winnerName);
     }
   }
 
   endGameByShrink() {
-    // Count alive players per team
-    const counts = {};
-    for (const p of this.players) {
-      if (!p.isDead) counts[p.team] = (counts[p.team] || 0) + 1;
-    }
-    let bestTeam = null, bestCount = -1;
-    for (const [t, c] of Object.entries(counts)) {
-      if (c > bestCount) { bestCount = c; bestTeam = t; }
-    }
-    this.endGame(bestTeam ? TEAMS[bestTeam].name : '无');
-  }
-
-  _showCampusCareerSelection() {
-    const panel = document.getElementById('startRolePanel');
-    if (!panel) { this._startCampusWithCareer('ATHLETE'); return; }
-    const careers = [
-      { key: 'ATHLETE', name: '体育生', code: '体', desc: '被动:体力+50%  主动:冲刺(移速200%/3秒)', color: '#ff4444' },
-      { key: 'ENGINEER', name: '工科生', code: '工', desc: '被动:破解减半  主动:信号干扰(8m屏蔽)', color: '#44aaff' },
-      { key: 'CHEMIST', name: '化学系', code: '化', desc: '被动:免疫毒气  主动:粘液陷阱(定身1.5秒)', color: '#44ff44' },
-      { key: 'ARTIST', name: '美术生', code: '美', desc: '被动:感知+20%  主动:全息投影(8秒分身)', color: '#ff44ff' },
-      { key: 'SCHOLAR', name: '文科生', code: '文', desc: '被动:自动线索  主动:心理威慑(击退+眩晕)', color: '#ffaa44' },
-    ];
-    let cardsHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">';
-    for (const c of careers) {
-      cardsHtml += `<div class="start-role-card" data-career="${c.key}" style="cursor:pointer;padding:16px;border-radius:10px;border:2px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);text-align:center;min-width:120px;transition:all 0.2s;">
-        <div style="font-size:36px;font-weight:bold;color:${c.color};">${c.code}</div>
-        <div style="color:#e2e8f0;font-weight:bold;margin:6px 0 4px;">${c.name}</div>
-        <div style="color:#94a3b8;font-size:11px;line-height:1.4;">${c.desc}</div>
-      </div>`;
-    }
-    cardsHtml += '</div>';
-    panel.innerHTML = `
-      <div style="text-align:center;margin-bottom:16px;">
-        <h2 style="color:#00ffaa;margin:0 0 6px;">选择你的职业</h2>
-        <p style="color:#94a3b8;font-size:13px;margin:0;">校园寻宝模式 - 每个职业有独特技能</p>
-      </div>
-      <div id="startRoleCards" style="overflow-x:auto;padding:0 10px;">${cardsHtml}</div>`;
-    panel.style.display = 'flex';
-    panel.style.visibility = 'visible';
-    panel.style.zIndex = '9999';
-
-    panel.querySelectorAll('.start-role-card').forEach(card => {
-      const handler = (e) => { e.preventDefault(); e.stopPropagation(); this._startCampusWithCareer(card.dataset.career); };
-      card.onclick = handler;
-      card.addEventListener('touchend', handler, { passive: false });
-      card.addEventListener('mouseenter', () => { card.style.borderColor = '#00ffaa'; card.style.background = 'rgba(0,255,170,0.1)'; });
-      card.addEventListener('mouseleave', () => { card.style.borderColor = 'rgba(255,255,255,0.1)'; card.style.background = 'rgba(255,255,255,0.05)'; });
-    });
-  }
-
-  _startCampusWithCareer(careerKey) {
-    const panel = document.getElementById('startRolePanel');
-    if (panel) panel.style.display = 'none';
-
-    this.campusMode = new CampusMode(this.engine);
-    const mapGen = new CampusMapGenerator(this.engine.scene);
-    this._campusMapGen = mapGen;
-    mapGen.generate();
-
-    this.campusMode.init(careerKey, this.playerName);
-
-    this.campusMode.onEvent = (type, msg) => {
-      this.showMessage(msg);
-      const eventEl = document.getElementById('campusEvent');
-      if (eventEl) {
-        eventEl.textContent = msg;
-        eventEl.style.display = 'block';
-        setTimeout(() => { eventEl.style.display = 'none'; }, 3000);
-      }
-    };
-
-    this.campusMode.onEnd = (success, reason, player) => {
-      this.endCampusMode(success, reason, player);
-    };
-  }
-
-  endCampusMode(success, reason, player) {
-    this.isCampusMode = false;
-    document.getElementById('campusHud').style.display = 'none';
-    
-    // 显示结算
-    const goScreen = document.getElementById('gameOverScreen');
-    if (goScreen) {
-      goScreen.style.display = 'flex';
-      const resultTitle = goScreen.querySelector('.result-title');
-      const resultDesc = goScreen.querySelector('.result-desc');
-      if (resultTitle) resultTitle.textContent = success ? '撤离成功！' : '撤离失败';
-      if (resultTitle) resultTitle.style.color = success ? '#00ffaa' : '#ff4444';
-      if (resultDesc) resultDesc.textContent = reason || '';
-      
-      // 显示收集的物品
-      let itemsHtml = '<div style="margin-top:12px;color:#94a3b8;">';
-      if (player) {
-        const items = player.backpack.filter(Boolean);
-        const unique = {};
-        items.forEach(i => { unique[i.key] = (unique[i.key] || 0) + 1; });
-        let totalCredits = 0;
-        for (const [key, count] of Object.entries(unique)) {
-          const info = CAMPUS_ITEMS[key];
-          if (info) {
-            itemsHtml += `<div style="display:flex;justify-content:space-between;padding:4px 0;">
-              <span style="color:#e2e8f0;">${info.char} ${info.name} x${count}</span>
-              <span style="color:#ffd700;">${(info.credits || 0) * count}学分</span>
-            </div>`;
-            totalCredits += (info.credits || 0) * count;
-          }
-        }
-        itemsHtml += `<div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:8px;display:flex;justify-content:space-between;">
-          <span style="color:#e2e8f0;font-weight:bold;">总计</span>
-          <span style="color:#ffd700;font-weight:bold;">${totalCredits} 学分</span>
-        </div>`;
-      }
-      itemsHtml += '</div>';
-      
-      const statsEl = goScreen.querySelector('.result-stats');
-      if (statsEl) statsEl.innerHTML = itemsHtml;
-    }
-    
-    // 清理
-    if (this.campusMode) {
-      this.campusMode.dispose();
-      this.campusMode = null;
-    }
-    if (this._campusMapGen) {
-      this._campusMapGen.dispose();
-      this._campusMapGen = null;
+    // 按存活人数判定
+    const alivePlayers = this.players.filter(p => !p.isDead);
+    if (alivePlayers.length <= 1) {
+      const winner = alivePlayers[0];
+      const winnerName = winner ? winner.teamInfo.name : '平局';
+      this.endGame(winnerName);
     }
   }
 
-  _updateCampusHud() {
-    const cm = this.campusMode;
-    if (!cm || !cm.localPlayer) return;
-    const p = cm.localPlayer;
-    
-    // Timer
-    const timerEl = document.getElementById('campusTimer');
-    if (timerEl) {
-      const remaining = Math.max(0, cm.maxTime - cm.gameTime);
-      const min = Math.floor(remaining / 60);
-      const sec = Math.floor(remaining % 60);
-      timerEl.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
-    }
-    
-    // Status (HP/Stamina/Career)
-    const statusEl = document.getElementById('campusStatus');
-    if (statusEl) {
-      statusEl.innerHTML = `命 <span style="color:${p.hp > 30 ? '#00ffaa' : '#ff4444'}">${Math.ceil(p.hp)}</span> · 力 <span style="color:#44aaff">${Math.ceil(p.stamina)}</span> · ${p.career.name}`;
-    }
-    
-    // Weight
-    const weightEl = document.getElementById('campusWeight');
-    if (weightEl) {
-      const w = p.totalWeight;
-      const speed = p.getSpeedMultiplier();
-      const color = w > 40 ? '#ff4444' : w > 20 ? '#ffaa44' : '#00ffaa';
-      weightEl.innerHTML = `负重: <span style="color:${color}">${w}kg</span> · 移速${Math.round(speed * 100)}%`;
-    }
-  }
+  // ============================================
+  // 游戏结束
+  // ============================================
 
   endGame(winnerName) {
-    if (!this.gameActive) return;
     this.gameActive = false;
-    // 停止渲染循环
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
-    this.input?.destroy?.();
-    for (const tid of this._timeouts) clearTimeout(tid);
+
+    // 销毁输入
+    if (this.input) this.input.destroy();
+
+    // 清理timeout
+    for (const t of this._timeouts) clearTimeout(t);
     this._timeouts = [];
-    if (this.network?.roomNet?.setRoomStatus) {
-      this.network.roomNet.setRoomStatus('ended').catch(console.warn);
+
+    // 清理缩圈边界
+    if (this.shrinkBoundary) {
+      this.engine.scene.remove(this.shrinkBoundary);
+      this.shrinkBoundary.geometry.dispose();
+      this.shrinkBoundary.material.dispose();
+      this.shrinkBoundary = null;
     }
-    if (this.network?.sendGameOver) {
-      this.network.sendGameOver(winnerName).catch(console.warn);
-    }
+
+    // 退出pointer lock
     if (document.pointerLockElement) document.exitPointerLock();
-    this.social?.showPostMatchGallery?.(winnerName);
-    const screen = document.getElementById('gameOverScreen');
-    if (!screen) return;
-    screen.style.display = 'flex';
-    screen.querySelector('h1').textContent = winnerName === '无' ? '平局！' : '游戏结束！';
-    screen.querySelector('.winner').textContent = winnerName === '无' ? '所有队伍都覆灭了' : `胜利者: ${winnerName}`;
 
-    const lp = this.localPlayer;
-    const stats = screen.querySelector('.stats');
-    if (stats) stats.innerHTML = '';
-    const growthResult = this.growth?.settlement?.(winnerName);
-    const passResult = window.seasonPass?.addMatchSettlement?.(lp?.matchStats || {}, winnerName === lp?.teamInfo?.name, false);
-    // 反作弊：AI对局经验减半
-    const aiKillRatio = Math.min(1, (lp?.matchStats?.kills || 0) / Math.max(1, this.players.length - 1));
-    const xpMult = 1 - aiKillRatio * (1 - AI_CONFIG.XP_REDUCTION);
-    const rows = [
-      ['存活时间', `${Math.floor(this.gameTime / 60)}分${Math.floor(this.gameTime % 60)}秒`],
-      ['最终生命', `${Math.ceil(lp?.hp || 0)}/${lp?.maxHp || 0}`],
-      ['本局等级', `Lv.${lp?.matchLevel || 1} / 8`],
-      ['本局表现', `击杀:${lp?.matchStats.kills || 0} 拆床:${lp?.matchStats.beds || 0} 建造:${lp?.matchStats.blocksPlaced || 0}`],
-      ['持有资源', `铜:${Math.floor(lp?.inv.copper||0)} 银:${Math.floor(lp?.inv.silver||0)} 金:${Math.floor(lp?.inv.gold||0)}`],
-      ['筑梦星尘', `+${growthResult?.stardust || 0}`],
-      ['排位变化', `${growthResult?.rankDelta >= 0 ? '+' : ''}${growthResult?.rankDelta || 0}（${growthResult?.rankName || '沉睡梦游者'}）`],
-      ['赛季积分', `${growthResult?.seasonXp || 0}`],
-      ['手册经验', `+${passResult?.xp || 0}${passResult?.capped ? '（对局经验周上限）' : ''}`],
-      ['赛季券', `+${passResult?.coupons || 0}`]
-    ];
-    for (const [label, val] of rows) {
-      const row = document.createElement('div');
-      row.className = 'stat-row';
-      row.innerHTML = `<span>${label}</span><span>${val}</span>`;
-      stats.appendChild(row);
+    // 网络同步
+    try {
+      if (this.network && this.network.sendGameOver) {
+        this.network.sendGameOver(winnerName);
+      }
+      if (this.network && this.network.roomNet && this.network.roomNet.room) {
+        this.network.roomNet.setRoomStatus('finished').catch(() => {});
+      }
+    } catch (e) { /* 忽略 */ }
+
+    // 成长结算
+    let growthResult = null;
+    if (this.growth && !this.isCampusMode) {
+      growthResult = this.growth.settlement(winnerName);
     }
 
-    // MVP 计算
-    let mvp = null, mvpScore = -1;
+    // 计算MVP
+    let mvp = null;
+    let mvpScore = -1;
     for (const p of this.players) {
-      const s = (p.matchStats?.kills || 0) * 3 + (p.matchStats?.beds || 0) * 10 + (p.matchStats?.blocksPlaced || 0);
-      if (s > mvpScore) { mvpScore = s; mvp = p; }
+      const score = (p.matchStats.kills || 0) * 100 + (p.matchStats.beds || 0) * 200 + (p.matchStats.damage || 0);
+      if (score > mvpScore) { mvpScore = score; mvp = p; }
     }
-    const mvpSection = document.getElementById('mvpSection');
-    if (mvp && mvpSection) {
-      const winTeam = Object.entries(TEAMS).find(([k]) => TEAMS[k].name === winnerName);
-      let finalMvp = mvp;
-      if (winTeam) {
-        let winMvpScore = -1;
-        for (const p of this.players) {
-          if (p.team === winTeam[0]) {
-            const s = (p.matchStats?.kills || 0) * 3 + (p.matchStats?.beds || 0) * 10 + (p.matchStats?.blocksPlaced || 0);
-            if (s > winMvpScore) { winMvpScore = s; finalMvp = p; }
-          }
-        }
+
+    // 显示结算界面
+    const screen = document.getElementById('gameOverScreen');
+    if (screen) {
+      screen.style.display = '';
+      const titleEl = screen.querySelector('.result-title');
+      if (titleEl) titleEl.textContent = '游戏结束！';
+      const winnerEl = screen.querySelector('.winner');
+      if (winnerEl) winnerEl.textContent = winnerName + ' 获胜！';
+
+      // 填充结算数据
+      const statsEl = screen.querySelector('.stats');
+      if (statsEl && this.localPlayer) {
+        const p = this.localPlayer;
+        const survivalMin = Math.floor(this.gameTime / 60);
+        statsEl.innerHTML = ''
+          + '<div>存活时间：' + survivalMin + ' 分 ' + Math.floor(this.gameTime % 60) + ' 秒</div>'
+          + '<div>击杀：' + (p.matchStats.kills || 0) + '</div>'
+          + '<div>拆床：' + (p.matchStats.beds || 0) + '</div>'
+          + '<div>方块放置：' + (p.matchStats.blocksPlaced || 0) + '</div>'
+          + '<div>造成伤害：' + Math.floor(p.matchStats.damage || 0) + '</div>';
       }
-      mvpSection.style.display = 'block';
-      document.getElementById('mvpName').textContent = finalMvp ? `${finalMvp.name} (${TEAMS[finalMvp.team]?.name || ''})` : '--';
-      document.getElementById('mvpStats').textContent = finalMvp ? `击杀:${finalMvp.matchStats?.kills || 0} 拆床:${finalMvp.matchStats?.beds || 0} 建造:${finalMvp.matchStats?.blocksPlaced || 0}` : '--';
-    }
 
-    // 友方对战数据
-    if (lp) {
-      const allies = this.players.filter(p => p.team === lp.team && p !== lp);
-      const allySection = document.getElementById('allyStatsSection');
-      if (allies.length > 0 && allySection) {
-        allySection.style.display = 'block';
-        document.getElementById('allyStatsList').innerHTML = allies.map(a =>
-          `<div class="ally-stat-row"><span>${a.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span><span>击杀:${a.matchStats?.kills || 0} 拆床:${a.matchStats?.beds || 0} 建筑:${a.matchStats?.blocksPlaced || 0}</span></div>`
-        ).join('');
+      // MVP
+      const mvpSection = document.getElementById('mvpSection');
+      if (mvpSection && mvp) {
+        mvpSection.innerHTML = '<div>MVP：' + mvp.name + '（' + mvp.teamInfo.name + '）</div>';
       }
-    }
 
-    // 段位变化（总段位，不按角色）
-    const gm = this.growth;
-    const rankScore = gm?.profile?.rankScore || 0;
-    const isWinner = winnerName === (lp?.teamInfo?.name);
-    const rankDelta = isWinner ? (15 + Math.floor((lp?.matchStats?.kills || 0) * 2 + (lp?.matchStats?.beds || 0) * 5)) : -10;
-    const newRankScore = Math.max(0, rankScore + rankDelta);
-    if (gm?.profile) {
-      gm.profile.rankScore = newRankScore;
-      localStorage.setItem('bedwars_profile', JSON.stringify(gm.profile));
-    }
-    const rankChangeEl = document.getElementById('rankChange');
-    if (rankChangeEl) {
-      rankChangeEl.style.display = 'block';
-      const rn = gm?.rankName?.(newRankScore) || '沉睡梦游者';
-      rankChangeEl.innerHTML = `<span class="rank-${isWinner ? 'up' : 'down'}">${isWinner ? '▲' : '▼'} 段位 ${rankDelta >= 0 ? '+' : ''}${rankDelta}</span><br><span>${rn}</span>`;
-    }
-
-    // 失败队伍提前退出
-    const exitBtn = document.getElementById('earlyExitBtn');
-    if (exitBtn && !isWinner) {
-      exitBtn.style.display = 'block';
+      // 段位变化
+      const rankEl = document.getElementById('rankChange');
+      if (rankEl && growthResult) {
+        rankEl.innerHTML = '<div>段位：' + growthResult.rankName + '</div>'
+          + '<div>段位分变化：' + (growthResult.rankDelta >= 0 ? '+' : '') + growthResult.rankDelta + '</div>'
+          + '<div>获得星尘：' + growthResult.stardust + '</div>';
+      }
     }
   }
+
+  // ============================================
+  // 消息系统
+  // ============================================
 
   showMessage(text, color = '#fff') {
     const container = document.getElementById('gameMessages');
-    const div = document.createElement('div');
-    div.className = 'game-msg';
-    div.textContent = text;
-    div.style.color = color;
-    container.appendChild(div);
-    this._timeouts.push(setTimeout(() => div.remove(), 3500));
+    if (!container) return;
+    const msg = document.createElement('div');
+    msg.className = 'game-msg';
+    msg.style.color = color;
+    msg.textContent = text;
+    container.appendChild(msg);
+    const tid = setTimeout(() => {
+      if (msg.parentNode) msg.parentNode.removeChild(msg);
+    }, 4000);
+    this._timeouts.push(tid);
   }
 
   addKillFeed(text) {
     const container = document.getElementById('killFeed');
-    const div = document.createElement('div');
-    div.className = 'kill-msg';
-    div.textContent = text;
-    container.appendChild(div);
-    this._timeouts.push(setTimeout(() => div.remove(), 6000));
-    if (container.children.length > 6) container.removeChild(container.firstChild);
+    if (!container) return;
+    const msg = document.createElement('div');
+    msg.className = 'kill-msg';
+    msg.textContent = text;
+    container.appendChild(msg);
+    // 最多保留8条
+    while (container.children.length > 8) {
+      container.removeChild(container.firstChild);
+    }
+    const tid = setTimeout(() => {
+      if (msg.parentNode) msg.parentNode.removeChild(msg);
+    }, 8000);
+    this._timeouts.push(tid);
+  }
+
+  // ============================================
+  // 网络数据上报
+  // ============================================
+
+  reportMatchSnapshot() {
+    try {
+      if (!this.network || !this.network.roomNet || !this.network.roomNet.client) return;
+      const client = this.network.roomNet.client;
+      const roomId = this.network.roomNet.room?.id;
+      if (!roomId) return;
+
+      const playersState = this.players.map(p => ({
+        id: p.playerId,
+        team: p.team,
+        hp: Math.floor(p.hp),
+        isDead: p.isDead,
+        x: Math.floor(p.pos.x * 10) / 10,
+        z: Math.floor(p.pos.z * 10) / 10
+      }));
+
+      client.from('match_snapshots').insert({
+        room_id: roomId,
+        tick: this.tick,
+        game_time: Math.floor(this.gameTime),
+        players_state: playersState,
+        alive_teams: Object.entries(TEAMS).filter(([, t]) => t.bedAlive).map(([k]) => k)
+      }).catch(() => {});
+    } catch (e) { /* 忽略 */ }
+  }
+
+  reportEconomyStats() {
+    try {
+      if (!this.localPlayer || !this.network || !this.network.roomNet || !this.network.roomNet.client) return;
+      const client = this.network.roomNet.client;
+      const p = this.localPlayer;
+      const roomId = this.network.roomNet.room?.id;
+      if (!roomId) return;
+
+      client.from('player_economy_logs').insert({
+        player_id: p.playerId,
+        room_id: roomId,
+        event_type: 'snapshot',
+        tick: this.tick,
+        copper: p.inv.copper || 0,
+        silver: p.inv.silver || 0,
+        gold: p.inv.gold || 0,
+        jade: p.inv.jade || 0
+      }).catch(() => {});
+    } catch (e) { /* 忽略 */ }
   }
 
   getNetworkState() {
     return {
-      tick: this.tick,
+      gameActive: this.gameActive,
       gameTime: this.gameTime,
-      shrinkActive: this.shrinkActive,
-      shrinkRadius: this.shrinkRadius,
-      teams: Object.fromEntries(Object.entries(TEAMS).map(([key, team]) => [key, { bedAlive: team.bedAlive }])),
+      tick: this.tick,
       players: this.players.map(p => ({
-        name: p.name,
-        team: p.team,
-        role: p.role,
-        isLocal: p.isLocal,
-        hp: Math.max(0, Math.round(p.hp)),
-        armor: p.armor,
-        isDead: p.isDead,
-        pos: { x: Number(p.pos.x.toFixed(2)), y: Number(p.pos.y.toFixed(2)), z: Number(p.pos.z.toFixed(2)) },
-        yaw: Number(p.yaw.toFixed(3)),
-        inv: p.inv,
-        blocks: p.blocks,
-        weapon: p.equipped.weapon,
-        armorItem: p.equipped.armor
+        id: p.playerId, name: p.name, team: p.team,
+        hp: Math.floor(p.hp), isDead: p.isDead,
+        x: p.pos.x, y: p.pos.y, z: p.pos.z
       })),
-      blocks: Array.from(this.engine.blocks.entries())
-        .filter(([, b]) => b.type !== 'ground')
-        .slice(-300)
-        .map(([key, b]) => ({ key, type: b.type, hp: b.hp, team: b.team || null }))
+      beds: Object.fromEntries(
+        Object.entries(TEAMS).map(([k, t]) => [k, t.bedAlive])
+      )
     };
   }
 
-  reportMatchSnapshot() {
-    const alive = { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 };
-    for (const p of this.players) if (!p.isDead) alive[p.team]++;
-    const snapshot = {
-      room_id: this.network?.roomNet?.room?.id || 'local',
-      match_code: this.network?.roomNet?.room?.code || 'LOCAL',
-      status: this.gameActive ? 'playing' : 'ended',
-      team_red_alive: alive.RED,
-      team_blue_alive: alive.BLUE,
-      team_green_alive: alive.GREEN,
-      team_yellow_alive: alive.YELLOW,
-      red_bed_alive: TEAMS.RED.bedAlive,
-      blue_bed_alive: TEAMS.BLUE.bedAlive,
-      green_bed_alive: TEAMS.GREEN.bedAlive,
-      yellow_bed_alive: TEAMS.YELLOW.bedAlive,
-      tick: Math.floor(this.gameTime),
-      updated_at: new Date().toISOString()
-    };
-    try { this.network?.roomNet?.client?.from('active_matches')?.upsert?.(snapshot, { onConflict: 'room_id' })?.catch?.(()=>{}); } catch(_) {}
-  }
-
-  reportEconomyStats() {
-    const hourKey = new Date().toISOString().slice(0, 13);
-    let copper = 0, silver = 0, gold = 0, jade = 0;
-    for (const p of this.players) {
-      copper += p.inv.copper || 0;
-      silver += p.inv.silver || 0;
-      gold += p.inv.gold || 0;
-      jade += p.inv.jade || 0;
-    }
-    const stats = {
-      hour_key: hourKey,
-      copper_total: copper,
-      silver_total: silver,
-      gold_total: gold,
-      jade_total: jade,
-      match_count: 1,
-      player_count: this.players.length
-    };
-    try { this.network?.roomNet?.client?.from('economy_stats')?.upsert?.(stats, { onConflict: 'hour_key' })?.catch?.(()=>{}); } catch(_) {}
-  }
-
-  reportCheat(playerId, type, details, severity) {
-    const alert = {
-      player_id: playerId,
-      room_id: this.network?.roomNet?.room?.id || 'local',
-      alert_type: type,
-      severity,
-      details,
-      tick: Math.floor(this.gameTime),
-      pos_x: this.localPlayer?.pos?.x || 0,
-      pos_y: this.localPlayer?.pos?.y || 0,
-      pos_z: this.localPlayer?.pos?.z || 0
-    };
-    this.network?.roomNet?.client?.from('cheat_alerts').insert(alert).catch(()=>{});
-  }
-
-  async subscribeAdminCommands() {
-    if (!this.network?.roomNet?.client) return;
-    const client = this.network.roomNet.client;
-    this.adminCommandSub = client.channel('admin_broadcast')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: "room_id=eq.broadcast" }, payload => {
-        const evt = payload.new;
-        if (evt.event_type === 'admin_command') this.handleAdminCommand(evt.event_data);
-      })
-      .subscribe();
-  }
-
-  handleAdminCommand(data) {
-    const cmd = data.cmd;
-    if (cmd === 'force_shrink') {
-      this.shrinkActive = true; this.shrinkRadius = 30; this.showMessage('管理员触发缩圈！', '#ff4444');
-    } else if (cmd === 'force_final') {
-      this.shrinkActive = true; this.shrinkRadius = 5; this.showMessage('胜利之炉已激活！', '#ff4444');
-    } else if (cmd === 'force_tide') {
-      this.engine.triggerDreamTide?.(this.gens);
-      this.showMessage('管理员触发梦域潮汐！', '#00d4ff');
-    } else if (cmd === 'force_time') {
-      this.gameTime = (data.minutes || 0) * 60;
-      this.showMessage(`时间已调整至 ${data.minutes} 分钟`, '#ffdd00');
-    } else if (cmd === 'send_gift' && data.player === this.localPlayer?.playerId) {
-      this.localPlayer?.addToBackpack?.(data.item, data.count);
-      this.showMessage(`收到管理员补给: ${data.item} x${data.count}`, '#00d4ff');
-    } else if (cmd === 'ai_takeover') {
-      const p = this.players.find(x => x.playerId === data.player);
-      if (p) p.aiTakeover = data.enable;
-    }
-  }
+  // ============================================
+  // 右键菜单与物品操作
+  // ============================================
 
   showSlotContextMenu(slotEl, idx) {
-    this.selectHotbar(idx);
+    if (!this.localPlayer) return;
+    const item = this.localPlayer.hotbar[idx];
+    if (!item) return;
     const menu = document.getElementById('slotContextMenu');
     if (!menu) return;
+    // 定位菜单
     const rect = slotEl.getBoundingClientRect();
-    menu.style.display = 'flex';
-    const menuRect = menu.getBoundingClientRect();
-    let left = rect.left + rect.width / 2 - menuRect.width / 2;
-    let top = rect.top - menuRect.height - 8;
-    left = Math.max(8, Math.min(left, window.innerWidth - menuRect.width - 8));
-    top = Math.max(8, top);
-    menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
-    this._ctxSlotIdx = idx;
+    menu.style.left = rect.left + 'px';
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.display = 'block';
+    menu.dataset.slotIdx = idx;
+    // 绑定按钮
+    const splitBtn = menu.querySelector('[data-action="split"]');
+    const dropBtn = menu.querySelector('[data-action="drop"]');
+    if (splitBtn) splitBtn.onclick = () => { this.splitSelectedItem(); this.hideSlotContextMenu(); };
+    if (dropBtn) dropBtn.onclick = () => {
+      this.engine.spawnItemDrop(this.localPlayer.pos, item.key, 1);
+      item.count--;
+      if (item.count <= 0) this.localPlayer.hotbar[idx] = null;
+      this.localPlayer.updateWeaponMesh();
+      this.hideSlotContextMenu();
+    };
   }
 
   hideSlotContextMenu() {
     const menu = document.getElementById('slotContextMenu');
     if (menu) menu.style.display = 'none';
-    this._ctxSlotIdx = null;
   }
 
   splitSelectedItem() {
-    const lp = this.localPlayer;
-    if (!lp) return;
-    const idx = this._ctxSlotIdx !== undefined && this._ctxSlotIdx !== null ? this._ctxSlotIdx : lp.hotbarIndex;
-    const item = lp.hotbar[idx];
-    if (!item || item.count <= 1) {
-      this.showMessage('该物品无法拆分', '#ff5555');
-      this.hideSlotContextMenu();
+    if (!this.localPlayer) return;
+    const menu = document.getElementById('slotContextMenu');
+    if (!menu) return;
+    const idx = parseInt(menu.dataset.slotIdx);
+    if (isNaN(idx)) return;
+    const item = this.localPlayer.hotbar[idx];
+    if (!item || item.count <= 1) return;
+    // 找一个空快捷栏槽位
+    let emptyIdx = -1;
+    for (let i = 0; i < 8; i++) {
+      if (i !== idx && !this.localPlayer.hotbar[i]) { emptyIdx = i; break; }
+    }
+    if (emptyIdx < 0) {
+      this.showMessage('快捷栏没有空位', '#ffaa00');
       return;
     }
-    const defaultHalf = Math.floor(item.count / 2);
-    const amountStr = prompt(`拆分数量 (1-${item.count - 1}):`, String(defaultHalf));
-    if (amountStr === null) {
-      this.hideSlotContextMenu();
-      return;
-    }
-    const amount = parseInt(amountStr, 10);
-    if (!amount || amount < 1 || amount >= item.count) {
-      this.showMessage('无效拆分数量', '#ff5555');
-      this.hideSlotContextMenu();
-      return;
-    }
-
-    const stack = (ITEM_DB[item.key]?.stack || 1);
-    let hasSpace = false;
-    for (let i = 0; i < lp.hotbar.length; i++) {
-      const s = lp.hotbar[i];
-      if (!s || (s.key === item.key && s.count < stack)) {
-        hasSpace = true; break;
-      }
-    }
-    if (!hasSpace) {
-      for (let i = 0; i < lp.backpack.length; i++) {
-        const s = lp.backpack[i];
-        if (!s || (s.key === item.key && s.count < stack)) {
-          hasSpace = true; break;
-        }
-      }
-    }
-    if (!hasSpace) {
-      this.showMessage('道具栏已满，无法拆分', '#ff5555');
-      this.hideSlotContextMenu();
-      return;
-    }
-
-    item.count -= amount;
-    if (item.count <= 0) {
-      lp.hotbar[idx] = null;
-    }
-    lp.addToBackpack(item.key, amount);
-    this.hideSlotContextMenu();
-    this.ui.update();
-    if (document.getElementById('backpackPanel')?.style.display === 'flex') {
-      this.ui.updateBackpack();
-    }
-    this.showMessage('物品已拆分', '#8be9fd');
+    // 拆分：一半给空槽
+    const half = Math.floor(item.count / 2);
+    item.count -= half;
+    this.localPlayer.hotbar[emptyIdx] = { key: item.key, count: half };
   }
 
+  // ============================================
+  // 网络回调（由NetworkManager调用）
+  // ============================================
+
+  onNetworkRoomUpdate(room) {
+    // 房间信息更新
+  }
+
+  onNetworkSnapshot(data) {
+    // 收到快照（客户端同步）
+  }
+
+  onNetworkBedDestroyed(teamKey, destroyerId) {
+    const teamInfo = TEAMS[teamKey];
+    if (teamInfo) {
+      teamInfo.bedAlive = false;
+      if (teamInfo.bedMesh) teamInfo.bedMesh.visible = false;
+    }
+  }
+
+  onNetworkPlayerKilled(victimId, killerId) {
+    // 网络同步击杀
+  }
+
+  onNetworkGameOver(winner) {
+    this.endGame(winner || '未知');
+  }
+
+  onNetworkMembers(members) {
+    // 成员列表更新
+  }
 }
+
+// 挂载到全局
+window.Game = Game;
